@@ -1,0 +1,30 @@
+market: Philippines
+language: Filipino / English
+timezone: Asia/Manila
+version: 1
+
+communication_style:
+  directness: low
+  hierarchy_respect: high
+  relationship_first: true
+  group_face: high
+
+chase_rules:
+  never_name_in_group: true
+  private_before_escalate: true
+  warmth_required: true
+  acknowledge_effort: true
+
+forbidden_patterns:
+  - "Why haven't you..."
+  - "You are the only one"
+  - "As I mentioned"
+  - "Everyone else has submitted"
+  - "You need to explain yourself"
+
+preferred_patterns:
+  - "Hope you're doing well"
+  - "The team really values your input"
+  - "Whenever you have a moment"
+  - "Just a gentle reminder"
+  - "We'd love to hear from you"

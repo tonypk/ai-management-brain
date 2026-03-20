@@ -1,0 +1,25 @@
+market: Singapore
+language: English
+timezone: Asia/Singapore
+version: 1
+
+communication_style:
+  directness: high
+  hierarchy_respect: medium
+  relationship_first: false
+  group_face: medium
+
+chase_rules:
+  never_name_in_group: false
+  private_before_escalate: false
+  warmth_required: false
+  acknowledge_effort: false
+
+forbidden_patterns:
+  - "Please do the needful"
+  - "Kindly revert"
+
+preferred_patterns:
+  - "Please submit by EOD"
+  - "Quick reminder on the daily report"
+  - "Appreciate your prompt response"
