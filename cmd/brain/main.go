@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -22,6 +23,17 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/report"
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
 )
+
+// engineForTenant returns the appropriate engine for a tenant (blended or single mentor).
+func engineForTenant(factory *brain.EngineFactory, tenant *bot.Tenant, cultureCode string) (*brain.Engine, error) {
+	if len(tenant.MentorBlend) > 0 {
+		var blend brain.BlendConfig
+		if err := json.Unmarshal(tenant.MentorBlend, &blend); err == nil && blend.PrimaryID != "" && blend.SecondaryID != "" {
+			return factory.ForBlend(blend.PrimaryID, blend.SecondaryID, blend.Weight, cultureCode)
+		}
+	}
+	return factory.ForTenant(tenant.MentorID, cultureCode)
+}
 
 // redactHandler wraps slog.Handler to mask sensitive fields.
 type redactHandler struct {
@@ -256,9 +268,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create chaser and summarizer with factory (no fixed engine)
+	// Create chaser, summarizer, trigger checker, action executor, and analyzer
 	chaser := report.NewChaser(reportDB, llmService, tgBot, engineFactory)
 	summarizer := report.NewSummarizer(reportDB, llmService)
+	triggerChecker := report.NewTriggerChecker(reportDB, tgBot, engineFactory)
+	actionExecutor := report.NewActionExecutor(reportDB, tgBot, llmService, engineFactory)
+	analyzer := report.NewAnalyzer(reportDB, llmService)
 
 	// Create command handler and register commands
 	cmdHandler := bot.NewCommandHandler(botDB, nil, nil, cfg.BossTelegramID)
@@ -279,17 +294,17 @@ func main() {
 		}
 
 		// Read last run times from Redis
-		lastRemind, _ := rdb.Get(ctx, "scheduler:last_run:remind").Result()
-		lastChase, _ := rdb.Get(ctx, "scheduler:last_run:chase").Result()
-		lastSummary, _ := rdb.Get(ctx, "scheduler:last_run:summary").Result()
-		if lastRemind == "" {
-			lastRemind = "never"
+		lastRuns := map[string]string{
+			"remind":          "never",
+			"chase":           "never",
+			"summary":         "never",
+			"weekly_actions":  "never",
+			"monthly_actions": "never",
 		}
-		if lastChase == "" {
-			lastChase = "never"
-		}
-		if lastSummary == "" {
-			lastSummary = "never"
+		for key := range lastRuns {
+			if v, err := rdb.Get(ctx, "scheduler:last_run:"+key).Result(); err == nil && v != "" {
+				lastRuns[key] = v
+			}
 		}
 
 		return fmt.Sprintf(
@@ -301,9 +316,12 @@ func main() {
 				"Available Mentors: inamori, dalio, grove, ren\n\n"+
 				"Last Remind: %s\n"+
 				"Last Chase: %s\n"+
-				"Last Summary: %s",
+				"Last Summary: %s\n"+
+				"Last Weekly Actions: %s\n"+
+				"Last Monthly Actions: %s",
 			uptime, cfg.Timezone, aiStatus, mentorID,
-			lastRemind, lastChase, lastSummary,
+			lastRuns["remind"], lastRuns["chase"], lastRuns["summary"],
+			lastRuns["weekly_actions"], lastRuns["monthly_actions"],
 		)
 	}
 
@@ -337,6 +355,13 @@ func main() {
 						return sendReply("Report confirmed but failed to save. Please contact your manager.")
 					}
 					slog.Info("report saved", "employee_id", empID, "date", today)
+
+					// Run async blocker/sentiment analysis
+					go func(eid, date string) {
+						if err := analyzer.Analyze(context.Background(), eid, date); err != nil {
+							slog.Error("report analysis failed", "employee_id", eid, "error", err)
+						}
+					}(empID, today)
 				}
 				return sendReply(msg)
 			}
@@ -379,8 +404,8 @@ func main() {
 				return fmt.Errorf("get tenant: %w", err)
 			}
 
-			// Get mentor's questions for this tenant
-			engine, err := engineFactory.ForTenant(tenant.MentorID, "default")
+			// Get mentor's questions (supports blending)
+			engine, err := engineForTenant(engineFactory, tenant, "default")
 			if err != nil {
 				return fmt.Errorf("load engine for remind: %w", err)
 			}
@@ -423,7 +448,7 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("get tenant: %w", err)
 			}
-			engine, err := engineFactory.ForTenant(tenant.MentorID, "default")
+			engine, err := engineForTenant(engineFactory, tenant, "default")
 			if err != nil {
 				return fmt.Errorf("load engine for summary: %w", err)
 			}
@@ -437,6 +462,15 @@ func main() {
 				return fmt.Errorf("send summary to boss: %w", err)
 			}
 			slog.Info("summary job: completed", "submission_rate", result.SubmissionRate, "mentor", tenant.MentorID)
+
+			// Run trigger rules after summary
+			triggerResults, err := triggerChecker.CheckAll(ctx, tenant.ID, tenant.MentorID, cfg.BossTelegramID)
+			if err != nil {
+				slog.Error("trigger check failed", "error", err)
+			} else if len(triggerResults) > 0 {
+				slog.Info("triggers fired", "count", len(triggerResults))
+			}
+
 			return nil
 		},
 	}
@@ -447,6 +481,32 @@ func main() {
 		slog.Error("failed to create scheduler", "error", err)
 		os.Exit(1)
 	}
+
+	// Register proactive action jobs
+	if err := sched.AddJob("weekly_actions", "0 18 * * 5", func(ctx context.Context) error {
+		slog.Info("weekly actions job: running proactive actions")
+		tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID)
+		if err != nil {
+			return fmt.Errorf("get tenant: %w", err)
+		}
+		return actionExecutor.RunWeekly(ctx, tenant.ID, tenant.MentorID, cfg.BossTelegramID)
+	}); err != nil {
+		slog.Error("failed to register weekly actions job", "error", err)
+		os.Exit(1)
+	}
+
+	if err := sched.AddJob("monthly_actions", "0 18 1 * *", func(ctx context.Context) error {
+		slog.Info("monthly actions job: running proactive actions")
+		tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID)
+		if err != nil {
+			return fmt.Errorf("get tenant: %w", err)
+		}
+		return actionExecutor.RunMonthly(ctx, tenant.ID, tenant.MentorID, cfg.BossTelegramID)
+	}); err != nil {
+		slog.Error("failed to register monthly actions job", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("proactive action jobs registered", "weekly", "Friday 18:00", "monthly", "1st 18:00")
 
 	// Health check HTTP server
 	gin.SetMode(gin.ReleaseMode)

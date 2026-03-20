@@ -115,6 +115,18 @@ func (a *DBAdapter) UpdateTenantMentor(ctx context.Context, tenantID, mentorID s
 	})
 }
 
+func (a *DBAdapter) UpdateTenantBlend(ctx context.Context, tenantID, mentorID string, blendJSON []byte) error {
+	uid, err := parseUUID(tenantID)
+	if err != nil {
+		return err
+	}
+	return a.q.UpdateTenantMentor(ctx, sqlc.UpdateTenantMentorParams{
+		ID:          uid,
+		MentorID:    mentorID,
+		MentorBlend: blendJSON,
+	})
+}
+
 func (a *DBAdapter) UpdateEmployeeCulture(ctx context.Context, employeeID, cultureCode string) error {
 	uid, err := parseUUID(employeeID)
 	if err != nil {
@@ -124,6 +136,67 @@ func (a *DBAdapter) UpdateEmployeeCulture(ctx context.Context, employeeID, cultu
 		ID:          uid,
 		CultureCode: cultureCode,
 	})
+}
+
+// --- Profile ---
+
+func (a *DBAdapter) GetEmployeeProfile(ctx context.Context, employeeID string) (*EmployeeProfile, error) {
+	uid, err := parseUUID(employeeID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get submission history (last 30 days)
+	history, err := a.q.GetEmployeeSubmissionHistory(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get missed days (streak approximation)
+	streak, err := a.q.GetEmployeeReportStreak(ctx, uid)
+	if err != nil {
+		streak = 0
+	}
+
+	// Get submitted days last 7
+	submitted7, err := a.q.GetSubmittedDaysLast7(ctx, uid)
+	if err != nil {
+		submitted7 = 0
+	}
+
+	// Calculate sentiment trend
+	sentimentCounts := map[string]int{}
+	for _, h := range history {
+		if h.Sentiment.Valid {
+			sentimentCounts[h.Sentiment.String]++
+		}
+	}
+	sentimentTrend := "unknown"
+	if len(sentimentCounts) > 0 {
+		maxCount := 0
+		for s, c := range sentimentCounts {
+			if c > maxCount {
+				maxCount = c
+				sentimentTrend = s
+			}
+		}
+		if len(sentimentCounts) > 1 {
+			sentimentTrend = "mixed (" + sentimentTrend + " dominant)"
+		}
+	}
+
+	// Current streak = 7 - missed days (simple approximation)
+	currentStreak := 7 - int(streak)
+	if currentStreak < 0 {
+		currentStreak = 0
+	}
+
+	return &EmployeeProfile{
+		SubmittedLast7:  int(submitted7),
+		SubmittedLast30: len(history),
+		CurrentStreak:   currentStreak,
+		SentimentTrend:  sentimentTrend,
+	}, nil
 }
 
 // --- IdentityQuerier ---
@@ -143,11 +216,12 @@ func (a *DBAdapter) GetEmployeeByTelegramID(ctx context.Context, telegramID int6
 
 func sqlcTenantToBot(t sqlc.Tenant) *Tenant {
 	return &Tenant{
-		ID:         formatUUID(t.ID),
-		Name:       t.Name,
-		BossChatID: t.BossChatID,
-		MentorID:   t.MentorID,
-		Timezone:   t.Timezone,
+		ID:          formatUUID(t.ID),
+		Name:        t.Name,
+		BossChatID:  t.BossChatID,
+		MentorID:    t.MentorID,
+		MentorBlend: t.MentorBlend,
+		Timezone:    t.Timezone,
 	}
 }
 

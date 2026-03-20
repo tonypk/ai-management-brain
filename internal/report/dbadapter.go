@@ -228,6 +228,34 @@ func (a *DBAdapter) ListActiveEmployeesWithTelegram(ctx context.Context, tenantI
 	return result, nil
 }
 
+// --- TriggerDB ---
+
+// GetMissedDaysLast7 returns the number of missed report days in the last 7 days.
+func (a *DBAdapter) GetMissedDaysLast7(ctx context.Context, employeeID string) (int, error) {
+	uid, err := rParseUUID(employeeID)
+	if err != nil {
+		return 0, err
+	}
+	missed, err := a.q.GetEmployeeReportStreak(ctx, uid)
+	if err != nil {
+		return 0, err
+	}
+	return int(missed), nil
+}
+
+// GetSubmittedDaysLast7 returns the number of submitted report days in the last 7 days.
+func (a *DBAdapter) GetSubmittedDaysLast7(ctx context.Context, employeeID string) (int, error) {
+	uid, err := rParseUUID(employeeID)
+	if err != nil {
+		return 0, err
+	}
+	count, err := a.q.GetSubmittedDaysLast7(ctx, uid)
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
 // GetTenantIDByBossChatID returns the tenant UUID for the given boss chat ID.
 func (a *DBAdapter) GetTenantIDByBossChatID(ctx context.Context, bossChatID int64) (string, error) {
 	t, err := a.q.GetTenantByBossChatID(ctx, bossChatID)
@@ -235,6 +263,82 @@ func (a *DBAdapter) GetTenantIDByBossChatID(ctx context.Context, bossChatID int6
 		return "", err
 	}
 	return rFormatUUID(t.ID), nil
+}
+
+// --- AnalyzerDB ---
+
+// GetLatestReportByEmployee returns the report ID and answers JSON for analysis.
+func (a *DBAdapter) GetLatestReportByEmployee(ctx context.Context, employeeID, date string) (string, string, error) {
+	eid, err := rParseUUID(employeeID)
+	if err != nil {
+		return "", "", err
+	}
+	d, err := rParseDate(date)
+	if err != nil {
+		return "", "", err
+	}
+	r, err := a.q.GetLatestReportByEmployee(ctx, sqlc.GetLatestReportByEmployeeParams{
+		EmployeeID: eid,
+		ReportDate: d,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return rFormatUUID(r.ID), string(r.Answers), nil
+}
+
+// UpdateReportAnalysis saves extracted blockers and sentiment to the report.
+func (a *DBAdapter) UpdateReportAnalysis(ctx context.Context, reportID, blockers, sentiment string) error {
+	rid, err := rParseUUID(reportID)
+	if err != nil {
+		return err
+	}
+	return a.q.UpdateReportAnalysis(ctx, sqlc.UpdateReportAnalysisParams{
+		ID:        rid,
+		Blockers:  pgtext(blockers),
+		Sentiment: pgtext(sentiment),
+	})
+}
+
+// --- Profile queries ---
+
+// SubmissionHistoryRow represents one day's submission status.
+type SubmissionHistoryRow struct {
+	ReportDate string
+	Sentiment  string
+}
+
+// GetEmployeeSubmissionHistory returns the last 30 days of submissions.
+func (a *DBAdapter) GetEmployeeSubmissionHistory(ctx context.Context, employeeID string) ([]SubmissionHistoryRow, error) {
+	uid, err := rParseUUID(employeeID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := a.q.GetEmployeeSubmissionHistory(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]SubmissionHistoryRow, len(rows))
+	for i, r := range rows {
+		date := ""
+		if r.ReportDate.Valid {
+			date = r.ReportDate.Time.Format("2006-01-02")
+		}
+		sentiment := ""
+		if r.Sentiment.Valid {
+			sentiment = r.Sentiment.String
+		}
+		result[i] = SubmissionHistoryRow{ReportDate: date, Sentiment: sentiment}
+	}
+	return result, nil
+}
+
+// pgtext creates a pgtype.Text from a string (valid if non-empty).
+func pgtext(s string) pgtype.Text {
+	if s == "" {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: s, Valid: true}
 }
 
 // --- helpers (prefixed with r to avoid collision with bot/adapter.go) ---

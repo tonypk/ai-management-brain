@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 )
 
@@ -45,7 +47,17 @@ type CommandQuerier interface {
 	GetEmployeeByInviteCode(ctx context.Context, code string) (*Employee, error)
 	UpdateEmployeeTelegramID(ctx context.Context, employeeID string, telegramID int64) error
 	UpdateTenantMentor(ctx context.Context, tenantID, mentorID string) error
+	UpdateTenantBlend(ctx context.Context, tenantID, mentorID string, blendJSON []byte) error
 	UpdateEmployeeCulture(ctx context.Context, employeeID, cultureCode string) error
+	GetEmployeeProfile(ctx context.Context, employeeID string) (*EmployeeProfile, error)
+}
+
+// EmployeeProfile holds profile data for display.
+type EmployeeProfile struct {
+	SubmittedLast7  int
+	SubmittedLast30 int
+	CurrentStreak   int
+	SentimentTrend  string // e.g., "positive", "neutral", "mixed"
 }
 
 // CommandHandler handles bot commands.
@@ -133,7 +145,9 @@ func (h *CommandHandler) HandleHelp(c BotContext) error {
 /addemployee <name> <culture> — Add team member
 /join <code> — Link your Telegram (for employees)
 /mentor <id> — Switch mentor (inamori, dalio, grove, ren)
-/culture <name> <code> — Set employee culture (philippines, singapore, indonesia, srilanka)
+/blend <primary> <weight> <secondary> — Blend mentors (e.g., /blend inamori 70 dalio)
+/culture <name> <code> — Set employee culture
+/profile <name> — View employee profile & stats
 /diagnostics — System status
 /help — Show this message`
 	return c.Send(help)
@@ -297,6 +311,64 @@ func (h *CommandHandler) HandleCulture(c BotContext) error {
 	return c.Send(fmt.Sprintf("Culture for %s set to '%s'.", found.Name, cultureCode))
 }
 
+// HandleProfile shows an employee's submission profile to the boss.
+func (h *CommandHandler) HandleProfile(c BotContext) error {
+	if c.SenderID() != h.bossChatID {
+		return c.Send("Permission denied")
+	}
+
+	parts := strings.Fields(c.Text())
+	if len(parts) < 2 {
+		return c.Send("Usage: /profile <employee_name>\nExample: /profile Alice")
+	}
+
+	empName := parts[1]
+
+	tenant, err := h.db.GetTenantByBossChatID(context.Background(), c.SenderID())
+	if err != nil {
+		return c.Send("No team found. Use /start first.")
+	}
+
+	employees, err := h.db.ListEmployeesByTenant(context.Background(), tenant.ID)
+	if err != nil {
+		return fmt.Errorf("list employees: %w", err)
+	}
+
+	var found *Employee
+	for i, emp := range employees {
+		if strings.EqualFold(emp.Name, empName) {
+			found = &employees[i]
+			break
+		}
+	}
+	if found == nil {
+		return c.Send(fmt.Sprintf("Employee '%s' not found.", empName))
+	}
+
+	profile, err := h.db.GetEmployeeProfile(context.Background(), found.ID)
+	if err != nil {
+		return c.Send(fmt.Sprintf("Could not load profile for %s.", found.Name))
+	}
+
+	status := "not linked"
+	if found.TelegramID > 0 {
+		status = "active"
+	}
+
+	return c.Send(fmt.Sprintf(
+		"Employee Profile: %s\n\n"+
+			"Status: %s\n"+
+			"Culture: %s\n\n"+
+			"Last 7 days: %d/7 submitted\n"+
+			"Last 30 days: %d submitted\n"+
+			"Current streak: %d days\n"+
+			"Sentiment trend: %s",
+		found.Name, status, found.CultureCode,
+		profile.SubmittedLast7, profile.SubmittedLast30,
+		profile.CurrentStreak, profile.SentimentTrend,
+	))
+}
+
 // HandleDiagnostics shows system diagnostics to the boss.
 func (h *CommandHandler) HandleDiagnostics(c BotContext) error {
 	if c.SenderID() != h.bossChatID {
@@ -308,6 +380,84 @@ func (h *CommandHandler) HandleDiagnostics(c BotContext) error {
 		info = h.DiagnosticsFn()
 	}
 	return c.Send(info)
+}
+
+// BlendConfig matches brain.BlendConfig for JSON serialization.
+type BlendConfig struct {
+	PrimaryID   string  `json:"primary_id"`
+	SecondaryID string  `json:"secondary_id"`
+	Weight      float64 `json:"weight"`
+}
+
+// HandleBlend sets mentor blending for the boss's team.
+func (h *CommandHandler) HandleBlend(c BotContext) error {
+	if c.SenderID() != h.bossChatID {
+		return c.Send("Permission denied")
+	}
+
+	parts := strings.Fields(c.Text())
+
+	// /blend off — disable blending
+	if len(parts) >= 2 && strings.ToLower(parts[1]) == "off" {
+		tenant, err := h.db.GetTenantByBossChatID(context.Background(), c.SenderID())
+		if err != nil {
+			return c.Send("No team found. Use /start first.")
+		}
+		if err := h.db.UpdateTenantBlend(context.Background(), tenant.ID, tenant.MentorID, nil); err != nil {
+			return fmt.Errorf("clear blend: %w", err)
+		}
+		return c.Send(fmt.Sprintf("Mentor blending disabled. Using pure '%s'.", tenant.MentorID))
+	}
+
+	// /blend <primary> <weight> <secondary> — e.g., /blend inamori 70 dalio
+	if len(parts) < 4 {
+		return c.Send("Usage: /blend <primary> <weight%> <secondary>\nExample: /blend inamori 70 dalio\n\nThis blends 70% Inamori + 30% Dalio.\n\nUse /blend off to disable.")
+	}
+
+	primaryID := strings.ToLower(parts[1])
+	weightStr := parts[2]
+	secondaryID := strings.ToLower(parts[3])
+
+	if _, ok := mentorDescriptions[primaryID]; !ok {
+		return c.Send(fmt.Sprintf("Unknown primary mentor '%s'.", primaryID))
+	}
+	if _, ok := mentorDescriptions[secondaryID]; !ok {
+		return c.Send(fmt.Sprintf("Unknown secondary mentor '%s'.", secondaryID))
+	}
+	if primaryID == secondaryID {
+		return c.Send("Primary and secondary mentors must be different.")
+	}
+
+	weight, err := strconv.Atoi(strings.TrimSuffix(weightStr, "%"))
+	if err != nil || weight < 50 || weight > 90 {
+		return c.Send("Weight must be between 50-90 (e.g., 70 for 70% primary).")
+	}
+
+	tenant, err := h.db.GetTenantByBossChatID(context.Background(), c.SenderID())
+	if err != nil {
+		return c.Send("No team found. Use /start first.")
+	}
+
+	blend := BlendConfig{
+		PrimaryID:   primaryID,
+		SecondaryID: secondaryID,
+		Weight:      float64(weight) / 100.0,
+	}
+	blendJSON, err := json.Marshal(blend)
+	if err != nil {
+		return fmt.Errorf("marshal blend: %w", err)
+	}
+
+	if err := h.db.UpdateTenantBlend(context.Background(), tenant.ID, primaryID, blendJSON); err != nil {
+		return fmt.Errorf("save blend: %w", err)
+	}
+
+	return c.Send(fmt.Sprintf(
+		"Mentor blending enabled!\n\n%d%% %s + %d%% %s\n\nPrimary: %s\nSecondary: %s",
+		weight, primaryID, 100-weight, secondaryID,
+		mentorDescriptions[primaryID],
+		mentorDescriptions[secondaryID],
+	))
 }
 
 // generateInviteCode creates a short random uppercase hex string.

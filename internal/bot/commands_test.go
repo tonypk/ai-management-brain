@@ -87,8 +87,21 @@ func (m *mockCommandDB) UpdateTenantMentor(_ context.Context, _, _ string) error
 	return m.updateMentorErr
 }
 
+func (m *mockCommandDB) UpdateTenantBlend(_ context.Context, _ string, _ string, _ []byte) error {
+	return nil
+}
+
 func (m *mockCommandDB) UpdateEmployeeCulture(_ context.Context, _, _ string) error {
 	return nil
+}
+
+func (m *mockCommandDB) GetEmployeeProfile(_ context.Context, _ string) (*bot.EmployeeProfile, error) {
+	return &bot.EmployeeProfile{
+		SubmittedLast7:  5,
+		SubmittedLast30: 20,
+		CurrentStreak:   3,
+		SentimentTrend:  "positive",
+	}, nil
 }
 
 // --- Tests ---
@@ -295,6 +308,52 @@ func TestCommand_AddEmployee_NonBoss(t *testing.T) {
 
 	if err := h.HandleAddEmployee(ctx); err != nil {
 		t.Fatalf("HandleAddEmployee: %v", err)
+	}
+
+	if len(ctx.sent) == 0 {
+		t.Fatal("expected a reply message")
+	}
+	if !strings.Contains(strings.ToLower(ctx.sent[0]), "permission denied") {
+		t.Errorf("expected permission denied, got: %s", ctx.sent[0])
+	}
+}
+
+func TestCommand_Profile(t *testing.T) {
+	tenant := &bot.Tenant{ID: "t1", Name: "My Team", BossChatID: bossChatID}
+	db := &mockCommandDB{
+		tenantByBoss: tenant,
+		employees: []bot.Employee{
+			{ID: "emp-1", Name: "Alice", TenantID: "t1", CultureCode: "philippines", TelegramID: 111},
+		},
+	}
+	h := bot.NewCommandHandler(db, nil, nil, bossChatID)
+	ctx := &mockBotContext{senderID: bossChatID, text: "/profile Alice"}
+
+	if err := h.HandleProfile(ctx); err != nil {
+		t.Fatalf("HandleProfile: %v", err)
+	}
+
+	if len(ctx.sent) == 0 {
+		t.Fatal("expected a reply message")
+	}
+	if !strings.Contains(ctx.sent[0], "Alice") {
+		t.Errorf("expected Alice in profile, got: %s", ctx.sent[0])
+	}
+	if !strings.Contains(ctx.sent[0], "5/7") {
+		t.Errorf("expected 5/7 submission rate, got: %s", ctx.sent[0])
+	}
+	if !strings.Contains(ctx.sent[0], "positive") {
+		t.Errorf("expected positive sentiment, got: %s", ctx.sent[0])
+	}
+}
+
+func TestCommand_Profile_NonBoss(t *testing.T) {
+	db := &mockCommandDB{}
+	h := bot.NewCommandHandler(db, nil, nil, bossChatID)
+	ctx := &mockBotContext{senderID: 12345, text: "/profile Alice"}
+
+	if err := h.HandleProfile(ctx); err != nil {
+		t.Fatalf("HandleProfile: %v", err)
 	}
 
 	if len(ctx.sent) == 0 {

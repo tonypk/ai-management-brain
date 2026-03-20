@@ -18,12 +18,13 @@ type Employee struct {
 
 // Tenant represents a resolved tenant.
 type Tenant struct {
-	ID         string
-	BotToken   string
-	Name       string
-	BossChatID int64
-	MentorID   string
-	Timezone   string
+	ID          string
+	BotToken    string
+	Name        string
+	BossChatID  int64
+	MentorID    string
+	MentorBlend []byte // JSON: {"primary_id":"...","secondary_id":"...","weight":0.7}
+	Timezone    string
 }
 
 // IdentityResult holds the result of identity resolution.

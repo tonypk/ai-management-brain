@@ -103,6 +103,30 @@ func (s *Scheduler) Stop() error {
 	return s.scheduler.Shutdown()
 }
 
+// AddJob registers an additional cron job with the scheduler.
+func (s *Scheduler) AddJob(name, cron string, fn func(ctx context.Context) error) error {
+	jName := name
+	jFn := fn
+	redis := s.redis
+	_, err := s.scheduler.NewJob(
+		gocron.CronJob(cron, false),
+		gocron.NewTask(func() {
+			ctx := context.Background()
+			slog.Info("scheduler job running", "job", jName)
+			if err := jFn(ctx); err != nil {
+				slog.Error("scheduler job failed", "job", jName, "error", err)
+			}
+			redis.Set(ctx, fmt.Sprintf("scheduler:last_run:%s", jName),
+				time.Now().Format(time.RFC3339), 0)
+		}),
+	)
+	if err != nil {
+		return fmt.Errorf("register job %s: %w", name, err)
+	}
+	s.jobs = append(s.jobs, jobInfo{name: name, callback: fn})
+	return nil
+}
+
 // JobCount returns the number of registered jobs.
 func (s *Scheduler) JobCount() int {
 	return len(s.jobs)

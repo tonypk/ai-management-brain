@@ -65,6 +65,80 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (Rep
 	return i, err
 }
 
+const updateReportAnalysis = `-- name: UpdateReportAnalysis :exec
+UPDATE reports SET blockers = $2, sentiment = $3
+WHERE id = $1
+`
+
+type UpdateReportAnalysisParams struct {
+	ID        pgtype.UUID `json:"id"`
+	Blockers  pgtype.Text `json:"blockers"`
+	Sentiment pgtype.Text `json:"sentiment"`
+}
+
+func (q *Queries) UpdateReportAnalysis(ctx context.Context, arg UpdateReportAnalysisParams) error {
+	_, err := q.db.Exec(ctx, updateReportAnalysis, arg.ID, arg.Blockers, arg.Sentiment)
+	return err
+}
+
+const getLatestReportByEmployee = `-- name: GetLatestReportByEmployee :one
+SELECT id, tenant_id, employee_id, report_date, answers, blockers, sentiment, submitted_at FROM reports
+WHERE employee_id = $1 AND report_date = $2
+ORDER BY submitted_at DESC LIMIT 1
+`
+
+type GetLatestReportByEmployeeParams struct {
+	EmployeeID pgtype.UUID `json:"employee_id"`
+	ReportDate pgtype.Date `json:"report_date"`
+}
+
+func (q *Queries) GetLatestReportByEmployee(ctx context.Context, arg GetLatestReportByEmployeeParams) (Report, error) {
+	row := q.db.QueryRow(ctx, getLatestReportByEmployee, arg.EmployeeID, arg.ReportDate)
+	var i Report
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.EmployeeID,
+		&i.ReportDate,
+		&i.Answers,
+		&i.Blockers,
+		&i.Sentiment,
+		&i.SubmittedAt,
+	)
+	return i, err
+}
+
+const getEmployeeSubmissionHistory = `-- name: GetEmployeeSubmissionHistory :many
+SELECT report_date, sentiment FROM reports
+WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '30 days'
+ORDER BY report_date DESC
+`
+
+type GetEmployeeSubmissionHistoryRow struct {
+	ReportDate pgtype.Date `json:"report_date"`
+	Sentiment  pgtype.Text `json:"sentiment"`
+}
+
+func (q *Queries) GetEmployeeSubmissionHistory(ctx context.Context, employeeID pgtype.UUID) ([]GetEmployeeSubmissionHistoryRow, error) {
+	rows, err := q.db.Query(ctx, getEmployeeSubmissionHistory, employeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetEmployeeSubmissionHistoryRow
+	for rows.Next() {
+		var i GetEmployeeSubmissionHistoryRow
+		if err := rows.Scan(&i.ReportDate, &i.Sentiment); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEmployeeReportStreak = `-- name: GetEmployeeReportStreak :one
 SELECT COUNT(*) as missed_days FROM generate_series(
     CURRENT_DATE - INTERVAL '7 days', CURRENT_DATE - INTERVAL '1 day', '1 day'
@@ -79,6 +153,18 @@ func (q *Queries) GetEmployeeReportStreak(ctx context.Context, employeeID pgtype
 	var missed_days int64
 	err := row.Scan(&missed_days)
 	return missed_days, err
+}
+
+const getSubmittedDaysLast7 = `-- name: GetSubmittedDaysLast7 :one
+SELECT COUNT(DISTINCT report_date) FROM reports
+WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '7 days'
+`
+
+func (q *Queries) GetSubmittedDaysLast7(ctx context.Context, employeeID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getSubmittedDaysLast7, employeeID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const getReportsByTenantDate = `-- name: GetReportsByTenantDate :many

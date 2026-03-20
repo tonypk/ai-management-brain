@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -133,6 +134,49 @@ func (s *LLMService) GenerateChaseMessage(ctx context.Context, systemPrompt, emp
 		employeeName, tone,
 	)
 	return s.client.Chat(ctx, systemPrompt, userPrompt)
+}
+
+// ReportAnalysis holds extracted blockers and sentiment from a report.
+type ReportAnalysis struct {
+	Blockers  string `json:"blockers"`
+	Sentiment string `json:"sentiment"`
+}
+
+// AnalyzeReport extracts blockers and sentiment from report answers.
+func (s *LLMService) AnalyzeReport(ctx context.Context, answerText string) (*ReportAnalysis, error) {
+	systemPrompt := `You are an AI assistant that analyzes employee daily reports.
+Extract two things:
+1. BLOCKERS: Any obstacles, problems, or blockers mentioned. If none, return empty string.
+2. SENTIMENT: Classify the overall tone as one of: positive, neutral, negative, stressed.
+
+Respond in this exact JSON format only, no extra text:
+{"blockers": "...", "sentiment": "..."}`
+
+	userPrompt := fmt.Sprintf("Analyze this employee's daily report answers:\n\n%s", answerText)
+
+	resp, err := s.client.Chat(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("LLM analyze: %w", err)
+	}
+
+	// Parse JSON response
+	resp = strings.TrimSpace(resp)
+	// Handle markdown code blocks
+	if strings.HasPrefix(resp, "```") {
+		lines := strings.Split(resp, "\n")
+		if len(lines) > 2 {
+			resp = strings.Join(lines[1:len(lines)-1], "\n")
+		}
+	}
+
+	var result ReportAnalysis
+	if err := json.Unmarshal([]byte(resp), &result); err != nil {
+		// Fallback: treat entire response as blockers with neutral sentiment
+		slog.Warn("failed to parse LLM analysis JSON", "response", resp, "error", err)
+		return &ReportAnalysis{Blockers: "", Sentiment: "neutral"}, nil
+	}
+
+	return &result, nil
 }
 
 // GenerateSummary generates an AI summary of all submitted reports.
