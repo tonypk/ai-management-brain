@@ -1,0 +1,7 @@
+FROM alpine:3.19
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY brain .
+COPY configs ./configs
+EXPOSE 8080
+CMD ["./brain"]
