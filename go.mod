@@ -3,6 +3,7 @@ module github.com/tonypk/ai-management-brain
 go 1.25.0
 
 require (
+	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/anthropics/anthropic-sdk-go v1.27.1
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-co-op/gocron/v2 v2.19.1
@@ -49,6 +50,7 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/arch v0.22.0 // indirect

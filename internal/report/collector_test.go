@@ -102,3 +102,179 @@ func TestCollector_MidConversationRedirect(t *testing.T) {
 		t.Error("should be collecting")
 	}
 }
+
+func TestCollector_GetState_Idle(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Q1?"})
+	state := c.GetState(context.Background(), "emp-unknown")
+	if state != report.StateIdle {
+		t.Errorf("expected Idle for unknown employee, got %v", state)
+	}
+}
+
+func TestCollector_GetState_Collecting(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Q1?", "Q2?"})
+	ctx := context.Background()
+
+	c.Start(ctx, "emp-1")
+	state := c.GetState(ctx, "emp-1")
+	if state != report.StateCollecting {
+		t.Errorf("expected Collecting, got %v", state)
+	}
+}
+
+func TestCollector_GetState_Confirming(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Q1?"})
+	ctx := context.Background()
+
+	c.Start(ctx, "emp-1")
+	c.HandleAnswer(ctx, "emp-1", "A1") // → confirming
+
+	state := c.GetState(ctx, "emp-1")
+	if state != report.StateConfirming {
+		t.Errorf("expected Confirming, got %v", state)
+	}
+}
+
+func TestCollector_GetState_Complete(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Q1?"})
+	ctx := context.Background()
+
+	c.Start(ctx, "emp-1")
+	c.HandleAnswer(ctx, "emp-1", "A1")
+	c.Confirm(ctx, "emp-1")
+
+	state := c.GetState(ctx, "emp-1")
+	if state != report.StateComplete {
+		t.Errorf("expected Complete, got %v", state)
+	}
+}
+
+func TestCollector_Cancel(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Q1?", "Q2?"})
+	ctx := context.Background()
+
+	c.Start(ctx, "emp-1")
+	if !c.IsCollecting(ctx, "emp-1") {
+		t.Fatal("should be collecting before cancel")
+	}
+
+	c.Cancel(ctx, "emp-1")
+
+	if c.IsCollecting(ctx, "emp-1") {
+		t.Error("should not be collecting after cancel")
+	}
+	state := c.GetState(ctx, "emp-1")
+	if state != report.StateIdle {
+		t.Errorf("expected Idle after cancel, got %v", state)
+	}
+}
+
+func TestCollector_StartWithQuestions_Custom(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Default Q1?", "Default Q2?"})
+	ctx := context.Background()
+
+	customQs := []string{"Custom Q1?", "Custom Q2?", "Custom Q3?"}
+	state, msg, err := c.StartWithQuestions(ctx, "emp-1", customQs)
+	if err != nil {
+		t.Fatalf("StartWithQuestions: %v", err)
+	}
+	if state != report.StateCollecting {
+		t.Errorf("expected Collecting, got %v", state)
+	}
+	if msg != "Custom Q1?" {
+		t.Errorf("first question = %q, want Custom Q1?", msg)
+	}
+
+	// Verify it asks all 3 custom questions
+	state, msg, _ = c.HandleAnswer(ctx, "emp-1", "A1")
+	if msg != "Custom Q2?" {
+		t.Errorf("second question = %q, want Custom Q2?", msg)
+	}
+	state, msg, _ = c.HandleAnswer(ctx, "emp-1", "A2")
+	if msg != "Custom Q3?" {
+		t.Errorf("third question = %q, want Custom Q3?", msg)
+	}
+	state, _, _ = c.HandleAnswer(ctx, "emp-1", "A3")
+	if state != report.StateConfirming {
+		t.Errorf("expected Confirming after all questions, got %v", state)
+	}
+}
+
+func TestCollector_StartWithQuestions_FallbackToDefaults(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Default Q1?"})
+	ctx := context.Background()
+
+	// Empty custom questions should fallback to defaults
+	state, msg, err := c.StartWithQuestions(ctx, "emp-1", nil)
+	if err != nil {
+		t.Fatalf("StartWithQuestions: %v", err)
+	}
+	if state != report.StateCollecting {
+		t.Errorf("expected Collecting, got %v", state)
+	}
+	if msg != "Default Q1?" {
+		t.Errorf("should fallback to default questions, got %q", msg)
+	}
+}
+
+func TestCollector_GetAnswers_NoConversation(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Q1?"})
+	answers := c.GetAnswers(context.Background(), "emp-unknown")
+	if answers != nil {
+		t.Errorf("expected nil answers for unknown employee, got %v", answers)
+	}
+}
+
+func TestCollector_IsCollecting_NotCollecting(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Q1?"})
+	if c.IsCollecting(context.Background(), "emp-unknown") {
+		t.Error("should not be collecting for unknown employee")
+	}
+}
+
+func TestCollector_HandleAnswer_InConfirmingState(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Q1?"})
+	ctx := context.Background()
+
+	c.Start(ctx, "emp-1")
+	c.HandleAnswer(ctx, "emp-1", "A1") // → confirming
+
+	// Sending another answer while in confirming state
+	state, _, _ := c.HandleAnswer(ctx, "emp-1", "extra answer")
+	if state != report.StateConfirming {
+		t.Errorf("expected Confirming (not accepting new answers), got %v", state)
+	}
+}
+
+func TestCollector_Confirm_NoConversation(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Q1?"})
+	state, _, _ := c.Confirm(context.Background(), "emp-unknown")
+	if state != report.StateIdle {
+		t.Errorf("expected Idle for confirm without conversation, got %v", state)
+	}
+}
+
+func TestCollector_MultipleEmployees(t *testing.T) {
+	c := report.NewCollector(mockRedis(), []string{"Q1?"})
+	ctx := context.Background()
+
+	c.Start(ctx, "emp-1")
+	c.Start(ctx, "emp-2")
+
+	// Both should be collecting independently
+	if !c.IsCollecting(ctx, "emp-1") {
+		t.Error("emp-1 should be collecting")
+	}
+	if !c.IsCollecting(ctx, "emp-2") {
+		t.Error("emp-2 should be collecting")
+	}
+
+	// Answer only emp-1
+	c.HandleAnswer(ctx, "emp-1", "A1")
+	if c.IsCollecting(ctx, "emp-1") {
+		t.Error("emp-1 should no longer be collecting (in confirming)")
+	}
+	if !c.IsCollecting(ctx, "emp-2") {
+		t.Error("emp-2 should still be collecting")
+	}
+}

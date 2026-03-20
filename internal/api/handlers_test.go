@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
+	"time"
 	"net/http/httptest"
 	"testing"
 
@@ -137,6 +139,10 @@ func (r *mockRows) Scan(dest ...interface{}) error {
 			}
 		case *[]byte:
 			if v, ok := row[i].([]byte); ok {
+				*ptr = v
+			}
+		case *pgtype.Date:
+			if v, ok := row[i].(pgtype.Date); ok {
 				*ptr = v
 			}
 		}
@@ -451,5 +457,835 @@ func TestListEmployees_Authenticated(t *testing.T) {
 	}
 	if len(data) != 1 {
 		t.Errorf("expected 1 employee, got %d", len(data))
+	}
+}
+
+
+// ---------------------------------------------------------------------------
+// Additional handler tests
+// ---------------------------------------------------------------------------
+
+// tenantScanFn returns a scanFn that populates a Tenant row from the GetTenant query.
+func tenantScanFn(tenantUUID pgtype.UUID, name, tz, mentorID string) func(dest ...interface{}) error {
+	return func(dest ...interface{}) error {
+		if len(dest) < 10 {
+			return nil
+		}
+		if p, ok := dest[0].(*pgtype.UUID); ok {
+			*p = tenantUUID
+		}
+		if p, ok := dest[1].(*string); ok {
+			*p = name
+		}
+		if p, ok := dest[2].(*string); ok {
+			*p = tz
+		}
+		if p, ok := dest[3].(*pgtype.Text); ok {
+			*p = pgtype.Text{} // anthropic_key
+		}
+		if p, ok := dest[4].(*string); ok {
+			*p = mentorID
+		}
+		if p, ok := dest[5].(*[]byte); ok {
+			*p = nil // mentor_blend
+		}
+		if p, ok := dest[6].(*pgtype.Text); ok {
+			*p = pgtype.Text{} // bot_token
+		}
+		if p, ok := dest[7].(*int64); ok {
+			*p = 0 // boss_chat_id
+		}
+		if p, ok := dest[8].(*[]byte); ok {
+			*p = []byte("{}") // config
+		}
+		if p, ok := dest[9].(*pgtype.Timestamptz); ok {
+			*p = pgtype.Timestamptz{}
+		}
+		return nil
+	}
+}
+
+// TestHandleGetTenant verifies GET /api/v1/tenant returns tenant data.
+func TestHandleGetTenant(t *testing.T) {
+	tenantUUID := makeTestUUID(0x77)
+	db := newMockDBTX()
+
+	db.queryRowFn = func(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+		if len(sql) > 20 && sql[:20] == "-- name: GetTenant :" {
+			return &mockRow{scanFn: tenantScanFn(tenantUUID, "Alpha Team", "Asia/Tokyo", "dalio")}
+		}
+		return &mockRow{err: pgx.ErrNoRows}
+	}
+
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tenant", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	data, ok := resp["data"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected data object in response")
+	}
+
+	if name, ok := data["name"].(string); !ok || name != "Alpha Team" {
+		t.Errorf("name = %v, want %q", data["name"], "Alpha Team")
+	}
+	if tz, ok := data["timezone"].(string); !ok || tz != "Asia/Tokyo" {
+		t.Errorf("timezone = %v, want %q", data["timezone"], "Asia/Tokyo")
+	}
+	if mentor, ok := data["mentor_id"].(string); !ok || mentor != "dalio" {
+		t.Errorf("mentor_id = %v, want %q", data["mentor_id"], "dalio")
+	}
+	if id, ok := data["id"].(string); !ok || id == "" {
+		t.Errorf("expected non-empty id string, got %v", data["id"])
+	}
+}
+
+// TestHandleUpdateTenant_ValidBody verifies PUT /api/v1/tenant with valid JSON.
+func TestHandleUpdateTenant_ValidBody(t *testing.T) {
+	db := newMockDBTX()
+
+	var execCalled bool
+	db.execFn = func(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+		if len(sql) > 20 && sql[:20] == "-- name: UpdateTenan" {
+			execCalled = true
+		}
+		return pgconn.NewCommandTag("UPDATE 1"), nil
+	}
+
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	body := `{"name":"Renamed Team","timezone":"America/New_York"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/tenant", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !execCalled {
+		t.Error("expected exec to be called for UpdateTenantNameTimezone")
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	data, ok := resp["data"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected data object in response")
+	}
+	if data["name"] != "Renamed Team" {
+		t.Errorf("name = %v, want %q", data["name"], "Renamed Team")
+	}
+	if data["timezone"] != "America/New_York" {
+		t.Errorf("timezone = %v, want %q", data["timezone"], "America/New_York")
+	}
+}
+
+// TestHandleUpdateTenant_InvalidTimezone verifies PUT /api/v1/tenant rejects bad timezone.
+func TestHandleUpdateTenant_InvalidTimezone(t *testing.T) {
+	db := newMockDBTX()
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	body := `{"name":"Team","timezone":"Mars/Olympus"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/tenant", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	errMsg, _ := resp["error"].(string)
+	if !strings.Contains(errMsg, "invalid timezone") {
+		t.Errorf("expected error about invalid timezone, got %q", errMsg)
+	}
+}
+
+// TestHandleCreateEmployee_ValidData verifies POST /api/v1/employees with valid payload.
+func TestHandleCreateEmployee_ValidData(t *testing.T) {
+	empUUID := makeTestUUID(0xCC)
+	tenantUUID := makeTestUUID(0x77)
+
+	db := newMockDBTX()
+	db.queryRowFn = func(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+		if len(sql) > 20 && sql[:20] == "-- name: CreateEmplo" {
+			return &mockRow{scanFn: func(dest ...interface{}) error {
+				if len(dest) >= 9 {
+					if p, ok := dest[0].(*pgtype.UUID); ok {
+						*p = empUUID
+					}
+					if p, ok := dest[1].(*pgtype.UUID); ok {
+						*p = tenantUUID
+					}
+					if p, ok := dest[2].(*string); ok {
+						*p = "David"
+					}
+					if p, ok := dest[3].(*pgtype.Int8); ok {
+						*p = pgtype.Int8{}
+					}
+					if p, ok := dest[4].(*string); ok {
+						*p = "philippines"
+					}
+					if p, ok := dest[5].(*string); ok {
+						*p = "member"
+					}
+					if p, ok := dest[6].(*pgtype.Text); ok {
+						*p = pgtype.Text{String: "ABCD1234", Valid: true}
+					}
+					if p, ok := dest[7].(*bool); ok {
+						*p = true
+					}
+					if p, ok := dest[8].(*pgtype.Timestamptz); ok {
+						*p = pgtype.Timestamptz{}
+					}
+				}
+				return nil
+			}}
+		}
+		return &mockRow{err: pgx.ErrNoRows}
+	}
+
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	body := `{"name":"David","culture_code":"philippines"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/employees", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	data, ok := resp["data"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected data object in response")
+	}
+	if data["name"] != "David" {
+		t.Errorf("name = %v, want %q", data["name"], "David")
+	}
+	if data["culture_code"] != "philippines" {
+		t.Errorf("culture_code = %v, want %q", data["culture_code"], "philippines")
+	}
+	// invite_code should be a non-empty string (generated by generateInviteCode)
+	if code, ok := data["invite_code"].(string); !ok || len(code) != 8 {
+		t.Errorf("invite_code = %v, want 8-char string", data["invite_code"])
+	}
+}
+
+// TestHandleCreateEmployee_InvalidCulture verifies POST /api/v1/employees rejects bad culture code.
+func TestHandleCreateEmployee_InvalidCulture(t *testing.T) {
+	db := newMockDBTX()
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	body := `{"name":"Eve","culture_code":"atlantis"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/employees", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	errMsg, _ := resp["error"].(string)
+	if !strings.Contains(errMsg, "invalid culture code") {
+		t.Errorf("expected error about invalid culture code, got %q", errMsg)
+	}
+}
+
+// TestHandleListReports_WithDate verifies GET /api/v1/reports?date=2026-03-20 returns report data.
+func TestHandleListReports_WithDate(t *testing.T) {
+	tenantUUID := makeTestUUID(0x77)
+	reportUUID := makeTestUUID(0xDD)
+	empUUID := makeTestUUID(0xEE)
+
+	db := newMockDBTX()
+
+	// GetReportsByTenantDate is a :many query — uses Query.
+	// The query scans: id, tenant_id, employee_id, report_date, answers, blockers, sentiment, submitted_at, employee_name
+	// mockRows.Scan handles pgtype.UUID, pgtype.Text, pgtype.Timestamptz, []byte, string
+	// but NOT pgtype.Date. The report_date column is scanned by sqlc into pgtype.Date.
+	// Since our mockRows doesn't handle pgtype.Date, the field will remain zero-valued,
+	// but the handler formats it with .Time.Format("2006-01-02") which yields "0001-01-01".
+	// We still verify the rest of the fields work correctly.
+	db.queryResults["-- name: GetReportsByTenantDate"] = &mockRows{
+		items: [][]interface{}{
+			{
+				reportUUID,   // id (pgtype.UUID)
+				tenantUUID,   // tenant_id (pgtype.UUID)
+				empUUID,      // employee_id (pgtype.UUID)
+				pgtype.Date{Time: time.Date(2026, 3, 20, 0, 0, 0, 0, time.UTC), Valid: true}, // report_date
+				[]byte(`[{"q":"What did you do?","a":"Wrote tests"}]`), // answers ([]byte)
+				pgtype.Text{String: "none", Valid: true},                // blockers (pgtype.Text)
+				pgtype.Text{String: "positive", Valid: true},            // sentiment (pgtype.Text)
+				pgtype.Timestamptz{},                                    // submitted_at
+				"Alice",                                                 // employee_name (string)
+			},
+		},
+	}
+
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/reports?date=2026-03-20", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	data, ok := resp["data"].([]interface{})
+	if !ok {
+		t.Fatal("expected data array in response")
+	}
+	if len(data) != 1 {
+		t.Fatalf("expected 1 report, got %d", len(data))
+	}
+
+	report, ok := data[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected report to be an object")
+	}
+	if report["employee_name"] != "Alice" {
+		t.Errorf("employee_name = %v, want %q", report["employee_name"], "Alice")
+	}
+	if report["blockers"] != "none" {
+		t.Errorf("blockers = %v, want %q", report["blockers"], "none")
+	}
+	if report["sentiment"] != "positive" {
+		t.Errorf("sentiment = %v, want %q", report["sentiment"], "positive")
+	}
+}
+
+// TestHandleListReports_MissingDate verifies GET /api/v1/reports without date returns 400.
+func TestHandleListReports_MissingDate(t *testing.T) {
+	db := newMockDBTX()
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/reports", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	errMsg, _ := resp["error"].(string)
+	if !strings.Contains(errMsg, "date") {
+		t.Errorf("expected error about missing date, got %q", errMsg)
+	}
+}
+
+// TestHandleGetSummary_NotFound verifies GET /api/v1/reports/summary?date=2026-03-20
+// returns 404 when no summary exists.
+func TestHandleGetSummary_NotFound(t *testing.T) {
+	db := newMockDBTX()
+	db.queryRowFn = func(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+		return &mockRow{err: pgx.ErrNoRows}
+	}
+
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/reports/summary?date=2026-03-20", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	errMsg, _ := resp["error"].(string)
+	if !strings.Contains(errMsg, "summary not found") {
+		t.Errorf("expected 'summary not found' error, got %q", errMsg)
+	}
+}
+
+// TestHandleGetMentor verifies GET /api/v1/mentor returns current mentor and available list.
+func TestHandleGetMentor(t *testing.T) {
+	tenantUUID := makeTestUUID(0x77)
+	db := newMockDBTX()
+
+	db.queryRowFn = func(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+		if len(sql) > 20 && sql[:20] == "-- name: GetTenant :" {
+			return &mockRow{scanFn: tenantScanFn(tenantUUID, "Alpha Team", "Asia/Singapore", "grove")}
+		}
+		return &mockRow{err: pgx.ErrNoRows}
+	}
+
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/mentor", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	data, ok := resp["data"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected data object in response")
+	}
+
+	if data["current_mentor_id"] != "grove" {
+		t.Errorf("current_mentor_id = %v, want %q", data["current_mentor_id"], "grove")
+	}
+
+	available, ok := data["available_mentors"].([]interface{})
+	if !ok {
+		t.Fatal("expected available_mentors array in response")
+	}
+	if len(available) == 0 {
+		t.Error("expected at least one available mentor")
+	}
+	// Verify each available mentor has id, name, description
+	for i, m := range available {
+		mentor, ok := m.(map[string]interface{})
+		if !ok {
+			t.Fatalf("available_mentors[%d] is not an object", i)
+		}
+		if _, ok := mentor["id"]; !ok {
+			t.Errorf("available_mentors[%d] missing id", i)
+		}
+		if _, ok := mentor["name"]; !ok {
+			t.Errorf("available_mentors[%d] missing name", i)
+		}
+		if _, ok := mentor["description"]; !ok {
+			t.Errorf("available_mentors[%d] missing description", i)
+		}
+	}
+}
+
+// TestHandleUpdateMentor_ValidMentorID verifies PUT /api/v1/mentor with valid mentor_id.
+func TestHandleUpdateMentor_ValidMentorID(t *testing.T) {
+	db := newMockDBTX()
+
+	var execCalled bool
+	db.execFn = func(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+		if len(sql) > 20 && sql[:20] == "-- name: UpdateTenan" {
+			execCalled = true
+		}
+		return pgconn.NewCommandTag("UPDATE 1"), nil
+	}
+
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	body := `{"mentor_id":"bezos"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/mentor", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !execCalled {
+		t.Error("expected exec to be called for UpdateTenantMentor")
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	data, ok := resp["data"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected data object in response")
+	}
+	if data["mentor_id"] != "bezos" {
+		t.Errorf("mentor_id = %v, want %q", data["mentor_id"], "bezos")
+	}
+}
+
+// TestHandleUpdateMentor_InvalidMentorID verifies PUT /api/v1/mentor rejects invalid mentor.
+func TestHandleUpdateMentor_InvalidMentorID(t *testing.T) {
+	db := newMockDBTX()
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	body := `{"mentor_id":"confucius"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/mentor", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	errMsg, _ := resp["error"].(string)
+	if !strings.Contains(errMsg, "invalid mentor_id") {
+		t.Errorf("expected error about invalid mentor_id, got %q", errMsg)
+	}
+}
+
+// TestFormatUUID_ValidUUID indirectly tests formatUUID by verifying the UUID
+// format in the API response matches the expected hex-dash pattern.
+func TestFormatUUID_ValidUUID(t *testing.T) {
+	tenantUUID := makeTestUUID(0xAB)
+	db := newMockDBTX()
+
+	db.queryRowFn = func(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+		if len(sql) > 20 && sql[:20] == "-- name: GetTenant :" {
+			return &mockRow{scanFn: tenantScanFn(tenantUUID, "UUID Test", "UTC", "inamori")}
+		}
+		return &mockRow{err: pgx.ErrNoRows}
+	}
+
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"abababab-abab-abab-abab-abababababab",
+		"boss",
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tenant", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	data := resp["data"].(map[string]interface{})
+	id, ok := data["id"].(string)
+	if !ok || id == "" {
+		t.Fatal("expected non-empty id string")
+	}
+
+	expected := "abababab-abab-abab-abab-abababababab"
+	if id != expected {
+		t.Errorf("formatUUID = %q, want %q", id, expected)
+	}
+}
+
+// TestFormatUUID_InvalidUUID tests that formatUUID returns empty string for
+// a UUID with Valid=false.
+func TestFormatUUID_InvalidUUID(t *testing.T) {
+	invalidUUID := pgtype.UUID{Valid: false}
+	db := newMockDBTX()
+
+	db.queryRowFn = func(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+		if len(sql) > 20 && sql[:20] == "-- name: GetTenant :" {
+			return &mockRow{scanFn: func(dest ...interface{}) error {
+				if len(dest) >= 10 {
+					if p, ok := dest[0].(*pgtype.UUID); ok {
+						*p = invalidUUID
+					}
+					if p, ok := dest[1].(*string); ok {
+						*p = "Test"
+					}
+					if p, ok := dest[2].(*string); ok {
+						*p = "UTC"
+					}
+					if p, ok := dest[3].(*pgtype.Text); ok {
+						*p = pgtype.Text{}
+					}
+					if p, ok := dest[4].(*string); ok {
+						*p = "inamori"
+					}
+					if p, ok := dest[5].(*[]byte); ok {
+						*p = nil
+					}
+					if p, ok := dest[6].(*pgtype.Text); ok {
+						*p = pgtype.Text{}
+					}
+					if p, ok := dest[7].(*int64); ok {
+						*p = 0
+					}
+					if p, ok := dest[8].(*[]byte); ok {
+						*p = []byte("{}")
+					}
+					if p, ok := dest[9].(*pgtype.Timestamptz); ok {
+						*p = pgtype.Timestamptz{}
+					}
+				}
+				return nil
+			}}
+		}
+		return &mockRow{err: pgx.ErrNoRows}
+	}
+
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tenant", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	data := resp["data"].(map[string]interface{})
+	id, _ := data["id"].(string)
+	if id != "" {
+		t.Errorf("expected empty string for invalid UUID, got %q", id)
+	}
+}
+
+// TestParseDate_InvalidDate indirectly tests parseDate by sending an invalid
+// date to the reports endpoint.
+func TestParseDate_InvalidDate(t *testing.T) {
+	db := newMockDBTX()
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/reports?date=not-a-date", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	errMsg, _ := resp["error"].(string)
+	if !strings.Contains(errMsg, "invalid date") {
+		t.Errorf("expected 'invalid date' error, got %q", errMsg)
+	}
+}
+
+// TestParseDate_ValidDate indirectly tests parseDate by sending a valid date
+// to the summary endpoint (which uses parseDate).
+func TestParseDate_ValidDate(t *testing.T) {
+	db := newMockDBTX()
+	// Return ErrNoRows for the summary — we just want to verify parseDate accepted the format.
+	db.queryRowFn = func(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+		return &mockRow{err: pgx.ErrNoRows}
+	}
+
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/reports/summary?date=2026-03-20", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Should be 404 (not found), NOT 400 (bad date). This confirms parseDate succeeded.
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404 (valid date, no summary), got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestGenerateInviteCode_ThroughCreateEmployee verifies that the invite code
+// generated by handleCreateEmployee is 8-char uppercase hex.
+func TestGenerateInviteCode_ThroughCreateEmployee(t *testing.T) {
+	db := newMockDBTX()
+
+	var capturedInviteCode string
+	db.queryRowFn = func(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+		if len(sql) > 20 && sql[:20] == "-- name: CreateEmplo" {
+			// args: tenant_id, name, telegram_id, culture_code, role, invite_code
+			if len(args) >= 6 {
+				if ic, ok := args[5].(pgtype.Text); ok {
+					capturedInviteCode = ic.String
+				}
+			}
+			empUUID := makeTestUUID(0xDD)
+			tenantUUID := makeTestUUID(0x77)
+			return &mockRow{scanFn: func(dest ...interface{}) error {
+				if len(dest) >= 9 {
+					if p, ok := dest[0].(*pgtype.UUID); ok {
+						*p = empUUID
+					}
+					if p, ok := dest[1].(*pgtype.UUID); ok {
+						*p = tenantUUID
+					}
+					if p, ok := dest[2].(*string); ok {
+						*p = "Frank"
+					}
+					if p, ok := dest[3].(*pgtype.Int8); ok {
+						*p = pgtype.Int8{}
+					}
+					if p, ok := dest[4].(*string); ok {
+						*p = "default"
+					}
+					if p, ok := dest[5].(*string); ok {
+						*p = "member"
+					}
+					if p, ok := dest[6].(*pgtype.Text); ok {
+						*p = pgtype.Text{String: capturedInviteCode, Valid: true}
+					}
+					if p, ok := dest[7].(*bool); ok {
+						*p = true
+					}
+					if p, ok := dest[8].(*pgtype.Timestamptz); ok {
+						*p = pgtype.Timestamptz{}
+					}
+				}
+				return nil
+			}}
+		}
+		return &mockRow{err: pgx.ErrNoRows}
+	}
+
+	router := setupRouter(db)
+	token := generateTestToken(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"77777777-7777-7777-7777-777777777777",
+		"boss",
+	)
+
+	body := `{"name":"Frank"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/employees", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify the invite code format: 8 characters, uppercase hex
+	if len(capturedInviteCode) != 8 {
+		t.Errorf("invite code length = %d, want 8", len(capturedInviteCode))
+	}
+	for _, ch := range capturedInviteCode {
+		if !((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F')) {
+			t.Errorf("invite code contains non-uppercase-hex char: %c in %q", ch, capturedInviteCode)
+			break
+		}
 	}
 }

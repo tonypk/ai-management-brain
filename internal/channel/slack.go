@@ -25,6 +25,7 @@ type SlackAdapter struct {
 	webhookURL string
 	httpClient *http.Client
 	stopCh     chan struct{}
+	baseURL    string
 }
 
 // NewSlackAdapter creates a new Slack channel adapter.
@@ -38,6 +39,22 @@ func NewSlackAdapter(cfg SlackConfig) (*SlackAdapter, error) {
 		webhookURL: cfg.WebhookURL,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 		stopCh:     make(chan struct{}),
+		baseURL:    "https://slack.com/api",
+	}, nil
+}
+
+// NewSlackAdapterWithHTTPClient creates a Slack adapter with a custom base URL (for testing).
+func NewSlackAdapterWithHTTPClient(cfg SlackConfig, baseURL string) (*SlackAdapter, error) {
+	if cfg.BotToken == "" {
+		return nil, fmt.Errorf("slack bot token is required")
+	}
+	return &SlackAdapter{
+		token:      cfg.BotToken,
+		appToken:   cfg.AppToken,
+		webhookURL: cfg.WebhookURL,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+		stopCh:     make(chan struct{}),
+		baseURL:    baseURL,
 	}, nil
 }
 
@@ -102,7 +119,7 @@ func (s *SlackAdapter) postMessage(ctx context.Context, channel, text string) er
 		return fmt.Errorf("marshal slack message: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://slack.com/api/chat.postMessage", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", s.baseURL+"/chat.postMessage", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
@@ -141,7 +158,7 @@ func (s *SlackAdapter) openDM(ctx context.Context, userID string) (string, error
 		return "", fmt.Errorf("marshal DM request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://slack.com/api/conversations.open", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", s.baseURL+"/conversations.open", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}

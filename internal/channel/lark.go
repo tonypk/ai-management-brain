@@ -29,6 +29,7 @@ type LarkAdapter struct {
 
 	httpClient *http.Client
 	stopCh     chan struct{}
+	baseURL    string
 }
 
 const (
@@ -48,6 +49,21 @@ func NewLarkAdapter(cfg LarkConfig) (*LarkAdapter, error) {
 		appSecret:  cfg.AppSecret,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 		stopCh:     make(chan struct{}),
+		baseURL:    larkBaseURL,
+	}, nil
+}
+
+// NewLarkAdapterWithBaseURL creates a Lark adapter with a custom base URL (for testing).
+func NewLarkAdapterWithBaseURL(cfg LarkConfig, baseURL string) (*LarkAdapter, error) {
+	if cfg.AppID == "" || cfg.AppSecret == "" {
+		return nil, fmt.Errorf("lark app ID and secret are required")
+	}
+	return &LarkAdapter{
+		appID:      cfg.AppID,
+		appSecret:  cfg.AppSecret,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+		stopCh:     make(chan struct{}),
+		baseURL:    baseURL,
 	}, nil
 }
 
@@ -121,7 +137,7 @@ func (l *LarkAdapter) refreshAccessToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("marshal token request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", larkTokenURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", l.baseURL+"/auth/v3/tenant_access_token/internal", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create token request: %w", err)
 	}
@@ -173,7 +189,7 @@ func (l *LarkAdapter) sendMessage(ctx context.Context, receiveIDType, receiveID,
 		return fmt.Errorf("marshal lark message: %w", err)
 	}
 
-	url := larkMessageURL + "?receive_id_type=" + receiveIDType
+	url := l.baseURL + "/im/v1/messages?receive_id_type=" + receiveIDType
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)

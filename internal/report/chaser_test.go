@@ -169,3 +169,79 @@ func TestChaser_PerEmployeeCulture(t *testing.T) {
 		}
 	}
 }
+
+func TestChaser_NoEmployeesWithoutReport(t *testing.T) {
+	db := &mockChaserDB{
+		employeesWithoutReport: nil,
+		lastChaseStep:          0,
+	}
+	sender := &mockSender{}
+	factory := brain.NewEngineFactory()
+
+	chaser := report.NewChaser(db, nil, sender, factory)
+	err := chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20", "inamori")
+	if err != nil {
+		t.Fatalf("chase: %v", err)
+	}
+	if len(sender.sentMessages) != 0 {
+		t.Errorf("expected 0 messages with no employees, got %d", len(sender.sentMessages))
+	}
+}
+
+func TestChaser_NilLLM_UsesFallback(t *testing.T) {
+	db := &mockChaserDB{
+		employeesWithoutReport: []report.EmployeeInfo{
+			{ID: "e1", Name: "Alice", TelegramID: 111, CultureCode: "default"},
+		},
+		lastChaseStep: 0,
+	}
+	sender := &mockSender{}
+	factory := brain.NewEngineFactory()
+
+	// nil LLM → should use fallback message
+	chaser := report.NewChaser(db, nil, sender, factory)
+	err := chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20", "inamori")
+	if err != nil {
+		t.Fatalf("chase: %v", err)
+	}
+
+	if len(sender.sentMessages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(sender.sentMessages))
+	}
+	msg := sender.sentMessages[0].Message
+	if msg == "" {
+		t.Error("expected non-empty fallback message")
+	}
+}
+
+func TestChaser_ChaseLogContainsCorrectFields(t *testing.T) {
+	db := &mockChaserDB{
+		employeesWithoutReport: []report.EmployeeInfo{
+			{ID: "e1", Name: "Bob", TelegramID: 222, CultureCode: "default"},
+		},
+		lastChaseStep: 1, // step 1 already done
+	}
+	llm := &mockLLM{response: "step 2 reminder"}
+	sender := &mockSender{}
+	factory := brain.NewEngineFactory()
+
+	chaser := report.NewChaser(db, brain.NewLLMService(llm), sender, factory)
+	chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-21", "grove")
+
+	if len(db.createdLogs) != 1 {
+		t.Fatalf("expected 1 log, got %d", len(db.createdLogs))
+	}
+	log := db.createdLogs[0]
+	if log.TenantID != "tenant-1" {
+		t.Errorf("log.TenantID = %q", log.TenantID)
+	}
+	if log.EmployeeID != "e1" {
+		t.Errorf("log.EmployeeID = %q", log.EmployeeID)
+	}
+	if log.ReportDate != "2026-03-21" {
+		t.Errorf("log.ReportDate = %q", log.ReportDate)
+	}
+	if log.Step != 2 {
+		t.Errorf("log.Step = %d, want 2", log.Step)
+	}
+}

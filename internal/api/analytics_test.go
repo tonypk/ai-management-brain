@@ -39,3 +39,50 @@ func TestSafeRate(t *testing.T) {
 		t.Errorf("expected 0.0 for zero total, got %f", r)
 	}
 }
+
+func TestCalculateHealthScore_AllNegative(t *testing.T) {
+	sentiments := map[string]int{"negative": 10}
+	score := calculateHealthScore(0.5, sentiments)
+	// 20 (50% submission) + 0 (0% positive, 0% neutral) + 20 base = 40
+	if score != 40 {
+		t.Errorf("expected 40 for all negative, got %d", score)
+	}
+}
+
+func TestCalculateHealthScore_Cap100(t *testing.T) {
+	sentiments := map[string]int{"positive": 10}
+	score := calculateHealthScore(2.0, sentiments)
+	if score != 100 {
+		t.Errorf("expected 100 cap, got %d", score)
+	}
+}
+
+func TestCalculateHealthScore_AllNeutral(t *testing.T) {
+	sentiments := map[string]int{"neutral": 10}
+	score := calculateHealthScore(1.0, sentiments)
+	// 40 (100% submission) + 0 (positive) + 20 (100% neutral) + 20 base = 80
+	if score != 80 {
+		t.Errorf("expected 80 for all neutral, got %d", score)
+	}
+}
+
+func TestCalculateHealthScore_Stressed(t *testing.T) {
+	sentiments := map[string]int{"stressed": 10}
+	score := calculateHealthScore(1.0, sentiments)
+	// 40 (100% submission) + 0 (positive) + 0 (neutral) + 20 base = 60
+	if score != 60 {
+		t.Errorf("expected 60 for all stressed, got %d", score)
+	}
+}
+
+func TestSafeRate_ZeroCount(t *testing.T) {
+	if r := safeRate(0, 10); r != 0.0 {
+		t.Errorf("expected 0.0 for zero count, got %f", r)
+	}
+}
+
+func TestSafeRate_Equal(t *testing.T) {
+	if r := safeRate(10, 10); r != 1.0 {
+		t.Errorf("expected 1.0, got %f", r)
+	}
+}

@@ -2,6 +2,7 @@ package report_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/tonypk/ai-management-brain/internal/report"
@@ -191,5 +192,138 @@ func TestHasSentimentDrop_InsufficientData(t *testing.T) {
 	}
 	if len(alerts) != 0 {
 		t.Errorf("expected 0 alerts with insufficient sentiment data, got %d", len(alerts))
+	}
+}
+
+func TestAlertChecker_NoEmployees(t *testing.T) {
+	db := &mockAlertDB{
+		employees: nil,
+	}
+	sender := &mockAlertSender{}
+	checker := report.NewAlertChecker(db, sender)
+
+	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	if err != nil {
+		t.Fatalf("CheckAll: %v", err)
+	}
+	if len(alerts) != 0 {
+		t.Errorf("expected 0 alerts with no employees, got %d", len(alerts))
+	}
+	if len(sender.messages) != 0 {
+		t.Errorf("expected 0 messages, got %d", len(sender.messages))
+	}
+}
+
+func TestAlertChecker_BothAlerts_SameEmployee(t *testing.T) {
+	db := &mockAlertDB{
+		employees: []report.EmployeeInfo{
+			{ID: "e1", Name: "Frank", TelegramID: 666},
+		},
+		missedDays: map[string]int{"e1": 5},                                                      // critical miss
+		sentiments: map[string][]string{"e1": {"negative", "negative", "negative", "positive"}},   // sentiment drop
+	}
+	sender := &mockAlertSender{}
+	checker := report.NewAlertChecker(db, sender)
+
+	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	if err != nil {
+		t.Fatalf("CheckAll: %v", err)
+	}
+	// Both consecutive_miss and sentiment_drop for same employee
+	if len(alerts) != 2 {
+		t.Fatalf("expected 2 alerts for same employee, got %d", len(alerts))
+	}
+
+	types := map[string]bool{}
+	for _, a := range alerts {
+		types[a.AlertType] = true
+	}
+	if !types["consecutive_miss"] || !types["sentiment_drop"] {
+		t.Errorf("expected both alert types, got %v", types)
+	}
+}
+
+func TestAlertChecker_SentimentDrop_NonConsecutive(t *testing.T) {
+	db := &mockAlertDB{
+		employees: []report.EmployeeInfo{
+			{ID: "e1", Name: "Grace", TelegramID: 777},
+		},
+		missedDays: map[string]int{"e1": 0},
+		sentiments: map[string][]string{"e1": {"negative", "negative", "positive", "negative", "negative"}},
+	}
+	sender := &mockAlertSender{}
+	checker := report.NewAlertChecker(db, sender)
+
+	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	if err != nil {
+		t.Fatalf("CheckAll: %v", err)
+	}
+	// non-consecutive negatives (max 2 in a row) should NOT trigger drop
+	if len(alerts) != 0 {
+		t.Errorf("expected 0 alerts for non-consecutive negatives, got %d", len(alerts))
+	}
+}
+
+func TestAlertChecker_ExactThreshold_3Miss(t *testing.T) {
+	db := &mockAlertDB{
+		employees: []report.EmployeeInfo{
+			{ID: "e1", Name: "Harry", TelegramID: 888},
+		},
+		missedDays: map[string]int{"e1": 3},
+		sentiments: map[string][]string{"e1": {}},
+	}
+	sender := &mockAlertSender{}
+	checker := report.NewAlertChecker(db, sender)
+
+	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	if err != nil {
+		t.Fatalf("CheckAll: %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("expected 1 alert at threshold, got %d", len(alerts))
+	}
+	if alerts[0].Severity != "warning" {
+		t.Errorf("3 missed days severity = %q, want warning", alerts[0].Severity)
+	}
+}
+
+func TestAlertChecker_BelowThreshold_2Miss(t *testing.T) {
+	db := &mockAlertDB{
+		employees: []report.EmployeeInfo{
+			{ID: "e1", Name: "Ivy", TelegramID: 999},
+		},
+		missedDays: map[string]int{"e1": 2},
+		sentiments: map[string][]string{"e1": {}},
+	}
+	sender := &mockAlertSender{}
+	checker := report.NewAlertChecker(db, sender)
+
+	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	if err != nil {
+		t.Fatalf("CheckAll: %v", err)
+	}
+	if len(alerts) != 0 {
+		t.Errorf("expected 0 alerts below threshold, got %d", len(alerts))
+	}
+}
+
+func TestAlertChecker_DBError_Graceful(t *testing.T) {
+	db := &mockAlertDB{
+		employees: []report.EmployeeInfo{
+			{ID: "e1", Name: "Jack", TelegramID: 100},
+		},
+		missedDaysErr: errors.New("db error"),
+		sentimentsErr: errors.New("db error"),
+	}
+	sender := &mockAlertSender{}
+	checker := report.NewAlertChecker(db, sender)
+
+	// Should not return error, just skip the employee
+	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	if err != nil {
+		t.Fatalf("CheckAll should not return error for per-employee DB failures: %v", err)
+	}
+	if len(alerts) != 0 {
+		t.Errorf("expected 0 alerts with DB errors, got %d", len(alerts))
 	}
 }
