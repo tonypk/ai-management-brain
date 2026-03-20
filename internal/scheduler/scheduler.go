@@ -1,0 +1,137 @@
+package scheduler
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/go-co-op/gocron/v2"
+)
+
+// RedisClient defines the Redis operations needed by the scheduler.
+type RedisClient interface {
+	Get(ctx context.Context, key string) (string, error)
+	Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error
+	Del(ctx context.Context, keys ...string) error
+}
+
+// Callbacks defines the functions the scheduler will invoke.
+type Callbacks interface {
+	Remind(ctx context.Context) error
+	Chase(ctx context.Context) error
+	Summary(ctx context.Context) error
+}
+
+// Scheduler manages scheduled jobs for the management loop.
+type Scheduler struct {
+	scheduler gocron.Scheduler
+	redis     RedisClient
+	callbacks Callbacks
+	jobs      []jobInfo
+}
+
+type jobInfo struct {
+	name     string
+	callback func(ctx context.Context) error
+}
+
+// New creates a new scheduler with remind/chase/summary jobs.
+func New(timezone string, redis RedisClient, callbacks Callbacks) (*Scheduler, error) {
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		return nil, fmt.Errorf("load timezone %q: %w", timezone, err)
+	}
+
+	s, err := gocron.NewScheduler(gocron.WithLocation(loc))
+	if err != nil {
+		return nil, fmt.Errorf("create scheduler: %w", err)
+	}
+
+	sched := &Scheduler{
+		scheduler: s,
+		redis:     redis,
+		callbacks: callbacks,
+	}
+
+	// Register jobs
+	jobs := []struct {
+		name string
+		cron string
+		fn   func(ctx context.Context) error
+	}{
+		{"remind", "0 9 * * *", callbacks.Remind},    // 9:00 AM
+		{"chase", "30 17 * * *", callbacks.Chase},    // 5:30 PM
+		{"summary", "0 19 * * *", callbacks.Summary}, // 7:00 PM
+	}
+
+	for _, j := range jobs {
+		jName := j.name
+		jFn := j.fn
+		_, err := s.NewJob(
+			gocron.CronJob(j.cron, false),
+			gocron.NewTask(func() {
+				ctx := context.Background()
+				slog.Info("scheduler job running", "job", jName)
+				if err := jFn(ctx); err != nil {
+					slog.Error("scheduler job failed", "job", jName, "error", err)
+				}
+				// Update last_run
+				redis.Set(ctx, fmt.Sprintf("scheduler:last_run:%s", jName),
+					time.Now().Format(time.RFC3339), 0)
+			}),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("register job %s: %w", jName, err)
+		}
+		sched.jobs = append(sched.jobs, jobInfo{name: jName, callback: jFn})
+	}
+
+	return sched, nil
+}
+
+// Start begins the scheduler and checks for missed jobs.
+func (s *Scheduler) Start(ctx context.Context) {
+	slog.Info("scheduler starting")
+	s.CheckMissedJobs(ctx)
+	s.scheduler.Start()
+}
+
+// Stop gracefully shuts down the scheduler.
+func (s *Scheduler) Stop() error {
+	slog.Info("scheduler stopping")
+	return s.scheduler.Shutdown()
+}
+
+// JobCount returns the number of registered jobs.
+func (s *Scheduler) JobCount() int {
+	return len(s.jobs)
+}
+
+// CheckMissedJobs checks if any jobs missed their window and runs catch-up.
+func (s *Scheduler) CheckMissedJobs(ctx context.Context) {
+	threshold := 2 * time.Hour
+
+	for _, j := range s.jobs {
+		key := fmt.Sprintf("scheduler:last_run:%s", j.name)
+		raw, err := s.redis.Get(ctx, key)
+		if err != nil {
+			continue // no last_run = skip (first run or Redis error)
+		}
+
+		lastRun, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			slog.Warn("parse last_run", "job", j.name, "raw", raw, "error", err)
+			continue
+		}
+
+		if time.Since(lastRun) > threshold {
+			slog.Info("missed job detected, running catch-up", "job", j.name, "last_run", lastRun)
+			if err := j.callback(ctx); err != nil {
+				slog.Error("catch-up failed", "job", j.name, "error", err)
+			}
+			// Update last_run after catch-up
+			s.redis.Set(ctx, key, time.Now().Format(time.RFC3339), 0)
+		}
+	}
+}
