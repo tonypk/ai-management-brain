@@ -73,14 +73,16 @@ func (c *Chaser) ChaseAll(ctx context.Context, tenantID, date string) error {
 			continue
 		}
 
-		// Build system prompt from engine
-		systemPrompt := c.engine.BuildSystemPrompt()
-
-		// Generate message via LLM
-		msg, err := c.llm.GenerateChaseMessage(ctx, systemPrompt, emp.Name, step.Tone)
-		if err != nil {
-			// Fallback to template
-			slog.Warn("LLM failed, using fallback", "error", err, "employee", emp.Name)
+		// Generate message via LLM (if available) or use template fallback
+		var msg string
+		if c.llm != nil {
+			systemPrompt := c.engine.BuildSystemPrompt()
+			msg, err = c.llm.GenerateChaseMessage(ctx, systemPrompt, emp.Name, step.Tone)
+			if err != nil {
+				slog.Warn("LLM failed, using fallback", "error", err, "employee", emp.Name)
+				msg = fmt.Sprintf("Hi %s, this is a reminder to submit your daily report.", emp.Name)
+			}
+		} else {
 			msg = fmt.Sprintf("Hi %s, this is a reminder to submit your daily report.", emp.Name)
 		}
 

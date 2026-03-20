@@ -92,11 +92,15 @@ func (s *Summarizer) Generate(ctx context.Context, tenantID, date string) (*Summ
 		summaryConfig.Flag,
 	)
 
-	// Generate via LLM
-	content, err := s.llm.GenerateSummary(ctx, systemPrompt, reportData)
-	if err != nil {
-		// Fallback: bullet-point summary
-		slog.Warn("LLM failed for summary, using fallback", "error", err)
+	// Generate via LLM (if available)
+	var content string
+	if s.llm != nil {
+		content, err = s.llm.GenerateSummary(ctx, systemPrompt, reportData)
+		if err != nil {
+			slog.Warn("LLM failed for summary, using fallback", "error", err)
+			content = s.buildFallbackSummary(reports, len(reports), int(activeCount))
+		}
+	} else {
 		content = s.buildFallbackSummary(reports, len(reports), int(activeCount))
 	}
 
