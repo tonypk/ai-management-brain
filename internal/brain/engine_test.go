@@ -59,3 +59,69 @@ func TestEngine_GetCheckinQuestions(t *testing.T) {
 		t.Errorf("expected at least 2 questions, got %d", len(qs))
 	}
 }
+
+func TestEngineFactory_Caching(t *testing.T) {
+	f := brain.NewEngineFactory()
+	e1, err := f.ForTenant("inamori", "default")
+	if err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	e2, err := f.ForTenant("inamori", "default")
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if e1 != e2 {
+		t.Error("factory should return cached engine")
+	}
+}
+
+func TestEngineFactory_DifferentMentors(t *testing.T) {
+	f := brain.NewEngineFactory()
+	mentors := []string{"inamori", "dalio", "grove", "ren"}
+	for _, m := range mentors {
+		e, err := f.ForTenant(m, "default")
+		if err != nil {
+			t.Fatalf("failed for mentor %s: %v", m, err)
+		}
+		if e.MentorID() != m {
+			t.Errorf("expected mentor %s, got %s", m, e.MentorID())
+		}
+	}
+}
+
+func TestEngineFactory_DifferentCultures(t *testing.T) {
+	f := brain.NewEngineFactory()
+	cultures := []string{"default", "philippines", "singapore", "indonesia", "srilanka"}
+	for _, c := range cultures {
+		_, err := f.ForTenant("inamori", c)
+		if err != nil {
+			t.Fatalf("failed for culture %s: %v", c, err)
+		}
+	}
+}
+
+func TestEngineFactory_Invalidate(t *testing.T) {
+	f := brain.NewEngineFactory()
+	e1, _ := f.ForTenant("inamori", "default")
+	f.Invalidate("inamori", "default")
+	e2, _ := f.ForTenant("inamori", "default")
+	if e1 == e2 {
+		t.Error("after invalidate, should return new engine")
+	}
+}
+
+func TestValidMentors(t *testing.T) {
+	expected := []string{"inamori", "dalio", "grove", "ren"}
+	for _, m := range expected {
+		if !brain.ValidMentors[m] {
+			t.Errorf("expected %s in ValidMentors", m)
+		}
+	}
+}
+
+func TestEngine_MentorID(t *testing.T) {
+	e, _ := brain.NewEngine("grove", "default")
+	if e.MentorID() != "grove" {
+		t.Errorf("expected grove, got %s", e.MentorID())
+	}
+}

@@ -1,0 +1,29 @@
+market: Sri Lanka
+language: Sinhala / Tamil / English
+timezone: Asia/Colombo
+version: 1
+
+communication_style:
+  directness: low
+  hierarchy_respect: high
+  relationship_first: true
+  group_face: high
+
+chase_rules:
+  never_name_in_group: true
+  private_before_escalate: true
+  warmth_required: true
+  acknowledge_effort: true
+
+forbidden_patterns:
+  - "You haven't done..."
+  - "Everyone else finished"
+  - "This is your responsibility alone"
+  - "Why are you always late"
+
+preferred_patterns:
+  - "Hope you're having a good day"
+  - "Your contributions are valued"
+  - "When you get a chance, please share your update"
+  - "The team benefits from your perspective"
+  - "Thank you for your efforts"

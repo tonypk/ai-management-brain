@@ -65,10 +65,10 @@ func TestChaser_ChasesEmployeesWithoutReport(t *testing.T) {
 	}
 	llm := &mockLLM{response: "Hi Alice, gentle reminder!"}
 	sender := &mockSender{}
-	engine, _ := brain.NewEngine("inamori", "philippines")
+	factory := brain.NewEngineFactory()
 
-	chaser := report.NewChaser(db, brain.NewLLMService(llm), sender, engine)
-	err := chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20")
+	chaser := report.NewChaser(db, brain.NewLLMService(llm), sender, factory)
+	err := chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20", "inamori")
 	if err != nil {
 		t.Fatalf("chase: %v", err)
 	}
@@ -89,10 +89,10 @@ func TestChaser_SkipsTodayWhenMaxSteps(t *testing.T) {
 	}
 	llm := &mockLLM{response: "reminder"}
 	sender := &mockSender{}
-	engine, _ := brain.NewEngine("inamori", "singapore")
+	factory := brain.NewEngineFactory()
 
-	chaser := report.NewChaser(db, brain.NewLLMService(llm), sender, engine)
-	chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20")
+	chaser := report.NewChaser(db, brain.NewLLMService(llm), sender, factory)
+	chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20", "inamori")
 
 	if len(sender.sentMessages) != 0 {
 		t.Error("should not send message when skip_today")
@@ -108,10 +108,10 @@ func TestChaser_CultureOverrideApplied(t *testing.T) {
 	}
 	llm := &mockLLM{response: "reminder"}
 	sender := &mockSender{}
-	engine, _ := brain.NewEngine("dalio", "philippines")
+	factory := brain.NewEngineFactory()
 
-	chaser := report.NewChaser(db, brain.NewLLMService(llm), sender, engine)
-	chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20")
+	chaser := report.NewChaser(db, brain.NewLLMService(llm), sender, factory)
+	chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20", "dalio")
 
 	if len(db.createdLogs) != 1 {
 		t.Fatal("expected 1 log")
@@ -130,12 +130,42 @@ func TestChaser_LLMFallback(t *testing.T) {
 	}
 	llm := &mockLLM{err: errors.New("api down")}
 	sender := &mockSender{}
-	engine, _ := brain.NewEngine("inamori", "default")
+	factory := brain.NewEngineFactory()
 
-	chaser := report.NewChaser(db, brain.NewLLMService(llm), sender, engine)
-	chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20")
+	chaser := report.NewChaser(db, brain.NewLLMService(llm), sender, factory)
+	chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20", "inamori")
 
 	if len(sender.sentMessages) != 1 {
 		t.Errorf("should send fallback message, got %d messages", len(sender.sentMessages))
+	}
+}
+
+func TestChaser_PerEmployeeCulture(t *testing.T) {
+	db := &mockChaserDB{
+		employeesWithoutReport: []report.EmployeeInfo{
+			{ID: "e1", Name: "Alice", TelegramID: 111, CultureCode: "philippines"},
+			{ID: "e2", Name: "Budi", TelegramID: 222, CultureCode: "indonesia"},
+			{ID: "e3", Name: "Kumar", TelegramID: 333, CultureCode: "srilanka"},
+		},
+		lastChaseStep: 0,
+	}
+	llm := &mockLLM{response: "chase msg"}
+	sender := &mockSender{}
+	factory := brain.NewEngineFactory()
+
+	chaser := report.NewChaser(db, brain.NewLLMService(llm), sender, factory)
+	err := chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20", "dalio")
+	if err != nil {
+		t.Fatalf("chase: %v", err)
+	}
+
+	// All 3 should get private_message due to culture override (all cultures have NeverNameInGroup)
+	if len(sender.sentMessages) != 3 {
+		t.Errorf("expected 3 messages, got %d", len(sender.sentMessages))
+	}
+	for _, log := range db.createdLogs {
+		if log.Action != "private_message" {
+			t.Errorf("expected private_message for all cultures, got %q for %s", log.Action, log.EmployeeID)
+		}
 	}
 }

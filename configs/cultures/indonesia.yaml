@@ -1,0 +1,30 @@
+market: Indonesia
+language: Bahasa Indonesia / English
+timezone: Asia/Jakarta
+version: 1
+
+communication_style:
+  directness: low
+  hierarchy_respect: high
+  relationship_first: true
+  group_face: high
+
+chase_rules:
+  never_name_in_group: true
+  private_before_escalate: true
+  warmth_required: true
+  acknowledge_effort: true
+
+forbidden_patterns:
+  - "Why didn't you..."
+  - "You failed to..."
+  - "This is unacceptable"
+  - "I'm disappointed in you"
+  - "You are behind everyone"
+
+preferred_patterns:
+  - "Mohon maaf, just a gentle reminder"
+  - "We appreciate your hard work"
+  - "Please take your time, but we'd love to hear from you"
+  - "The team looks forward to your update"
+  - "Thank you for your dedication"

@@ -216,13 +216,15 @@ func main() {
 
 	redisClient := &redisWrapper{client: rdb}
 
-	// Load brain engine (default mentor + culture)
-	engine, err := brain.NewEngine("inamori", "default")
-	if err != nil {
-		slog.Error("failed to create brain engine", "error", err)
+	// Create engine factory (dynamic mentor+culture per tenant)
+	engineFactory := brain.NewEngineFactory()
+
+	// Verify default mentor loads
+	if _, err := engineFactory.ForTenant("inamori", "default"); err != nil {
+		slog.Error("failed to load default engine", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("brain engine loaded", "mentor", "inamori", "culture", "default")
+	slog.Info("engine factory ready", "mentors", "inamori,dalio,grove,ren")
 
 	// Create LLM client (optional)
 	var llmService *brain.LLMService
@@ -243,8 +245,9 @@ func main() {
 	botDB := bot.NewDBAdapter(queries)
 	reportDB := report.NewDBAdapter(queries)
 
-	// Create report collector with mentor's check-in questions
-	collector := report.NewCollector(redisClient, engine.GetCheckinQuestions())
+	// Create report collector with default questions (overridden per-remind)
+	defaultEngine, _ := engineFactory.ForTenant("inamori", "default")
+	collector := report.NewCollector(redisClient, defaultEngine.GetCheckinQuestions())
 
 	// Create Telegram bot
 	tgBot, err := bot.NewBot(cfg.TelegramToken, cfg.BossTelegramID, botDB)
@@ -253,20 +256,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create chaser and summarizer with real DB + bot sender
-	chaser := report.NewChaser(reportDB, llmService, tgBot, engine)
-	summarizer := report.NewSummarizer(reportDB, llmService, engine)
+	// Create chaser and summarizer with factory (no fixed engine)
+	chaser := report.NewChaser(reportDB, llmService, tgBot, engineFactory)
+	summarizer := report.NewSummarizer(reportDB, llmService)
 
 	// Create command handler and register commands
 	cmdHandler := bot.NewCommandHandler(botDB, nil, nil, cfg.BossTelegramID)
 
-	// Wire diagnostics to show scheduler info
+	// Wire diagnostics to show scheduler info + current mentor
 	startTime := time.Now()
 	cmdHandler.DiagnosticsFn = func() string {
 		uptime := time.Since(startTime).Round(time.Second)
 		aiStatus := "disabled (no API key)"
 		if cfg.AnthropicKey != "" {
 			aiStatus = "enabled"
+		}
+
+		// Look up current mentor
+		mentorID := "unknown"
+		if tenant, err := botDB.GetTenantByBossChatID(context.Background(), cfg.BossTelegramID); err == nil {
+			mentorID = tenant.MentorID
 		}
 
 		// Read last run times from Redis
@@ -288,11 +297,12 @@ func main() {
 				"Uptime: %s\n"+
 				"Timezone: %s\n"+
 				"AI Features: %s\n"+
-				"Mentor: inamori\n\n"+
+				"Active Mentor: %s\n"+
+				"Available Mentors: inamori, dalio, grove, ren\n\n"+
 				"Last Remind: %s\n"+
 				"Last Chase: %s\n"+
 				"Last Summary: %s",
-			uptime, cfg.Timezone, aiStatus,
+			uptime, cfg.Timezone, aiStatus, mentorID,
 			lastRemind, lastChase, lastSummary,
 		)
 	}
@@ -304,7 +314,6 @@ func main() {
 		// Look up employee by telegram_id
 		emp, err := botDB.GetEmployeeByTelegramID(context.Background(), senderID)
 		if err != nil {
-			// Unknown user — ignore (commands like /join handle this)
 			return nil
 		}
 
@@ -315,7 +324,6 @@ func main() {
 		switch state {
 		case report.StateConfirming:
 			if lower == "confirm" {
-				// Get answers before confirming
 				answers := collector.GetAnswers(context.Background(), empID)
 				cState, msg, err := collector.Confirm(context.Background(), empID)
 				if err != nil {
@@ -353,7 +361,7 @@ func main() {
 			}
 
 		default:
-			// No active conversation — ignore non-command messages
+			// No active conversation
 		}
 
 		return nil
@@ -362,15 +370,23 @@ func main() {
 	// Start bot polling in background
 	go tgBot.Start()
 
-	// Create scheduler callbacks wired to real operations
+	// Create scheduler callbacks wired to real operations (dynamic mentor)
 	callbacks := &schedulerCallbacks{
 		remindFn: func(ctx context.Context) error {
 			slog.Info("remind job: sending check-in questions")
-			tenantID, err := reportDB.GetTenantIDByBossChatID(ctx, cfg.BossTelegramID)
+			tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID)
 			if err != nil {
 				return fmt.Errorf("get tenant: %w", err)
 			}
-			emps, err := reportDB.ListActiveEmployeesWithTelegram(ctx, tenantID)
+
+			// Get mentor's questions for this tenant
+			engine, err := engineFactory.ForTenant(tenant.MentorID, "default")
+			if err != nil {
+				return fmt.Errorf("load engine for remind: %w", err)
+			}
+			questions := engine.GetCheckinQuestions()
+
+			emps, err := reportDB.ListActiveEmployeesWithTelegram(ctx, tenant.ID)
 			if err != nil {
 				return fmt.Errorf("list employees: %w", err)
 			}
@@ -379,7 +395,7 @@ func main() {
 				return nil
 			}
 			for _, emp := range emps {
-				_, firstQ, err := collector.Start(ctx, emp.ID)
+				_, firstQ, err := collector.StartWithQuestions(ctx, emp.ID, questions)
 				if err != nil {
 					slog.Error("start collection", "employee_id", emp.ID, "error", err)
 					continue
@@ -389,34 +405,38 @@ func main() {
 					slog.Error("send remind", "employee_id", emp.ID, "error", err)
 				}
 			}
-			slog.Info("remind job: completed", "employees_reminded", len(emps))
+			slog.Info("remind job: completed", "employees_reminded", len(emps), "mentor", tenant.MentorID)
 			return nil
 		},
 		chaseFn: func(ctx context.Context) error {
 			slog.Info("chase job: chasing non-submitters")
-			tenantID, err := reportDB.GetTenantIDByBossChatID(ctx, cfg.BossTelegramID)
+			tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID)
 			if err != nil {
 				return fmt.Errorf("get tenant: %w", err)
 			}
 			today := time.Now().In(loc).Format("2006-01-02")
-			return chaser.ChaseAll(ctx, tenantID, today)
+			return chaser.ChaseAll(ctx, tenant.ID, today, tenant.MentorID)
 		},
 		summaryFn: func(ctx context.Context) error {
 			slog.Info("summary job: generating daily summary")
-			tenantID, err := reportDB.GetTenantIDByBossChatID(ctx, cfg.BossTelegramID)
+			tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID)
 			if err != nil {
 				return fmt.Errorf("get tenant: %w", err)
 			}
+			engine, err := engineFactory.ForTenant(tenant.MentorID, "default")
+			if err != nil {
+				return fmt.Errorf("load engine for summary: %w", err)
+			}
 			today := time.Now().In(loc).Format("2006-01-02")
-			result, err := summarizer.Generate(ctx, tenantID, today)
+			result, err := summarizer.Generate(ctx, tenant.ID, today, engine)
 			if err != nil {
 				return fmt.Errorf("generate summary: %w", err)
 			}
-			header := fmt.Sprintf("Daily Summary (%s)\nSubmission rate: %.0f%%\n\n", today, result.SubmissionRate*100)
+			header := fmt.Sprintf("Daily Summary (%s)\nMentor: %s\nSubmission rate: %.0f%%\n\n", today, tenant.MentorID, result.SubmissionRate*100)
 			if err := tgBot.SendMessage(cfg.BossTelegramID, header+result.Content); err != nil {
 				return fmt.Errorf("send summary to boss: %w", err)
 			}
-			slog.Info("summary job: completed", "submission_rate", result.SubmissionRate)
+			slog.Info("summary job: completed", "submission_rate", result.SubmissionRate, "mentor", tenant.MentorID)
 			return nil
 		},
 	}

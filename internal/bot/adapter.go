@@ -115,6 +115,17 @@ func (a *DBAdapter) UpdateTenantMentor(ctx context.Context, tenantID, mentorID s
 	})
 }
 
+func (a *DBAdapter) UpdateEmployeeCulture(ctx context.Context, employeeID, cultureCode string) error {
+	uid, err := parseUUID(employeeID)
+	if err != nil {
+		return err
+	}
+	return a.q.UpdateEmployeeCulture(ctx, sqlc.UpdateEmployeeCultureParams{
+		ID:          uid,
+		CultureCode: cultureCode,
+	})
+}
+
 // --- IdentityQuerier ---
 
 func (a *DBAdapter) GetEmployeeByTelegramID(ctx context.Context, telegramID int64) (*Employee, error) {

@@ -87,6 +87,10 @@ func (m *mockCommandDB) UpdateTenantMentor(_ context.Context, _, _ string) error
 	return m.updateMentorErr
 }
 
+func (m *mockCommandDB) UpdateEmployeeCulture(_ context.Context, _, _ string) error {
+	return nil
+}
+
 // --- Tests ---
 
 const bossChatID int64 = 999

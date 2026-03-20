@@ -193,6 +193,20 @@ func (q *Queries) ListEmployeesWithoutReport(ctx context.Context, arg ListEmploy
 	return items, nil
 }
 
+const updateEmployeeCulture = `-- name: UpdateEmployeeCulture :exec
+UPDATE employees SET culture_code = $2 WHERE id = $1
+`
+
+type UpdateEmployeeCultureParams struct {
+	ID          pgtype.UUID `json:"id"`
+	CultureCode string      `json:"culture_code"`
+}
+
+func (q *Queries) UpdateEmployeeCulture(ctx context.Context, arg UpdateEmployeeCultureParams) error {
+	_, err := q.db.Exec(ctx, updateEmployeeCulture, arg.ID, arg.CultureCode)
+	return err
+}
+
 const updateEmployeeTelegramID = `-- name: UpdateEmployeeTelegramID :exec
 UPDATE employees SET telegram_id = $2 WHERE id = $1
 `

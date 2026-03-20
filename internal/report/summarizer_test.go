@@ -39,8 +39,8 @@ func TestSummarizer_GenerateWithReports(t *testing.T) {
 	llm := &mockLLM{response: "## Summary\nTeam is making progress. Alice and Bob submitted. Blocker: API dependency."}
 	engine, _ := brain.NewEngine("inamori", "philippines")
 
-	summarizer := report.NewSummarizer(db, brain.NewLLMService(llm), engine)
-	result, err := summarizer.Generate(context.Background(), "tenant-1", "2026-03-20")
+	summarizer := report.NewSummarizer(db, brain.NewLLMService(llm))
+	result, err := summarizer.Generate(context.Background(), "tenant-1", "2026-03-20", engine)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -63,8 +63,8 @@ func TestSummarizer_PartialData(t *testing.T) {
 	llm := &mockLLM{response: "No reports submitted today."}
 	engine, _ := brain.NewEngine("inamori", "default")
 
-	summarizer := report.NewSummarizer(db, brain.NewLLMService(llm), engine)
-	result, err := summarizer.Generate(context.Background(), "tenant-1", "2026-03-20")
+	summarizer := report.NewSummarizer(db, brain.NewLLMService(llm))
+	result, err := summarizer.Generate(context.Background(), "tenant-1", "2026-03-20", engine)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -83,12 +83,39 @@ func TestSummarizer_LLMFallback(t *testing.T) {
 	llm := &mockLLM{err: errors.New("api down")}
 	engine, _ := brain.NewEngine("inamori", "default")
 
-	summarizer := report.NewSummarizer(db, brain.NewLLMService(llm), engine)
-	result, err := summarizer.Generate(context.Background(), "tenant-1", "2026-03-20")
+	summarizer := report.NewSummarizer(db, brain.NewLLMService(llm))
+	result, err := summarizer.Generate(context.Background(), "tenant-1", "2026-03-20", engine)
 	if err != nil {
 		t.Fatalf("should not error with fallback: %v", err)
 	}
 	if result.Content == "" {
 		t.Error("fallback should produce non-empty content")
+	}
+}
+
+func TestSummarizer_DifferentMentors(t *testing.T) {
+	db := &mockSummarizerDB{
+		reports: []report.ReportRow{
+			{EmployeeName: "Alice", Answers: `{"q1":"did X"}`},
+		},
+		activeCount: 3,
+	}
+	llm := &mockLLM{response: "summary"}
+
+	// Test with different mentors to ensure they all load properly
+	for _, mentorID := range []string{"inamori", "dalio", "grove", "ren"} {
+		engine, err := brain.NewEngine(mentorID, "default")
+		if err != nil {
+			t.Fatalf("failed to create engine for %s: %v", mentorID, err)
+		}
+
+		summarizer := report.NewSummarizer(db, brain.NewLLMService(llm))
+		result, err := summarizer.Generate(context.Background(), "tenant-1", "2026-03-20", engine)
+		if err != nil {
+			t.Fatalf("generate with mentor %s: %v", mentorID, err)
+		}
+		if result.Content == "" {
+			t.Errorf("expected content for mentor %s", mentorID)
+		}
 	}
 }

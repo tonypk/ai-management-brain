@@ -45,6 +45,7 @@ type CommandQuerier interface {
 	GetEmployeeByInviteCode(ctx context.Context, code string) (*Employee, error)
 	UpdateEmployeeTelegramID(ctx context.Context, employeeID string, telegramID int64) error
 	UpdateTenantMentor(ctx context.Context, tenantID, mentorID string) error
+	UpdateEmployeeCulture(ctx context.Context, employeeID, cultureCode string) error
 }
 
 // CommandHandler handles bot commands.
@@ -129,9 +130,10 @@ func (h *CommandHandler) HandleHelp(c BotContext) error {
 
 /start — Initialize your team
 /status — View team & report status
-/addemployee <name> <culture> — Add team member (e.g., /addemployee Alice ph)
+/addemployee <name> <culture> — Add team member
 /join <code> — Link your Telegram (for employees)
-/mentor <id> — Switch mentor (inamori, dalio)
+/mentor <id> — Switch mentor (inamori, dalio, grove, ren)
+/culture <name> <code> — Set employee culture (philippines, singapore, indonesia, srilanka)
 /diagnostics — System status
 /help — Show this message`
 	return c.Send(help)
@@ -197,6 +199,14 @@ func (h *CommandHandler) HandleJoin(c BotContext) error {
 	))
 }
 
+// mentorDescriptions provides human-readable info for each mentor.
+var mentorDescriptions = map[string]string{
+	"inamori": "稻盛和夫 (Kyocera) — 阿米巴经营，敬天爱人，利他哲学",
+	"dalio":   "Ray Dalio (Bridgewater) — 极度透明，原则驱动，数据决策",
+	"grove":   "Andy Grove (Intel) — OKR驱动，高产出管理，建设性对抗",
+	"ren":     "任正非 (华为) — 狼性文化，自我批判，以奋斗者为本",
+}
+
 // HandleMentor switches the active mentor for the boss's team.
 func (h *CommandHandler) HandleMentor(c BotContext) error {
 	if c.SenderID() != h.bossChatID {
@@ -205,13 +215,22 @@ func (h *CommandHandler) HandleMentor(c BotContext) error {
 
 	parts := strings.Fields(c.Text())
 	if len(parts) < 2 {
-		return c.Send("Usage: /mentor <id>\nAvailable: inamori, dalio")
+		var sb strings.Builder
+		sb.WriteString("Usage: /mentor <id>\n\nAvailable mentors:\n")
+		for id, desc := range mentorDescriptions {
+			sb.WriteString(fmt.Sprintf("  %s — %s\n", id, desc))
+		}
+		return c.Send(sb.String())
 	}
 
-	mentorID := parts[1]
-	validMentors := map[string]bool{"inamori": true, "dalio": true}
-	if !validMentors[mentorID] {
-		return c.Send("Unknown mentor. Available: inamori, dalio")
+	mentorID := strings.ToLower(parts[1])
+	if _, ok := mentorDescriptions[mentorID]; !ok {
+		var sb strings.Builder
+		sb.WriteString("Unknown mentor. Available:\n")
+		for id, desc := range mentorDescriptions {
+			sb.WriteString(fmt.Sprintf("  %s — %s\n", id, desc))
+		}
+		return c.Send(sb.String())
 	}
 
 	tenant, err := h.db.GetTenantByBossChatID(context.Background(), c.SenderID())
@@ -223,7 +242,59 @@ func (h *CommandHandler) HandleMentor(c BotContext) error {
 		return fmt.Errorf("update mentor: %w", err)
 	}
 
-	return c.Send(fmt.Sprintf("Mentor switched to '%s'!", mentorID))
+	desc := mentorDescriptions[mentorID]
+	return c.Send(fmt.Sprintf("Mentor switched to '%s'!\n%s", mentorID, desc))
+}
+
+// HandleCulture sets or views employee culture codes.
+func (h *CommandHandler) HandleCulture(c BotContext) error {
+	if c.SenderID() != h.bossChatID {
+		return c.Send("Permission denied")
+	}
+
+	parts := strings.Fields(c.Text())
+	if len(parts) < 3 {
+		return c.Send("Usage: /culture <employee_name> <code>\nAvailable cultures: default, philippines, singapore, indonesia, srilanka\n\nExample: /culture Alice philippines")
+	}
+
+	empName := parts[1]
+	cultureCode := strings.ToLower(parts[2])
+
+	validCultures := map[string]bool{
+		"default": true, "philippines": true, "singapore": true,
+		"indonesia": true, "srilanka": true,
+	}
+	if !validCultures[cultureCode] {
+		return c.Send("Unknown culture. Available: default, philippines, singapore, indonesia, srilanka")
+	}
+
+	tenant, err := h.db.GetTenantByBossChatID(context.Background(), c.SenderID())
+	if err != nil {
+		return c.Send("No team found. Use /start first.")
+	}
+
+	employees, err := h.db.ListEmployeesByTenant(context.Background(), tenant.ID)
+	if err != nil {
+		return fmt.Errorf("list employees: %w", err)
+	}
+
+	// Find employee by name (case-insensitive)
+	var found *Employee
+	for i, emp := range employees {
+		if strings.EqualFold(emp.Name, empName) {
+			found = &employees[i]
+			break
+		}
+	}
+	if found == nil {
+		return c.Send(fmt.Sprintf("Employee '%s' not found.", empName))
+	}
+
+	if err := h.db.UpdateEmployeeCulture(context.Background(), found.ID, cultureCode); err != nil {
+		return fmt.Errorf("update culture: %w", err)
+	}
+
+	return c.Send(fmt.Sprintf("Culture for %s set to '%s'.", found.Name, cultureCode))
 }
 
 // HandleDiagnostics shows system diagnostics to the boss.

@@ -40,25 +40,33 @@ type MessageSender interface {
 
 // Chaser handles chasing employees who haven't submitted reports.
 type Chaser struct {
-	db     ChaserDB
-	llm    *brain.LLMService
-	sender MessageSender
-	engine *brain.Engine
+	db      ChaserDB
+	llm     *brain.LLMService
+	sender  MessageSender
+	factory *brain.EngineFactory
 }
 
-// NewChaser creates a new chaser.
-func NewChaser(db ChaserDB, llm *brain.LLMService, sender MessageSender, engine *brain.Engine) *Chaser {
-	return &Chaser{db: db, llm: llm, sender: sender, engine: engine}
+// NewChaser creates a new chaser with an EngineFactory for per-employee culture support.
+func NewChaser(db ChaserDB, llm *brain.LLMService, sender MessageSender, factory *brain.EngineFactory) *Chaser {
+	return &Chaser{db: db, llm: llm, sender: sender, factory: factory}
 }
 
 // ChaseAll chases all employees without reports for the given date.
-func (c *Chaser) ChaseAll(ctx context.Context, tenantID, date string) error {
+// mentorID is the tenant's active mentor; each employee's culture is used individually.
+func (c *Chaser) ChaseAll(ctx context.Context, tenantID, date, mentorID string) error {
 	employees, err := c.db.ListEmployeesWithoutReport(ctx, tenantID, date)
 	if err != nil {
 		return fmt.Errorf("list employees without report: %w", err)
 	}
 
 	for _, emp := range employees {
+		// Create engine per employee culture
+		engine, err := c.factory.ForTenant(mentorID, emp.CultureCode)
+		if err != nil {
+			slog.Error("create engine for chase", "employee_id", emp.ID, "mentor", mentorID, "culture", emp.CultureCode, "error", err)
+			continue
+		}
+
 		lastStep, err := c.db.GetLastChaseStep(ctx, emp.ID, date)
 		if err != nil {
 			slog.Error("get last chase step", "employee_id", emp.ID, "error", err)
@@ -66,7 +74,7 @@ func (c *Chaser) ChaseAll(ctx context.Context, tenantID, date string) error {
 		}
 
 		nextStep := lastStep + 1
-		step := c.engine.GetEffectiveChaseStep(nextStep)
+		step := engine.GetEffectiveChaseStep(nextStep)
 
 		if step.Action == "skip_today" {
 			slog.Info("skip chase (max steps reached)", "employee_id", emp.ID)
@@ -76,7 +84,7 @@ func (c *Chaser) ChaseAll(ctx context.Context, tenantID, date string) error {
 		// Generate message via LLM (if available) or use template fallback
 		var msg string
 		if c.llm != nil {
-			systemPrompt := c.engine.BuildSystemPrompt()
+			systemPrompt := engine.BuildSystemPrompt()
 			msg, err = c.llm.GenerateChaseMessage(ctx, systemPrompt, emp.Name, step.Tone)
 			if err != nil {
 				slog.Warn("LLM failed, using fallback", "error", err, "employee", emp.Name)

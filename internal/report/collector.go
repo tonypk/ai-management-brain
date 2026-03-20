@@ -51,13 +51,21 @@ func redisKey(employeeID string) string {
 	return fmt.Sprintf("conv:%s", employeeID)
 }
 
-// Start begins a new conversation for the employee.
+// Start begins a new conversation for the employee using default questions.
 func (c *Collector) Start(ctx context.Context, employeeID string) (ConversationState, string, error) {
+	return c.StartWithQuestions(ctx, employeeID, c.questions)
+}
+
+// StartWithQuestions begins a new conversation with custom questions (e.g. per-mentor).
+func (c *Collector) StartWithQuestions(ctx context.Context, employeeID string, questions []string) (ConversationState, string, error) {
+	if len(questions) == 0 {
+		questions = c.questions // fallback to defaults
+	}
 	data := conversationData{
 		State:           StateCollecting,
 		CurrentQuestion: 0,
 		Answers:         make(map[string]string),
-		Questions:       c.questions,
+		Questions:       questions,
 	}
 
 	if err := c.saveConversation(ctx, employeeID, data); err != nil {
@@ -65,7 +73,7 @@ func (c *Collector) Start(ctx context.Context, employeeID string) (ConversationS
 	}
 
 	slog.Info("conversation started", "employee_id", employeeID)
-	return StateCollecting, c.questions[0], nil
+	return StateCollecting, questions[0], nil
 }
 
 // HandleAnswer processes an answer to the current question.

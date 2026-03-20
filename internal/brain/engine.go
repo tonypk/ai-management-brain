@@ -1,6 +1,26 @@
 package brain
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
+
+// ValidMentors lists all available mentor IDs.
+var ValidMentors = map[string]bool{
+	"inamori": true,
+	"dalio":   true,
+	"grove":   true,
+	"ren":     true,
+}
+
+// ValidCultures lists all available culture codes.
+var ValidCultures = map[string]bool{
+	"default":     true,
+	"philippines":  true,
+	"singapore":   true,
+	"indonesia":   true,
+	"srilanka":    true,
+}
 
 // Engine assembles mentor strategy + culture pack into executable decisions.
 type Engine struct {
@@ -19,6 +39,51 @@ func NewEngine(mentorID, cultureCode string) (*Engine, error) {
 		return nil, fmt.Errorf("load culture %q: %w", cultureCode, err)
 	}
 	return &Engine{mentor: m, culture: c}, nil
+}
+
+// MentorID returns the loaded mentor's ID.
+func (e *Engine) MentorID() string {
+	return e.mentor.ID
+}
+
+// EngineFactory creates Engine instances with caching.
+type EngineFactory struct {
+	mu    sync.RWMutex
+	cache map[string]*Engine
+}
+
+// NewEngineFactory creates a new factory.
+func NewEngineFactory() *EngineFactory {
+	return &EngineFactory{cache: make(map[string]*Engine)}
+}
+
+// ForTenant returns a cached or newly created Engine for the given mentor + culture pair.
+func (f *EngineFactory) ForTenant(mentorID, cultureCode string) (*Engine, error) {
+	key := mentorID + ":" + cultureCode
+	f.mu.RLock()
+	if e, ok := f.cache[key]; ok {
+		f.mu.RUnlock()
+		return e, nil
+	}
+	f.mu.RUnlock()
+
+	e, err := NewEngine(mentorID, cultureCode)
+	if err != nil {
+		return nil, err
+	}
+
+	f.mu.Lock()
+	f.cache[key] = e
+	f.mu.Unlock()
+	return e, nil
+}
+
+// Invalidate removes a cached engine (e.g. after mentor switch).
+func (f *EngineFactory) Invalidate(mentorID, cultureCode string) {
+	key := mentorID + ":" + cultureCode
+	f.mu.Lock()
+	delete(f.cache, key)
+	f.mu.Unlock()
 }
 
 // BuildSystemPrompt assembles the mentor's system prompt augmented with

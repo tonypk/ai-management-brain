@@ -42,18 +42,17 @@ type SummarizerDB interface {
 
 // Summarizer generates team summaries from daily reports.
 type Summarizer struct {
-	db     SummarizerDB
-	llm    *brain.LLMService
-	engine *brain.Engine
+	db  SummarizerDB
+	llm *brain.LLMService
 }
 
 // NewSummarizer creates a new summarizer.
-func NewSummarizer(db SummarizerDB, llm *brain.LLMService, engine *brain.Engine) *Summarizer {
-	return &Summarizer{db: db, llm: llm, engine: engine}
+func NewSummarizer(db SummarizerDB, llm *brain.LLMService) *Summarizer {
+	return &Summarizer{db: db, llm: llm}
 }
 
-// Generate creates a summary for the given tenant and date.
-func (s *Summarizer) Generate(ctx context.Context, tenantID, date string) (*SummaryResult, error) {
+// Generate creates a summary for the given tenant and date using the provided engine.
+func (s *Summarizer) Generate(ctx context.Context, tenantID, date string, engine *brain.Engine) (*SummaryResult, error) {
 	// Get reports
 	reports, err := s.db.GetReportsByTenantDate(ctx, tenantID, date)
 	if err != nil {
@@ -84,8 +83,8 @@ func (s *Summarizer) Generate(ctx context.Context, tenantID, date string) (*Summ
 	}
 
 	// Build system prompt with mentor's summary config
-	summaryConfig := s.engine.GetSummaryConfig()
-	systemPrompt := s.engine.BuildSystemPrompt()
+	summaryConfig := engine.GetSummaryConfig()
+	systemPrompt := engine.BuildSystemPrompt()
 	systemPrompt += fmt.Sprintf("\n\nSummary Focus: %s\nHighlight: %s\nFlag: %s",
 		strings.Join(summaryConfig.Focus, ", "),
 		summaryConfig.Highlight,
@@ -98,10 +97,10 @@ func (s *Summarizer) Generate(ctx context.Context, tenantID, date string) (*Summ
 		content, err = s.llm.GenerateSummary(ctx, systemPrompt, reportData)
 		if err != nil {
 			slog.Warn("LLM failed for summary, using fallback", "error", err)
-			content = s.buildFallbackSummary(reports, len(reports), int(activeCount))
+			content = buildFallbackSummary(reports, len(reports), int(activeCount))
 		}
 	} else {
-		content = s.buildFallbackSummary(reports, len(reports), int(activeCount))
+		content = buildFallbackSummary(reports, len(reports), int(activeCount))
 	}
 
 	result := &SummaryResult{
@@ -123,7 +122,7 @@ func (s *Summarizer) Generate(ctx context.Context, tenantID, date string) (*Summ
 	return result, nil
 }
 
-func (s *Summarizer) buildFallbackSummary(reports []ReportRow, submitted, total int) string {
+func buildFallbackSummary(reports []ReportRow, submitted, total int) string {
 	var sb strings.Builder
 	pct := 0
 	if total > 0 {
