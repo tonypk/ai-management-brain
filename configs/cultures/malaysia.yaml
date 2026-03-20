@@ -1,0 +1,30 @@
+market: Malaysia
+language: Bahasa Malaysia / English
+timezone: Asia/Kuala_Lumpur
+version: 1
+
+communication_style:
+  directness: low
+  hierarchy_respect: high
+  relationship_first: true
+  group_face: high
+
+chase_rules:
+  never_name_in_group: true
+  private_before_escalate: true
+  warmth_required: true
+  acknowledge_effort: true
+
+forbidden_patterns:
+  - "Why didn't you..."
+  - "You are the only one who hasn't"
+  - "This is unacceptable"
+  - "I'm disappointed in you"
+  - "Everyone else finished on time"
+
+preferred_patterns:
+  - "Hope everything is going well"
+  - "Just checking in with you"
+  - "Your input would be really helpful"
+  - "Take your time, but we'd appreciate hearing from you"
+  - "The team benefits from your perspective"

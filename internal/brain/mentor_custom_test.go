@@ -2,6 +2,7 @@ package brain_test
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
@@ -24,49 +25,44 @@ func TestMentorGenerator_RequiresLLM(t *testing.T) {
 }
 
 func TestMentorGenerator_GeneratesConfig(t *testing.T) {
-	// Mock LLM that returns a valid JSON config
+	// Mock LLM that returns a valid JSON config — use a unique test ID to avoid overwriting real configs
 	mockResp := `{
-		"id": "jobs",
-		"name": "Steve Jobs",
-		"name_en": "Steve Jobs",
-		"company": "Apple",
-		"philosophy": "Stay hungry, stay foolish",
-		"checkin_questions": ["What did you ship today?", "What's blocking you?", "What would you simplify?"],
+		"id": "test_mentor_xyz",
+		"name": "Test Mentor",
+		"name_en": "Test Mentor",
+		"company": "TestCo",
+		"philosophy": "Test philosophy",
+		"checkin_questions": ["Q1?", "Q2?", "Q3?"],
 		"chase_method": "private_first",
 		"chase_escalation": [
-			{"action": "private_message", "delay": "0", "tone": "direct_challenge"},
-			{"action": "manager_notify", "delay": "1h", "tone": "urgent"},
+			{"action": "private_message", "delay": "0", "tone": "warm"},
 			{"action": "skip_today", "delay": "2h"}
 		],
-		"chase_forbidden": ["long_delay"],
-		"chase_encouraged": ["direct_feedback"],
-		"summary_focus": ["innovation", "execution", "quality"],
-		"summary_highlight": "breakthroughs",
-		"summary_flag": "mediocrity",
-		"summary_metrics": [{"name": "Ship Rate", "source": "task_completion"}],
-		"weekly_actions": [{"type": "review", "desc": "Product review"}],
-		"monthly_actions": [{"type": "vision", "desc": "Vision alignment"}],
+		"chase_forbidden": ["harsh"],
+		"chase_encouraged": ["kind"],
+		"summary_focus": ["quality", "speed"],
+		"summary_highlight": "wins",
+		"summary_flag": "blockers",
+		"summary_metrics": [{"name": "Test Metric", "source": "test_source"}],
+		"weekly_actions": [{"type": "review", "desc": "Weekly review"}],
+		"monthly_actions": [{"type": "report", "desc": "Monthly report"}],
 		"triggers": [
-			{"event": "consecutive_miss_3days", "action": "direct_call", "message": "{name} needs accountability"},
-			{"event": "sentiment_drop", "action": "one_on_one", "message": "Check on {name}"}
+			{"event": "consecutive_miss_3days", "action": "notify", "message": "{name} missed"}
 		],
-		"system_prompt": "You embody Steve Jobs management style. Focus on simplicity and excellence."
+		"system_prompt": "Test system prompt."
 	}`
 	llm := &mockLLM{response: mockResp}
 	gen := brain.NewMentorGenerator(llm)
 
-	result, err := gen.Generate(context.Background(), brain.CustomMentorRequest{Name: "Steve Jobs"})
+	result, err := gen.Generate(context.Background(), brain.CustomMentorRequest{Name: "Test Mentor"})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
 	if result.Config == nil {
 		t.Fatal("expected non-nil config")
 	}
-	if result.Config.ID != "jobs" {
-		t.Errorf("id = %q, want %q", result.Config.ID, "jobs")
-	}
-	if result.Config.NameEn != "Steve Jobs" {
-		t.Errorf("name_en = %q, want %q", result.Config.NameEn, "Steve Jobs")
+	if result.Config.ID != "test_mentor_xyz" {
+		t.Errorf("id = %q, want %q", result.Config.ID, "test_mentor_xyz")
 	}
 	if len(result.Config.Strategy.CheckinQuestions) != 3 {
 		t.Errorf("expected 3 checkin questions, got %d", len(result.Config.Strategy.CheckinQuestions))
@@ -76,10 +72,11 @@ func TestMentorGenerator_GeneratesConfig(t *testing.T) {
 	}
 
 	// Verify the mentor was registered as valid
-	if !brain.ValidMentors["jobs"] {
-		t.Error("expected 'jobs' to be registered as valid mentor")
+	if !brain.ValidMentors["test_mentor_xyz"] {
+		t.Error("expected 'test_mentor_xyz' to be registered as valid mentor")
 	}
 
 	// Clean up: remove the generated file and unregister
-	delete(brain.ValidMentors, "jobs")
+	os.Remove(result.FilePath)
+	delete(brain.ValidMentors, "test_mentor_xyz")
 }

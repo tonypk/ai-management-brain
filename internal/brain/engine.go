@@ -11,15 +11,21 @@ var ValidMentors = map[string]bool{
 	"dalio":   true,
 	"grove":   true,
 	"ren":     true,
+	"son":     true,
+	"jobs":    true,
+	"bezos":   true,
+	"ma":      true,
 }
 
 // ValidCultures lists all available culture codes.
 var ValidCultures = map[string]bool{
 	"default":     true,
-	"philippines":  true,
+	"philippines": true,
 	"singapore":   true,
 	"indonesia":   true,
 	"srilanka":    true,
+	"malaysia":    true,
+	"china":       true,
 }
 
 // Engine assembles mentor strategy + culture pack into executable decisions.

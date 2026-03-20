@@ -19,6 +19,17 @@ type Config struct {
 	Timezone       string
 	LogLevel       string
 	Port           string
+
+	// Google OAuth (optional)
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURI  string
+
+	// Stripe billing (optional)
+	StripeSecretKey     string
+	StripeWebhookSecret string
+	StripePriceIDPro    string
+	StripePriceIDEnt    string
 }
 
 func Load() (*Config, error) {
@@ -88,6 +99,17 @@ func Load() (*Config, error) {
 	}
 
 	cfg.AnthropicKey = os.Getenv("ANTHROPIC_API_KEY")
+
+	// Google OAuth (optional)
+	cfg.GoogleClientID = os.Getenv("GOOGLE_CLIENT_ID")
+	cfg.GoogleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
+	cfg.GoogleRedirectURI = getEnv("GOOGLE_REDIRECT_URI", "http://localhost:8080/auth/callback")
+
+	// Stripe billing (optional)
+	cfg.StripeSecretKey = os.Getenv("STRIPE_SECRET_KEY")
+	cfg.StripeWebhookSecret = os.Getenv("STRIPE_WEBHOOK_SECRET")
+	cfg.StripePriceIDPro = os.Getenv("STRIPE_PRICE_ID_PRO")
+	cfg.StripePriceIDEnt = os.Getenv("STRIPE_PRICE_ID_ENT")
 
 	return cfg, nil
 }

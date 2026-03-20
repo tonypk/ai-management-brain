@@ -1,0 +1,30 @@
+market: China
+language: 中文
+timezone: Asia/Shanghai
+version: 1
+
+communication_style:
+  directness: medium
+  hierarchy_respect: high
+  relationship_first: true
+  group_face: high
+
+chase_rules:
+  never_name_in_group: true
+  private_before_escalate: true
+  warmth_required: false
+  acknowledge_effort: true
+
+forbidden_patterns:
+  - "You are falling behind"
+  - "This is your fault"
+  - "I expected better from you"
+  - "You're the weakest link"
+  - "Do I need to remind you again"
+
+preferred_patterns:
+  - "辛苦了"
+  - "有什么需要帮忙的吗"
+  - "大家都很期待你的反馈"
+  - "抽空的时候记得提交一下"
+  - "你的意见对团队很重要"

@@ -552,6 +552,17 @@ func main() {
 		Queries:   queries,
 		JWTSecret: cfg.JWTSecret,
 		Redis:     rdb,
+		OAuth: api.OAuthConfig{
+			ClientID:     cfg.GoogleClientID,
+			ClientSecret: cfg.GoogleClientSecret,
+			RedirectURI:  cfg.GoogleRedirectURI,
+		},
+		Billing: api.BillingConfig{
+			SecretKey:     cfg.StripeSecretKey,
+			WebhookSecret: cfg.StripeWebhookSecret,
+			ProPriceID:    cfg.StripePriceIDPro,
+			EntPriceID:    cfg.StripePriceIDEnt,
+		},
 	})
 
 	// Health check (public, outside /api/v1)

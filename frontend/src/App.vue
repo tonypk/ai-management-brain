@@ -6,7 +6,7 @@ import { isAuthenticated, logout } from './composables/api'
 const router = useRouter()
 const route = useRoute()
 
-const showNav = computed(() => route.name !== 'Login' && isAuthenticated())
+const showNav = computed(() => route.name !== 'Login' && route.name !== 'Landing' && isAuthenticated())
 
 function handleLogout() {
   logout()
@@ -18,6 +18,7 @@ const navItems = [
   { path: '/employees', label: 'Team', icon: '👥' },
   { path: '/reports', label: 'Reports', icon: '📝' },
   { path: '/mentor', label: 'Mentor', icon: '🧠' },
+  { path: '/analytics', label: 'Analytics', icon: '📈' },
 ]
 </script>
 

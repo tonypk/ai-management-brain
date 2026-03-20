@@ -452,6 +452,10 @@ var mentorDescriptions = map[string]mentorInfo{
 	"dalio":   {ID: "dalio", Name: "Ray Dalio", Description: "Bridgewater - Radical transparency, principles-driven"},
 	"grove":   {ID: "grove", Name: "Andy Grove", Description: "Intel - OKR-driven, high output management"},
 	"ren":     {ID: "ren", Name: "Ren Zhengfei", Description: "Huawei - Wolf culture, self-criticism, striver-oriented"},
+	"son":     {ID: "son", Name: "Masayoshi Son", Description: "SoftBank - 300-year vision, time machine theory"},
+	"jobs":    {ID: "jobs", Name: "Steve Jobs", Description: "Apple - Pursuit of simplicity, reality distortion field"},
+	"bezos":   {ID: "bezos", Name: "Jeff Bezos", Description: "Amazon - Day 1 mentality, customer obsession"},
+	"ma":      {ID: "ma", Name: "Jack Ma", Description: "Alibaba - Embrace change, customer first, teamwork"},
 }
 
 // handleGetMentor returns the current mentor and available mentors list.
