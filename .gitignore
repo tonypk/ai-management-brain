@@ -1,0 +1,21 @@
+# Binaries
+/brain
+/bin/
+*.exe
+
+# Environment
+.env
+*.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage.out
+coverage.html
