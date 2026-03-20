@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS summaries;
+DROP TABLE IF EXISTS chase_logs;
+DROP TABLE IF EXISTS reports;
+DROP TABLE IF EXISTS employees;
+DROP TABLE IF EXISTS tenants;
