@@ -125,3 +125,18 @@ func (q *Queries) UpdateTenantMentor(ctx context.Context, arg UpdateTenantMentor
 	_, err := q.db.Exec(ctx, updateTenantMentor, arg.ID, arg.MentorID, arg.MentorBlend)
 	return err
 }
+
+const updateTenantNameTimezone = `-- name: UpdateTenantNameTimezone :exec
+UPDATE tenants SET name = $2, timezone = $3 WHERE id = $1
+`
+
+type UpdateTenantNameTimezoneParams struct {
+	ID       pgtype.UUID `json:"id"`
+	Name     string      `json:"name"`
+	Timezone string      `json:"timezone"`
+}
+
+func (q *Queries) UpdateTenantNameTimezone(ctx context.Context, arg UpdateTenantNameTimezoneParams) error {
+	_, err := q.db.Exec(ctx, updateTenantNameTimezone, arg.ID, arg.Name, arg.Timezone)
+	return err
+}

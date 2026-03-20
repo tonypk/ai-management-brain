@@ -12,6 +12,7 @@ type Config struct {
 	DatabaseURL    string
 	RedisURL       string
 	EncryptionKey  []byte // 32 bytes for AES-256
+	JWTSecret      []byte // 32 bytes for HMAC-SHA256
 	TelegramToken  string
 	BossTelegramID int64
 	AnthropicKey   string // optional, for system-level use
@@ -53,6 +54,17 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("ENCRYPTION_KEY must be 64 hex chars (32 bytes)")
 		}
 		cfg.EncryptionKey = key
+	}
+
+	jwtHex := os.Getenv("JWT_SECRET")
+	if jwtHex == "" {
+		missing = append(missing, "JWT_SECRET")
+	} else {
+		secret, err := hex.DecodeString(jwtHex)
+		if err != nil || len(secret) != 32 {
+			return nil, fmt.Errorf("JWT_SECRET must be 64 hex chars (32 bytes)")
+		}
+		cfg.JWTSecret = secret
 	}
 
 	cfg.TelegramToken = os.Getenv("TELEGRAM_BOT_TOKEN")

@@ -11,6 +11,7 @@ func TestLoad_RequiredFields(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/test")
 	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("JWT_SECRET", "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
 	t.Setenv("TELEGRAM_BOT_TOKEN", "123:ABC")
 	t.Setenv("BOSS_TELEGRAM_ID", "999")
 
@@ -30,7 +31,7 @@ func TestLoad_RequiredFields(t *testing.T) {
 }
 
 func TestLoad_MissingRequired(t *testing.T) {
-	for _, key := range []string{"DATABASE_URL", "REDIS_URL", "ENCRYPTION_KEY", "TELEGRAM_BOT_TOKEN", "BOSS_TELEGRAM_ID"} {
+	for _, key := range []string{"DATABASE_URL", "REDIS_URL", "ENCRYPTION_KEY", "JWT_SECRET", "TELEGRAM_BOT_TOKEN", "BOSS_TELEGRAM_ID"} {
 		t.Setenv(key, "")
 	}
 	_, err := config.Load()
@@ -43,6 +44,7 @@ func TestLoad_InvalidTimezone(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/test")
 	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("JWT_SECRET", "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
 	t.Setenv("TELEGRAM_BOT_TOKEN", "123:ABC")
 	t.Setenv("BOSS_TELEGRAM_ID", "999")
 	t.Setenv("TIMEZONE", "Invalid/Zone")
@@ -57,6 +59,7 @@ func TestLoad_ValidTimezone(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/test")
 	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("JWT_SECRET", "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
 	t.Setenv("TELEGRAM_BOT_TOKEN", "123:ABC")
 	t.Setenv("BOSS_TELEGRAM_ID", "999")
 	t.Setenv("TIMEZONE", "America/New_York")

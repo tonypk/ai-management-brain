@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/tonypk/ai-management-brain/internal/api"
 	"github.com/tonypk/ai-management-brain/internal/bot"
 	"github.com/tonypk/ai-management-brain/internal/brain"
 	"github.com/tonypk/ai-management-brain/internal/config"
@@ -160,6 +161,17 @@ CREATE INDEX IF NOT EXISTS idx_reports_employee_date ON reports(employee_id, rep
 CREATE INDEX IF NOT EXISTS idx_chase_logs_tenant_date ON chase_logs(tenant_id, report_date);
 CREATE INDEX IF NOT EXISTS idx_chase_logs_employee ON chase_logs(employee_id, report_date);
 CREATE INDEX IF NOT EXISTS idx_summaries_tenant_date ON summaries(tenant_id, summary_date);
+CREATE TABLE IF NOT EXISTS users (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES tenants(id),
+    email         TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'boss',
+    is_active     BOOLEAN NOT NULL DEFAULT true,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
 `
 	_, err := pool.Exec(ctx, migrationSQL)
 	return err
@@ -508,11 +520,11 @@ func main() {
 	}
 	slog.Info("proactive action jobs registered", "weekly", "Friday 18:00", "monthly", "1st 18:00")
 
-	// Health check HTTP server
+	// API router (includes REST API + health check)
 	gin.SetMode(gin.ReleaseMode)
-	router := gin.New()
-	router.Use(gin.Recovery())
+	router := api.NewRouter(queries, cfg.JWTSecret)
 
+	// Health check (public, outside /api/v1)
 	router.GET("/healthz", func(c *gin.Context) {
 		status := "ok"
 		dbStatus := "ok"
@@ -545,9 +557,9 @@ func main() {
 		Handler: router,
 	}
 	go func() {
-		slog.Info("health check server starting", "port", cfg.Port)
+		slog.Info("API server starting", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("health server error", "error", err)
+			slog.Error("API server error", "error", err)
 		}
 	}()
 

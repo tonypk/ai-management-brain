@@ -53,6 +53,16 @@ type Summary struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type User struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	Role         string             `json:"role"`
+	IsActive     bool               `json:"is_active"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type Tenant struct {
 	ID           pgtype.UUID        `json:"id"`
 	Name         string             `json:"name"`

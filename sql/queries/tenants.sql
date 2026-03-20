@@ -14,3 +14,6 @@ UPDATE tenants SET mentor_id = $2, mentor_blend = $3 WHERE id = $1;
 
 -- name: UpdateTenantConfig :exec
 UPDATE tenants SET config = $2 WHERE id = $1;
+
+-- name: UpdateTenantNameTimezone :exec
+UPDATE tenants SET name = $2, timezone = $3 WHERE id = $1;
