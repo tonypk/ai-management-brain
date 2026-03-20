@@ -13,12 +13,17 @@ type Employee struct {
 	TenantID    string
 	TelegramID  int64
 	CultureCode string
+	InviteCode  string
 }
 
 // Tenant represents a resolved tenant.
 type Tenant struct {
-	ID       string
-	BotToken string
+	ID         string
+	BotToken   string
+	Name       string
+	BossChatID int64
+	MentorID   string
+	Timezone   string
 }
 
 // IdentityResult holds the result of identity resolution.
