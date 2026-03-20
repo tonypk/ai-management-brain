@@ -38,7 +38,38 @@ func NewBot(token string, bossChatID int64, querier IdentityQuerier) (*Bot, erro
 	}, nil
 }
 
-// Start registers handlers and begins polling.
+// teleBotContext adapts telebot.Context to BotContext for testability.
+type teleBotContext struct {
+	c tele.Context
+}
+
+func (t *teleBotContext) SenderID() int64 { return t.c.Sender().ID }
+func (t *teleBotContext) Text() string    { return t.c.Text() }
+func (t *teleBotContext) Send(msg string) error {
+	return t.c.Send(msg)
+}
+
+// RegisterCommands registers command handlers with the telebot.
+func (b *Bot) RegisterCommands(h *CommandHandler) {
+	wrap := func(fn func(BotContext) error) tele.HandlerFunc {
+		return func(c tele.Context) error {
+			return fn(&teleBotContext{c: c})
+		}
+	}
+
+	b.bot.Handle("/start", wrap(h.HandleStart))
+	b.bot.Handle("/help", wrap(h.HandleHelp))
+	b.bot.Handle("/status", wrap(h.HandleStatus))
+	b.bot.Handle("/addemployee", wrap(h.HandleAddEmployee))
+	b.bot.Handle("/join", wrap(h.HandleJoin))
+	b.bot.Handle("/mentor", wrap(h.HandleMentor))
+
+	slog.Info("bot commands registered",
+		"commands", []string{"/start", "/help", "/status", "/addemployee", "/join", "/mentor"},
+	)
+}
+
+// Start begins polling for messages. This blocks until Stop is called.
 func (b *Bot) Start() {
 	slog.Info("telegram bot starting")
 	b.bot.Start()

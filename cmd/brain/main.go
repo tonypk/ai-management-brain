@@ -15,8 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/tonypk/ai-management-brain/internal/bot"
 	"github.com/tonypk/ai-management-brain/internal/brain"
 	"github.com/tonypk/ai-management-brain/internal/config"
+	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
 	"github.com/tonypk/ai-management-brain/internal/report"
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
 )
@@ -81,6 +83,81 @@ func (r *redisWrapper) Del(ctx context.Context, keys ...string) error {
 	return r.client.Del(ctx, keys...).Err()
 }
 
+// runMigrations applies database migrations idempotently.
+func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+	migrationSQL := `
+CREATE TABLE IF NOT EXISTS tenants (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name          TEXT NOT NULL,
+    timezone      TEXT NOT NULL DEFAULT 'Asia/Singapore',
+    anthropic_key TEXT,
+    mentor_id     TEXT NOT NULL DEFAULT 'inamori',
+    mentor_blend  JSONB,
+    bot_token     TEXT,
+    boss_chat_id  BIGINT NOT NULL,
+    config        JSONB NOT NULL DEFAULT '{}',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS employees (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES tenants(id),
+    name          TEXT NOT NULL,
+    telegram_id   BIGINT UNIQUE,
+    culture_code  TEXT NOT NULL DEFAULT 'default',
+    role          TEXT NOT NULL DEFAULT 'member',
+    invite_code   TEXT,
+    is_active     BOOLEAN NOT NULL DEFAULT true,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS reports (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES tenants(id),
+    employee_id   UUID NOT NULL REFERENCES employees(id),
+    report_date   DATE NOT NULL,
+    answers       JSONB NOT NULL,
+    blockers      TEXT,
+    sentiment     TEXT,
+    submitted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(employee_id, report_date)
+);
+
+CREATE TABLE IF NOT EXISTS chase_logs (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES tenants(id),
+    employee_id   UUID NOT NULL REFERENCES employees(id),
+    report_date   DATE NOT NULL,
+    step          INT NOT NULL DEFAULT 1,
+    action        TEXT NOT NULL,
+    message       TEXT NOT NULL,
+    chased_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS summaries (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID NOT NULL REFERENCES tenants(id),
+    summary_date    DATE NOT NULL,
+    content         TEXT NOT NULL,
+    submission_rate FLOAT NOT NULL DEFAULT 0,
+    blockers_count  INT NOT NULL DEFAULT 0,
+    key_metrics     JSONB,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, summary_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_employees_tenant ON employees(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_employees_telegram ON employees(telegram_id);
+CREATE INDEX IF NOT EXISTS idx_reports_tenant_date ON reports(tenant_id, report_date);
+CREATE INDEX IF NOT EXISTS idx_reports_employee_date ON reports(employee_id, report_date);
+CREATE INDEX IF NOT EXISTS idx_chase_logs_tenant_date ON chase_logs(tenant_id, report_date);
+CREATE INDEX IF NOT EXISTS idx_chase_logs_employee ON chase_logs(employee_id, report_date);
+CREATE INDEX IF NOT EXISTS idx_summaries_tenant_date ON summaries(tenant_id, summary_date);
+`
+	_, err := pool.Exec(ctx, migrationSQL)
+	return err
+}
+
 func main() {
 	// Set up log redaction
 	baseHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
@@ -112,6 +189,13 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("PostgreSQL connected")
+
+	// Run migrations
+	if err := runMigrations(ctx, pool); err != nil {
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("database migrations applied")
 
 	// Connect Redis
 	opt, err := redis.ParseURL(cfg.RedisURL)
@@ -152,6 +236,10 @@ func main() {
 		slog.Warn("ANTHROPIC_API_KEY not set — AI features disabled, using template fallbacks")
 	}
 
+	// Create sqlc queries and DB adapter
+	queries := sqlc.New(pool)
+	dbAdapter := bot.NewDBAdapter(queries)
+
 	// Create report collector
 	collector := report.NewCollector(redisClient, engine.GetCheckinQuestions())
 	_ = collector // Will be wired to bot handler in full integration
@@ -184,6 +272,20 @@ func main() {
 		slog.Error("failed to create scheduler", "error", err)
 		os.Exit(1)
 	}
+
+	// Create Telegram bot
+	tgBot, err := bot.NewBot(cfg.TelegramToken, cfg.BossTelegramID, dbAdapter)
+	if err != nil {
+		slog.Error("failed to create telegram bot", "error", err)
+		os.Exit(1)
+	}
+
+	// Create command handler and register with bot
+	cmdHandler := bot.NewCommandHandler(dbAdapter, nil, nil, cfg.BossTelegramID)
+	tgBot.RegisterCommands(cmdHandler)
+
+	// Start bot polling in background
+	go tgBot.Start()
 
 	// Health check HTTP server
 	gin.SetMode(gin.ReleaseMode)
@@ -247,6 +349,7 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
+	tgBot.Stop()
 	if err := sched.Stop(); err != nil {
 		slog.Error("scheduler stop error", "error", err)
 	}
