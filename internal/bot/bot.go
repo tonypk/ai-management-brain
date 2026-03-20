@@ -63,10 +63,25 @@ func (b *Bot) RegisterCommands(h *CommandHandler) {
 	b.bot.Handle("/addemployee", wrap(h.HandleAddEmployee))
 	b.bot.Handle("/join", wrap(h.HandleJoin))
 	b.bot.Handle("/mentor", wrap(h.HandleMentor))
+	b.bot.Handle("/diagnostics", wrap(h.HandleDiagnostics))
 
 	slog.Info("bot commands registered",
-		"commands", []string{"/start", "/help", "/status", "/addemployee", "/join", "/mentor"},
+		"commands", []string{"/start", "/help", "/status", "/addemployee", "/join", "/mentor", "/diagnostics"},
 	)
+}
+
+// TextHandlerFunc is called for non-command text messages.
+// Parameters: senderID, text, sendReply function.
+type TextHandlerFunc func(senderID int64, text string, sendReply func(string) error) error
+
+// RegisterTextHandler registers a handler for non-command text messages.
+func (b *Bot) RegisterTextHandler(h TextHandlerFunc) {
+	b.bot.Handle(tele.OnText, func(c tele.Context) error {
+		return h(c.Sender().ID, c.Text(), func(msg string) error {
+			return c.Send(msg)
+		})
+	})
+	slog.Info("text message handler registered")
 }
 
 // Start begins polling for messages. This blocks until Stop is called.

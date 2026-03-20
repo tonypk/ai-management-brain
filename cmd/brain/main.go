@@ -98,7 +98,6 @@ CREATE TABLE IF NOT EXISTS tenants (
     config        JSONB NOT NULL DEFAULT '{}',
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS employees (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id     UUID NOT NULL REFERENCES tenants(id),
@@ -110,7 +109,6 @@ CREATE TABLE IF NOT EXISTS employees (
     is_active     BOOLEAN NOT NULL DEFAULT true,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS reports (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id     UUID NOT NULL REFERENCES tenants(id),
@@ -122,7 +120,6 @@ CREATE TABLE IF NOT EXISTS reports (
     submitted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(employee_id, report_date)
 );
-
 CREATE TABLE IF NOT EXISTS chase_logs (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id     UUID NOT NULL REFERENCES tenants(id),
@@ -133,7 +130,6 @@ CREATE TABLE IF NOT EXISTS chase_logs (
     message       TEXT NOT NULL,
     chased_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS summaries (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id       UUID NOT NULL REFERENCES tenants(id),
@@ -145,7 +141,6 @@ CREATE TABLE IF NOT EXISTS summaries (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(tenant_id, summary_date)
 );
-
 CREATE INDEX IF NOT EXISTS idx_employees_tenant ON employees(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_employees_telegram ON employees(telegram_id);
 CREATE INDEX IF NOT EXISTS idx_reports_tenant_date ON reports(tenant_id, report_date);
@@ -170,6 +165,13 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
+	}
+
+	// Load timezone for date formatting
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		slog.Error("failed to load timezone", "error", err)
 		os.Exit(1)
 	}
 
@@ -236,32 +238,185 @@ func main() {
 		slog.Warn("ANTHROPIC_API_KEY not set — AI features disabled, using template fallbacks")
 	}
 
-	// Create sqlc queries and DB adapter
+	// Create sqlc queries and adapters
 	queries := sqlc.New(pool)
-	dbAdapter := bot.NewDBAdapter(queries)
+	botDB := bot.NewDBAdapter(queries)
+	reportDB := report.NewDBAdapter(queries)
 
-	// Create report collector
+	// Create report collector with mentor's check-in questions
 	collector := report.NewCollector(redisClient, engine.GetCheckinQuestions())
-	_ = collector // Will be wired to bot handler in full integration
 
-	// Create chaser and summarizer (nil DB adapter for Phase 1)
-	chaser := report.NewChaser(nil, llmService, nil, engine)
-	summarizer := report.NewSummarizer(nil, llmService, engine)
+	// Create Telegram bot
+	tgBot, err := bot.NewBot(cfg.TelegramToken, cfg.BossTelegramID, botDB)
+	if err != nil {
+		slog.Error("failed to create telegram bot", "error", err)
+		os.Exit(1)
+	}
 
-	// Create scheduler callbacks wired to chaser/summarizer
+	// Create chaser and summarizer with real DB + bot sender
+	chaser := report.NewChaser(reportDB, llmService, tgBot, engine)
+	summarizer := report.NewSummarizer(reportDB, llmService, engine)
+
+	// Create command handler and register commands
+	cmdHandler := bot.NewCommandHandler(botDB, nil, nil, cfg.BossTelegramID)
+
+	// Wire diagnostics to show scheduler info
+	startTime := time.Now()
+	cmdHandler.DiagnosticsFn = func() string {
+		uptime := time.Since(startTime).Round(time.Second)
+		aiStatus := "disabled (no API key)"
+		if cfg.AnthropicKey != "" {
+			aiStatus = "enabled"
+		}
+
+		// Read last run times from Redis
+		lastRemind, _ := rdb.Get(ctx, "scheduler:last_run:remind").Result()
+		lastChase, _ := rdb.Get(ctx, "scheduler:last_run:chase").Result()
+		lastSummary, _ := rdb.Get(ctx, "scheduler:last_run:summary").Result()
+		if lastRemind == "" {
+			lastRemind = "never"
+		}
+		if lastChase == "" {
+			lastChase = "never"
+		}
+		if lastSummary == "" {
+			lastSummary = "never"
+		}
+
+		return fmt.Sprintf(
+			"System Diagnostics\n\n"+
+				"Uptime: %s\n"+
+				"Timezone: %s\n"+
+				"AI Features: %s\n"+
+				"Mentor: inamori\n\n"+
+				"Last Remind: %s\n"+
+				"Last Chase: %s\n"+
+				"Last Summary: %s",
+			uptime, cfg.Timezone, aiStatus,
+			lastRemind, lastChase, lastSummary,
+		)
+	}
+
+	tgBot.RegisterCommands(cmdHandler)
+
+	// Register text handler for report collection conversation
+	tgBot.RegisterTextHandler(func(senderID int64, text string, sendReply func(string) error) error {
+		// Look up employee by telegram_id
+		emp, err := botDB.GetEmployeeByTelegramID(context.Background(), senderID)
+		if err != nil {
+			// Unknown user — ignore (commands like /join handle this)
+			return nil
+		}
+
+		empID := emp.ID
+		state := collector.GetState(context.Background(), empID)
+		lower := strings.ToLower(strings.TrimSpace(text))
+
+		switch state {
+		case report.StateConfirming:
+			if lower == "confirm" {
+				// Get answers before confirming
+				answers := collector.GetAnswers(context.Background(), empID)
+				cState, msg, err := collector.Confirm(context.Background(), empID)
+				if err != nil {
+					slog.Error("confirm report", "employee_id", empID, "error", err)
+					return sendReply("Error confirming report. Please try again.")
+				}
+				if cState == report.StateComplete && answers != nil {
+					today := time.Now().In(loc).Format("2006-01-02")
+					if err := reportDB.CreateReport(context.Background(), emp.TenantID, empID, today, answers); err != nil {
+						slog.Error("save report", "employee_id", empID, "error", err)
+						return sendReply("Report confirmed but failed to save. Please contact your manager.")
+					}
+					slog.Info("report saved", "employee_id", empID, "date", today)
+				}
+				return sendReply(msg)
+			}
+			if lower == "edit" {
+				_, firstQ, err := collector.Start(context.Background(), empID)
+				if err != nil {
+					return sendReply("Error restarting. Please try again.")
+				}
+				return sendReply("Let's start over.\n\n" + firstQ)
+			}
+			return sendReply("Please reply 'confirm' to submit or 'edit' to start over.")
+
+		case report.StateCollecting:
+			cState, nextMsg, err := collector.HandleAnswer(context.Background(), empID, text)
+			if err != nil {
+				slog.Error("handle answer", "employee_id", empID, "error", err)
+				return sendReply("Error processing your answer. Please try again.")
+			}
+			_ = cState
+			if nextMsg != "" {
+				return sendReply(nextMsg)
+			}
+
+		default:
+			// No active conversation — ignore non-command messages
+		}
+
+		return nil
+	})
+
+	// Start bot polling in background
+	go tgBot.Start()
+
+	// Create scheduler callbacks wired to real operations
 	callbacks := &schedulerCallbacks{
 		remindFn: func(ctx context.Context) error {
-			slog.Info("remind job triggered")
+			slog.Info("remind job: sending check-in questions")
+			tenantID, err := reportDB.GetTenantIDByBossChatID(ctx, cfg.BossTelegramID)
+			if err != nil {
+				return fmt.Errorf("get tenant: %w", err)
+			}
+			emps, err := reportDB.ListActiveEmployeesWithTelegram(ctx, tenantID)
+			if err != nil {
+				return fmt.Errorf("list employees: %w", err)
+			}
+			if len(emps) == 0 {
+				slog.Info("remind job: no employees to remind")
+				return nil
+			}
+			for _, emp := range emps {
+				_, firstQ, err := collector.Start(ctx, emp.ID)
+				if err != nil {
+					slog.Error("start collection", "employee_id", emp.ID, "error", err)
+					continue
+				}
+				msg := fmt.Sprintf("Good morning %s! Time for your daily check-in.\n\n%s", emp.Name, firstQ)
+				if err := tgBot.SendMessage(emp.TelegramID, msg); err != nil {
+					slog.Error("send remind", "employee_id", emp.ID, "error", err)
+				}
+			}
+			slog.Info("remind job: completed", "employees_reminded", len(emps))
 			return nil
 		},
 		chaseFn: func(ctx context.Context) error {
-			slog.Info("chase job triggered")
-			_ = chaser // chaser available for wiring
-			return nil
+			slog.Info("chase job: chasing non-submitters")
+			tenantID, err := reportDB.GetTenantIDByBossChatID(ctx, cfg.BossTelegramID)
+			if err != nil {
+				return fmt.Errorf("get tenant: %w", err)
+			}
+			today := time.Now().In(loc).Format("2006-01-02")
+			return chaser.ChaseAll(ctx, tenantID, today)
 		},
 		summaryFn: func(ctx context.Context) error {
-			slog.Info("summary job triggered")
-			_ = summarizer // summarizer available for wiring
+			slog.Info("summary job: generating daily summary")
+			tenantID, err := reportDB.GetTenantIDByBossChatID(ctx, cfg.BossTelegramID)
+			if err != nil {
+				return fmt.Errorf("get tenant: %w", err)
+			}
+			today := time.Now().In(loc).Format("2006-01-02")
+			result, err := summarizer.Generate(ctx, tenantID, today)
+			if err != nil {
+				return fmt.Errorf("generate summary: %w", err)
+			}
+			header := fmt.Sprintf("Daily Summary (%s)\nSubmission rate: %.0f%%\n\n", today, result.SubmissionRate*100)
+			if err := tgBot.SendMessage(cfg.BossTelegramID, header+result.Content); err != nil {
+				return fmt.Errorf("send summary to boss: %w", err)
+			}
+			slog.Info("summary job: completed", "submission_rate", result.SubmissionRate)
 			return nil
 		},
 	}
@@ -272,20 +427,6 @@ func main() {
 		slog.Error("failed to create scheduler", "error", err)
 		os.Exit(1)
 	}
-
-	// Create Telegram bot
-	tgBot, err := bot.NewBot(cfg.TelegramToken, cfg.BossTelegramID, dbAdapter)
-	if err != nil {
-		slog.Error("failed to create telegram bot", "error", err)
-		os.Exit(1)
-	}
-
-	// Create command handler and register with bot
-	cmdHandler := bot.NewCommandHandler(dbAdapter, nil, nil, cfg.BossTelegramID)
-	tgBot.RegisterCommands(cmdHandler)
-
-	// Start bot polling in background
-	go tgBot.Start()
 
 	// Health check HTTP server
 	gin.SetMode(gin.ReleaseMode)

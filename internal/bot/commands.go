@@ -49,8 +49,9 @@ type CommandQuerier interface {
 
 // CommandHandler handles bot commands.
 type CommandHandler struct {
-	db         CommandQuerier
-	bossChatID int64
+	db             CommandQuerier
+	bossChatID     int64
+	DiagnosticsFn  func() string // set externally to provide diagnostics info
 }
 
 // NewCommandHandler creates a new CommandHandler. The second and third arguments
@@ -223,6 +224,19 @@ func (h *CommandHandler) HandleMentor(c BotContext) error {
 	}
 
 	return c.Send(fmt.Sprintf("Mentor switched to '%s'!", mentorID))
+}
+
+// HandleDiagnostics shows system diagnostics to the boss.
+func (h *CommandHandler) HandleDiagnostics(c BotContext) error {
+	if c.SenderID() != h.bossChatID {
+		return c.Send("Permission denied")
+	}
+
+	info := "System Diagnostics:\n\nStatus: Running"
+	if h.DiagnosticsFn != nil {
+		info = h.DiagnosticsFn()
+	}
+	return c.Send(info)
 }
 
 // generateInviteCode creates a short random uppercase hex string.

@@ -135,6 +135,20 @@ func (c *Collector) IsCollecting(ctx context.Context, employeeID string) bool {
 	return data.State == StateCollecting
 }
 
+// GetState returns the current conversation state, or StateIdle if none.
+func (c *Collector) GetState(ctx context.Context, employeeID string) ConversationState {
+	data, err := c.loadConversation(ctx, employeeID)
+	if err != nil {
+		return StateIdle
+	}
+	return data.State
+}
+
+// Cancel removes any active conversation for the employee.
+func (c *Collector) Cancel(ctx context.Context, employeeID string) {
+	c.redis.Del(ctx, redisKey(employeeID))
+}
+
 func (c *Collector) buildSummary(data *conversationData) string {
 	var sb strings.Builder
 	sb.WriteString("Here's your report summary:\n\n")
