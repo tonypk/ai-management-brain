@@ -4,6 +4,31 @@
 
 **Invisible but indispensable.** Customers don't replace any existing tools. The brain quietly takes over management logic.
 
+## Quick Start
+
+```bash
+# 1. Clone
+git clone https://github.com/tonypk/ai-management-brain.git
+cd ai-management-brain
+
+# 2. Configure
+cp .env.example .env
+# Edit .env: set ENCRYPTION_KEY, JWT_SECRET (openssl rand -hex 32), TELEGRAM_BOT_TOKEN, BOSS_TELEGRAM_ID
+
+# 3. Run
+docker compose up -d
+
+# 4. Verify
+curl http://localhost/healthz
+# {"db":"ok","redis":"ok","status":"ok"}
+```
+
+**8 Management Mentors:** Inamori (稻盛和夫) · Dalio · Grove · Ren (任正非) · Son (孙正义) · Jobs · Bezos · Ma (马云)
+
+**6 Culture Packs:** Philippines · Singapore · Indonesia · Sri Lanka · Malaysia · China
+
+**Features:** Daily check-ins, AI-powered chase & summaries, mentor blending, anomaly alerts, multi-channel (Telegram + Slack + Lark), Vue3 dashboard, OAuth, billing.
+
 ---
 
 ## Design Specification (v1.1 · 2026-03-20)
@@ -327,7 +352,7 @@ Edge cases:
 
 | Layer | Choice | Reason |
 |-------|--------|--------|
-| Language | Go 1.22+ | Single binary, user's primary stack |
+| Language | Go 1.25+ | Single binary, user's primary stack |
 | Web Framework | Gin | Consistent with existing projects |
 | DB Access | sqlc | Type-safe SQL |
 | Database | PostgreSQL 16 | Multi-tenant RLS, JSONB |

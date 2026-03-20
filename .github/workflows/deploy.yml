@@ -48,6 +48,11 @@ jobs:
         run: |
           scp -i ~/.ssh/deploy_key -r configs ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USER }}/ai-management-brain/configs
 
+      - name: Deploy infra files
+        run: |
+          scp -i ~/.ssh/deploy_key docker-compose.prod.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USER }}/ai-management-brain/docker-compose.prod.yml
+          scp -i ~/.ssh/deploy_key frontend/nginx.conf ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USER }}/ai-management-brain/frontend/nginx.conf
+
       - name: Restart containers
         run: |
           ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
@@ -55,6 +60,6 @@ jobs:
 
       - name: Health check
         run: |
-          sleep 5
+          sleep 10
           ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "curl -sf http://localhost:8080/healthz || exit 1"
+            "curl -sf http://localhost/healthz || exit 1"
