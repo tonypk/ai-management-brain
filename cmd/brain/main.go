@@ -522,7 +522,11 @@ func main() {
 
 	// API router (includes REST API + health check)
 	gin.SetMode(gin.ReleaseMode)
-	router := api.NewRouter(queries, cfg.JWTSecret)
+	router := api.NewRouter(api.RouterConfig{
+		Queries:   queries,
+		JWTSecret: cfg.JWTSecret,
+		Redis:     rdb,
+	})
 
 	// Health check (public, outside /api/v1)
 	router.GET("/healthz", func(c *gin.Context) {

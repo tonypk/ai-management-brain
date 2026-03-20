@@ -158,7 +158,11 @@ func makeTestUUID(b byte) pgtype.UUID {
 func setupRouter(db sqlc.DBTX) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	queries := sqlc.New(db)
-	return api.NewRouter(queries, testSecret)
+	return api.NewRouter(api.RouterConfig{
+		Queries:   queries,
+		JWTSecret: testSecret,
+		Redis:     nil, // no rate limiting in tests
+	})
 }
 
 func generateTestToken(userID, tenantID, role string) string {

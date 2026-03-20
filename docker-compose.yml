@@ -34,6 +34,12 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  frontend:
+    build: ./frontend
+    ports: ["80:80"]
+    depends_on: [brain]
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:
