@@ -19,8 +19,10 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/api"
 	"github.com/tonypk/ai-management-brain/internal/bot"
 	"github.com/tonypk/ai-management-brain/internal/brain"
+	"github.com/tonypk/ai-management-brain/internal/channel"
 	"github.com/tonypk/ai-management-brain/internal/config"
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
+	"github.com/tonypk/ai-management-brain/internal/events"
 	"github.com/tonypk/ai-management-brain/internal/report"
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
 )
@@ -273,18 +275,28 @@ func main() {
 	defaultEngine, _ := engineFactory.ForTenant("inamori", "default")
 	collector := report.NewCollector(redisClient, defaultEngine.GetCheckinQuestions())
 
-	// Create Telegram bot
-	tgBot, err := bot.NewBot(cfg.TelegramToken, cfg.BossTelegramID, botDB)
+	// Create Telegram channel adapter (Phase 4: multi-channel foundation)
+	tgAdapter, err := channel.NewTelegramAdapter(channel.TelegramConfig{
+		Token: cfg.TelegramToken,
+	})
 	if err != nil {
-		slog.Error("failed to create telegram bot", "error", err)
+		slog.Error("failed to create telegram adapter", "error", err)
 		os.Exit(1)
 	}
+	slog.Info("telegram channel adapter created")
+
+	// Create bot wrapper from the adapter's underlying telebot (for command registration)
+	tgBot := bot.NewBotFromTelebot(tgAdapter.Bot(), cfg.BossTelegramID, botDB)
+
+	// Create event bus
+	eventBus := events.NewBus(rdb)
 
 	// Create chaser, summarizer, trigger checker, action executor, and analyzer
-	chaser := report.NewChaser(reportDB, llmService, tgBot, engineFactory)
+	// Note: tgAdapter implements MessageSender via SendMessage(chatID, text)
+	chaser := report.NewChaser(reportDB, llmService, tgAdapter, engineFactory)
 	summarizer := report.NewSummarizer(reportDB, llmService)
-	triggerChecker := report.NewTriggerChecker(reportDB, tgBot, engineFactory)
-	actionExecutor := report.NewActionExecutor(reportDB, tgBot, llmService, engineFactory)
+	triggerChecker := report.NewTriggerChecker(reportDB, tgAdapter, engineFactory)
+	actionExecutor := report.NewActionExecutor(reportDB, tgAdapter, llmService, engineFactory)
 	analyzer := report.NewAnalyzer(reportDB, llmService)
 
 	// Create command handler and register commands
@@ -368,12 +380,19 @@ func main() {
 					}
 					slog.Info("report saved", "employee_id", empID, "date", today)
 
+					// Publish report submitted event
+					_ = eventBus.PublishPayload(context.Background(), events.ReportSubmitted, emp.TenantID, events.ReportSubmittedPayload{
+						EmployeeID:   empID,
+						EmployeeName: emp.Name,
+						ReportDate:   today,
+					})
+
 					// Run async blocker/sentiment analysis
-					go func(eid, date string) {
+					go func(eid, tid, date string) {
 						if err := analyzer.Analyze(context.Background(), eid, date); err != nil {
 							slog.Error("report analysis failed", "employee_id", eid, "error", err)
 						}
-					}(empID, today)
+					}(empID, emp.TenantID, today)
 				}
 				return sendReply(msg)
 			}
@@ -406,6 +425,13 @@ func main() {
 
 	// Start bot polling in background
 	go tgBot.Start()
+
+	// Start event bus listener in background
+	go func() {
+		if err := eventBus.Listen(ctx); err != nil && err != context.Canceled {
+			slog.Error("event bus stopped", "error", err)
+		}
+	}()
 
 	// Create scheduler callbacks wired to real operations (dynamic mentor)
 	callbacks := &schedulerCallbacks{

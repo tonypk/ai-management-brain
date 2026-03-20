@@ -139,6 +139,56 @@ func (q *Queries) GetEmployeeSubmissionHistory(ctx context.Context, employeeID p
 	return items, nil
 }
 
+const getConsecutiveMissDays = `-- name: GetConsecutiveMissDays :one
+SELECT COUNT(*) as missed_days FROM generate_series(
+    CURRENT_DATE - INTERVAL '7 days', CURRENT_DATE - INTERVAL '1 day', '1 day'
+) d(day)
+WHERE d.day::date NOT IN (
+    SELECT report_date FROM reports WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '7 days'
+)
+AND d.day::date >= (
+    COALESCE(
+        (SELECT MAX(report_date) FROM reports WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '7 days'),
+        CURRENT_DATE - INTERVAL '7 days'
+    )
+)
+`
+
+func (q *Queries) GetConsecutiveMissDays(ctx context.Context, employeeID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getConsecutiveMissDays, employeeID)
+	var missedDays int64
+	err := row.Scan(&missedDays)
+	return missedDays, err
+}
+
+const getRecentSentiments = `-- name: GetRecentSentiments :many
+SELECT sentiment FROM reports
+WHERE employee_id = $1 AND sentiment IS NOT NULL
+AND report_date >= CURRENT_DATE - INTERVAL '7 days'
+ORDER BY report_date DESC
+LIMIT $2
+`
+
+func (q *Queries) GetRecentSentiments(ctx context.Context, employeeID pgtype.UUID, limit int32) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, getRecentSentiments, employeeID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var sentiment pgtype.Text
+		if err := rows.Scan(&sentiment); err != nil {
+			return nil, err
+		}
+		items = append(items, sentiment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEmployeeReportStreak = `-- name: GetEmployeeReportStreak :one
 SELECT COUNT(*) as missed_days FROM generate_series(
     CURRENT_DATE - INTERVAL '7 days', CURRENT_DATE - INTERVAL '1 day', '1 day'

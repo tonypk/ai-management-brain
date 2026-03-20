@@ -333,6 +333,40 @@ func (a *DBAdapter) GetEmployeeSubmissionHistory(ctx context.Context, employeeID
 	return result, nil
 }
 
+// --- AlertDB ---
+
+// GetConsecutiveMissDays returns the number of consecutive missed days for an employee.
+func (a *DBAdapter) GetConsecutiveMissDays(ctx context.Context, employeeID string) (int, error) {
+	uid, err := rParseUUID(employeeID)
+	if err != nil {
+		return 0, err
+	}
+	count, err := a.q.GetConsecutiveMissDays(ctx, uid)
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
+// GetRecentSentiments returns the most recent N sentiments for an employee.
+func (a *DBAdapter) GetRecentSentiments(ctx context.Context, employeeID string, days int) ([]string, error) {
+	uid, err := rParseUUID(employeeID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := a.q.GetRecentSentiments(ctx, uid, int32(days))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if r.Valid {
+			result = append(result, r.String)
+		}
+	}
+	return result, nil
+}
+
 // pgtext creates a pgtype.Text from a string (valid if non-empty).
 func pgtext(s string) pgtype.Text {
 	if s == "" {

@@ -38,6 +38,17 @@ func NewBot(token string, bossChatID int64, querier IdentityQuerier) (*Bot, erro
 	}, nil
 }
 
+// NewBotFromTelebot creates a Bot from an existing telebot instance (e.g., from
+// a channel.TelegramAdapter). This allows the channel adapter to own the
+// underlying bot while the Bot struct handles command registration.
+func NewBotFromTelebot(b *tele.Bot, bossChatID int64, querier IdentityQuerier) *Bot {
+	resolver := NewIdentityResolver(querier, bossChatID)
+	return &Bot{
+		bot:      b,
+		resolver: resolver,
+	}
+}
+
 // teleBotContext adapts telebot.Context to BotContext for testability.
 type teleBotContext struct {
 	c tele.Context
