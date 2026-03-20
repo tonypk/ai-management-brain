@@ -6,7 +6,7 @@
 
 ---
 
-## Design Specification (v1.0 · 2026-03-20)
+## Design Specification (v1.1 · 2026-03-20)
 
 ### Product Definition
 
@@ -24,6 +24,12 @@
 | Cultural Intelligence | None | Auto-adapt per employee nationality/culture |
 | Open Source | Closed SaaS | Core open source, self-hostable |
 
+**Competitive Moat (vs DIY Claude/GPT setups):**
+- Persistent memory across days/weeks (trend detection, not single-chat)
+- Multi-employee orchestration (manage 20+ people independently)
+- Cultural adaptation per employee (impossible in single-prompt setup)
+- Structured strategy execution (not ad-hoc prompting)
+
 ---
 
 ### Architecture
@@ -40,10 +46,10 @@ AI Management Intelligence Layer (the product)
   │  ┌──────────────┐ ┌────────────┐ ┌────────┐│
   │  │ Mentor       │ │ Agent      │ │Culture ││
   │  │ Strategy     │ │ Orchestr.  │ │Adapt + ││
-  │  │ Engine       │ │            │ │Skills  ││
+  │  │ Engine       │ │ (Phase 4)  │ │Skills  ││
   │  └──────────────┘ └────────────┘ └────────┘│
   │                                             │
-  │  BYOK · Multi-tenant · Event-driven · Memory│
+  │  BYOK · Multi-tenant · Scheduler · Memory   │
   └─────────────────────────────────────────────┘
                           |
                           v
@@ -55,6 +61,8 @@ Output Action Layer
 Write Back to Original Channel
   Lark / DingTalk / Telegram / Email
 ```
+
+Phase 1-3 are scheduler-driven (cron). Event-driven architecture (pub/sub) introduced in Phase 4.
 
 ---
 
@@ -79,9 +87,113 @@ Selecting a mentor changes **what the system does, how it does it, and what it f
 | Summary | Morale, collaboration, support | Decision quality, mistakes, principles | OKR progress, efficiency, bottlenecks | Achievement rate, top fighters |
 | Triggers | Sentiment drop → caring check-in | Same mistake twice → create principle | Output drop → suggest 1:1 | Low output → performance warning |
 
+#### Mentor YAML Schema
+
+```yaml
+id: inamori                          # unique identifier (required)
+name: 稻盛和夫                        # display name (required)
+name_en: Kazuo Inamori               # english name (required)
+company: 京瓷 · KDDI                  # associated company (required)
+philosophy: 敬天爱人，自利利他          # one-line summary (required)
+version: 1                           # schema version for upgrades
+
+strategy:
+  checkin_questions:                  # (required) daily questions sent to employees
+    - "今天你为团队做了什么贡献？"
+    - "遇到什么困难需要大家帮助？"
+    - "你从今天的工作中学到了什么？"
+
+  chase:
+    method: private_first             # (required) private_first | public_direct | data_driven
+    escalation:                       # (required) ordered steps
+      - action: private_message       # private_message | public_reminder | manager_notify | issue_log | skip_today
+        delay: "0"                    # duration from chase trigger
+        tone: warm_reminder           # free-form tone hint for AI
+      - action: manager_notify
+        delay: "2h"
+        tone: caring_concern
+      - action: skip_today
+        delay: "4h"
+    forbidden:                        # (optional) actions this mentor NEVER does
+      - public_naming
+      - shame_based
+    encouraged:                       # (optional) actions this mentor prefers
+      - private_conversation
+      - effort_recognition
+
+  summary:
+    focus:                            # (required) what to emphasize in boss summary
+      - morale
+      - collaboration
+      - support_needs
+    highlight: team_achievements      # (required) primary highlight category
+    flag: emotional_signals           # (required) primary warning signal
+    metrics:                          # (optional) mentor-specific metrics
+      - name: 团队协作度
+        source: mutual_mentions
+      - name: 需要关怀
+        source: sentiment_negative
+
+  actions:                            # (optional, Phase 2+)
+    weekly:
+      - type: recognition
+        desc: "感谢本周贡献最大的成员"
+      - type: team_pulse
+        desc: "团队氛围快速调查"
+    monthly:
+      - type: report
+        desc: "利他贡献月报"
+    triggers:                         # (optional, Phase 2+)
+      - event: consecutive_miss_3days
+        action: manager_private_chat
+        message: "{name} 连续3天未提交，建议私下关心一下"
+      - event: sentiment_drop
+        action: private_checkin
+        message: "最近感觉你状态不太好，有什么我能帮到你的吗？"
+
+  system_prompt: |                    # (required) injected into all Claude API calls
+    你融合了稻盛和夫的管理哲学。核心原则：
+    1. 以利他心出发，先考虑对方感受再提要求
+    2. 强调集体荣誉感和团队归属感
+    3. 认可努力本身，不只看结果数字
+    4. 温和而坚定，批评前先充分肯定
+    5. 「全员经营」— 让每个人感觉自己是经营者而非打工人
+```
+
+#### Culture Pack YAML Schema
+
+```yaml
+market: Philippines                   # (required)
+language: Filipino / English          # (required)
+timezone: Asia/Manila                 # (required)
+version: 1                           # schema version
+
+communication_style:
+  directness: low                     # low | medium | high
+  hierarchy_respect: high             # low | medium | high
+  relationship_first: true
+  group_face: high                    # low | medium | high
+
+chase_rules:
+  never_name_in_group: true           # culture overrides mentor if true
+  private_before_escalate: true
+  warmth_required: true
+  acknowledge_effort: true
+
+forbidden_patterns:                   # natural language rules for Claude (not regex)
+  - "Why haven't you..."
+  - "You are the only one"
+  - "As I mentioned"
+
+preferred_patterns:
+  - "Hope you're doing well"
+  - "The team really values your input"
+  - "Whenever you have a moment"
+```
+
 #### Mentor x Culture Matrix
 
-Same action, different execution per culture:
+Same action, different execution per culture. Culture can **override** mentor when there's a conflict (e.g., Dalio wants public chase but PH culture requires private-first → private wins):
 
 | | Philippines (low direct, high face) | Singapore (high direct) |
 |---|---|---|
@@ -89,7 +201,125 @@ Same action, different execution per culture:
 | **Dalio** | Private (culture override) | Group: direct transparency |
 | **Grove** | Private: output framing | Group: @name deadline |
 
-Culture can **override** mentor when there's a conflict.
+#### Mentor Blending (Phase 2)
+
+Users can blend mentors with weights (e.g., 70% Inamori + 30% Dalio):
+
+- **Questions**: Use primary mentor's questions, optionally append 1 from secondary
+- **Chase strategy**: Primary mentor's method; secondary influences tone
+- **Summary**: Weighted merge of focus areas
+- **System prompt**: Primary prompt with secondary's key principles appended
+
+---
+
+### Authentication & Authorization
+
+#### Phase 1: Bot-based Auth
+
+```
+Boss Setup Flow:
+1. Boss creates Telegram bot via @BotFather
+2. Boss runs the Brain binary with BOT_TOKEN + BOSS_TELEGRAM_ID in .env
+3. Boss adds bot to team group
+4. Bot recognizes boss by telegram_id → grants admin commands
+
+Employee Registration:
+1. Boss uses /addemployee <name> <culture_code> in bot DM
+2. Bot generates an invite link or code
+3. Employee DMs the bot with /join <code>
+4. Bot links employee.telegram_id → confirmed
+5. Unrecognized users get: "Please contact your manager for access"
+```
+
+#### Phase 3+: API Auth
+
+- JWT tokens for dashboard login (email + password)
+- API keys for programmatic access (per tenant)
+- Tenant isolation: every API request passes through `TenantFromContext()` middleware
+- RBAC: boss (full access), manager (team-scoped), member (own data only)
+
+#### Command Permissions
+
+| Command | Boss | Manager | Employee |
+|---------|------|---------|----------|
+| /start, /help | yes | yes | yes |
+| /status | yes | yes (own team) | no |
+| /mentor, /culture | yes | no | no |
+| /addemployee | yes | no | no |
+| /config | yes | no | no |
+| /join | no | no | yes |
+
+---
+
+### Secret Encryption (BYOK)
+
+All sensitive fields (`anthropic_key`, `bot_token`) are encrypted at rest using envelope encryption:
+
+1. **Master Key**: AES-256 key loaded from `ENCRYPTION_KEY` environment variable (32 bytes)
+2. **Per-field encryption**: AES-256-GCM with random nonce per value
+3. **Storage format**: `nonce:ciphertext` (base64 encoded) in TEXT column
+4. **Key rotation**: Re-encrypt all values with new master key via admin command
+5. **Lost key**: Encrypted values are unrecoverable — tenants must re-enter their API keys
+
+Implementation: `internal/pkg/crypto.go` provides `Encrypt(plaintext, masterKey) → ciphertext` and `Decrypt(ciphertext, masterKey) → plaintext`.
+
+---
+
+### Bot Interaction Model
+
+#### Group Chat vs DM
+
+- **Group chat**: Bot listens for commands (/start, /status) and recognizes free-form reports
+- **DM (private chat)**: Primary channel for report collection (privacy), chase messages, and admin commands
+- **Report collection preference**: Bot sends check-in questions via DM; employees reply in DM
+
+#### Conversation State Machine
+
+Report collection is a multi-turn conversation tracked in Redis:
+
+```
+States: idle → collecting(q1) → collecting(q2) → collecting(q3) → confirming → idle
+
+Redis key: conv:{employee_id}
+Value: {state, current_question, answers_so_far, started_at}
+TTL: 4 hours (auto-expire abandoned conversations)
+
+Flow:
+1. Bot sends Q1 → state = collecting(q1)
+2. Employee replies → store answer, send Q2 → state = collecting(q2)
+3. Employee replies → store answer, send Q3 → state = collecting(q3)
+4. Employee replies → show summary "Here's your report: ..." → state = confirming
+5. Employee confirms (or bot auto-confirms after 5min) → save to DB → state = idle
+
+Edge cases:
+- Employee goes silent: TTL expires after 4h, partial answers discarded
+- Employee sends unrelated message mid-report: bot gently redirects
+- Employee sends all answers in one message: AI parses and maps to questions
+- Group message recognized as report: bot DMs confirmation, saves to DB
+```
+
+---
+
+### Error Handling & Failure Modes
+
+| Failure | Handling |
+|---------|----------|
+| Claude API down/timeout | Retry 3x with exponential backoff (1s, 4s, 16s). If all fail: skip AI features, send raw data to boss with "AI unavailable" note |
+| Claude API key invalid | Mark tenant's key as invalid, notify boss via bot: "Your API key is no longer valid. Please update via /config" |
+| Telegram send failure | Message queue in Redis with retry (3 attempts). Failed messages logged to `chase_logs` with `action=send_failed` |
+| Scheduler missed job | On startup, check for missed jobs (last_run timestamp in Redis). Run catch-up if within 2-hour window |
+| Partial report data | Generate summary with available data. Note in summary: "3/10 employees submitted today" |
+| DB connection lost | Health check retries every 5s. Bot responds with "Service temporarily unavailable" |
+
+---
+
+### Observability
+
+- **Logging**: Structured JSON via `slog` (Go stdlib). Log levels: DEBUG, INFO, WARN, ERROR
+- **Log redaction**: Mask API keys, bot tokens, employee personal data in logs
+- **Health endpoint**: `GET /healthz` returns DB, Redis, Telegram Bot status
+- **Bot diagnostic**: `/diagnostics` command (boss only) shows: last remind/chase/summary time, message success rate, API key status
+- **Metrics** (Phase 3+): Prometheus endpoint with: messages_sent_total, reports_collected_total, chases_triggered_total, summaries_generated_total, llm_calls_total, llm_errors_total
 
 ---
 
@@ -101,7 +331,7 @@ Culture can **override** mentor when there's a conflict.
 | Web Framework | Gin | Consistent with existing projects |
 | DB Access | sqlc | Type-safe SQL |
 | Database | PostgreSQL 16 | Multi-tenant RLS, JSONB |
-| Cache/Queue | Redis 7 | Scheduler state, message dedup |
+| Cache/Queue | Redis 7 | Conversation state, scheduler state, message queue |
 | AI | Claude API (anthropic-go) | BYOK per tenant |
 | Bot | telebot/v3 | Mature Go Telegram Bot library |
 | Scheduler | go-co-op/gocron | Lightweight cron |
@@ -115,46 +345,45 @@ ai-management-brain/
 │   └── brain/main.go              # Single binary: API + Bot + Scheduler
 ├── internal/
 │   ├── bot/                        # Telegram Bot
-│   │   ├── handler.go
-│   │   ├── commands.go
-│   │   └── middleware.go
+│   │   ├── handler.go              # Message routing + conversation state
+│   │   ├── commands.go             # /start /status /help /mentor /addemployee
+│   │   └── middleware.go           # Identity resolution, tenant routing, permissions
 │   ├── brain/                      # Core AI Engine (Strategy Executor)
-│   │   ├── engine.go               # Assemble prompt (constitution+mentor+culture)
-│   │   ├── mentor.go               # Load/blend mentor strategies
+│   │   ├── engine.go               # Assemble prompt (mentor+culture)
+│   │   ├── mentor.go               # Load/blend mentor strategies from YAML
 │   │   ├── culture.go              # Cultural adaptation layer
-│   │   └── llm.go                  # Claude API wrapper
+│   │   └── llm.go                  # Claude API wrapper with retry
 │   ├── report/                     # Report business logic
-│   │   ├── collector.go
-│   │   ├── chaser.go
-│   │   └── summarizer.go
+│   │   ├── collector.go            # Multi-turn conversation collector
+│   │   ├── chaser.go               # Mentor-driven escalation + cultural override
+│   │   └── summarizer.go           # AI summary with mentor-specific focus
 │   ├── scheduler/
-│   │   └── jobs.go
+│   │   └── jobs.go                 # remind / chase / summarize + missed job catch-up
 │   ├── channel/                    # Channel abstraction (Phase 3+)
-│   │   ├── adapter.go
+│   │   ├── adapter.go              # interface: Send(), Receive(), Reply()
 │   │   └── telegram.go
-│   ├── db/
-│   │   ├── sqlc/
-│   │   ├── queries/
-│   │   └── migrations/
+│   ├── db/                         # sqlc generated code
+│   │   └── sqlc/
 │   ├── config/
-│   │   └── config.go
+│   │   └── config.go               # Env-based config with validation
 │   └── pkg/
-│       ├── crypto.go
-│       └── response.go
+│       ├── crypto.go               # AES-256-GCM envelope encryption
+│       └── response.go             # Unified API response format
 ├── api/                            # REST API (Phase 3+)
 ├── configs/
 │   ├── mentors/                    # Mentor YAML files
 │   └── cultures/                   # Culture pack YAML files
 ├── frontend/                       # Vue3 Dashboard (Phase 3+)
 ├── sql/
-│   ├── schema.sql
-│   ├── migrations/
-│   └── queries/
+│   ├── migrations/                 # golang-migrate files
+│   └── queries/                    # sqlc query files
 ├── docker-compose.yml
 ├── Dockerfile
 ├── Makefile
 └── .env.example
 ```
+
+Single binary in MVP. Split into cmd/bot + cmd/api + cmd/worker when scaling needed.
 
 ### Database Schema
 
@@ -163,10 +392,10 @@ CREATE TABLE tenants (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name          TEXT NOT NULL,
     timezone      TEXT NOT NULL DEFAULT 'Asia/Singapore',
-    anthropic_key TEXT,
+    anthropic_key TEXT,              -- AES-256-GCM encrypted
     mentor_id     TEXT NOT NULL DEFAULT 'inamori',
-    mentor_blend  JSONB,
-    bot_token     TEXT,
+    mentor_blend  JSONB,             -- optional: {"inamori": 0.7, "dalio": 0.3}
+    bot_token     TEXT,              -- AES-256-GCM encrypted
     boss_chat_id  BIGINT NOT NULL,
     config        JSONB NOT NULL DEFAULT '{}',
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -178,7 +407,8 @@ CREATE TABLE employees (
     name          TEXT NOT NULL,
     telegram_id   BIGINT UNIQUE,
     culture_code  TEXT NOT NULL DEFAULT 'default',
-    role          TEXT NOT NULL DEFAULT 'member',
+    role          TEXT NOT NULL DEFAULT 'member',  -- boss | manager | member
+    invite_code   TEXT,              -- for /join registration
     is_active     BOOLEAN NOT NULL DEFAULT true,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -188,9 +418,9 @@ CREATE TABLE reports (
     tenant_id     UUID NOT NULL REFERENCES tenants(id),
     employee_id   UUID NOT NULL REFERENCES employees(id),
     report_date   DATE NOT NULL,
-    answers       JSONB NOT NULL,
-    blockers      TEXT,
-    sentiment     TEXT,
+    answers       JSONB NOT NULL,    -- {"q1": "...", "q2": "...", "q3": "..."}
+    blockers      TEXT,              -- AI-extracted blockers
+    sentiment     TEXT,              -- positive | neutral | negative
     submitted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(employee_id, report_date)
 );
@@ -201,7 +431,7 @@ CREATE TABLE chase_logs (
     employee_id   UUID NOT NULL REFERENCES employees(id),
     report_date   DATE NOT NULL,
     step          INT NOT NULL DEFAULT 1,
-    action        TEXT NOT NULL,
+    action        TEXT NOT NULL,      -- private_message | public_reminder | manager_notify | send_failed
     message       TEXT NOT NULL,
     chased_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -213,10 +443,19 @@ CREATE TABLE summaries (
     content         TEXT NOT NULL,
     submission_rate FLOAT NOT NULL DEFAULT 0,
     blockers_count  INT NOT NULL DEFAULT 0,
-    key_metrics     JSONB,
+    key_metrics     JSONB,           -- mentor-specific metrics
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(tenant_id, summary_date)
 );
+
+-- Indexes
+CREATE INDEX idx_employees_tenant ON employees(tenant_id);
+CREATE INDEX idx_employees_telegram ON employees(telegram_id);
+CREATE INDEX idx_reports_tenant_date ON reports(tenant_id, report_date);
+CREATE INDEX idx_reports_employee_date ON reports(employee_id, report_date);
+CREATE INDEX idx_chase_logs_tenant_date ON chase_logs(tenant_id, report_date);
+CREATE INDEX idx_chase_logs_employee ON chase_logs(employee_id, report_date);
+CREATE INDEX idx_summaries_tenant_date ON summaries(tenant_id, summary_date);
 ```
 
 ### Brain Engine
@@ -236,106 +475,125 @@ MentorStrategy (loaded from YAML)
 
 CulturePack (loaded from YAML)
     ├── GetOverrides()             -> communication rules
-    ├── GetForbiddenPatterns()     -> []string
+    ├── GetForbiddenPatterns()     -> []string (natural language, not regex)
     ├── GetPreferredPatterns()     -> []string
-    └── ShouldOverride(action)     -> bool
+    └── ShouldOverride(action)     -> bool (culture trumps mentor on conflict)
 ```
 
 ---
 
 ### Phased Roadmap
 
-#### Phase 1: Core Bot (Week 1-2)
+#### Phase 1: Core Bot (Week 1-3)
 
-**Goal:** Complete daily loop with mentor-driven strategy.
+**Goal:** Complete daily loop with mentor-driven strategy + tenant isolation from day 1.
 
 | Task | Output |
 |------|--------|
 | Project init + Docker Compose | Go module + PG + Redis |
-| DB schema + migrations (5 tables) | sql/migrations/ |
+| DB schema + migrations (5 tables + indexes) | sql/migrations/ |
+| Secret encryption (AES-256-GCM) | internal/pkg/crypto.go |
+| Tenant isolation middleware (TenantFromContext) | internal/bot/middleware.go |
 | Mentor YAML loader (Inamori + Dalio) | internal/brain/mentor.go |
 | Culture pack loader (PH + SG) | internal/brain/culture.go |
 | Brain Engine v1 (strategy executor) | internal/brain/engine.go |
-| Telegram Bot framework | internal/bot/ |
-| Report Collector | internal/report/collector.go |
-| Chase logic (mentor-driven + cultural) | internal/report/chaser.go |
-| Summary generation (mentor-driven) | internal/report/summarizer.go |
-| Scheduler (remind/chase/summary) | internal/scheduler/jobs.go |
-| Bot commands: /start /status /help | internal/bot/commands.go |
-| Claude API wrapper | internal/brain/llm.go |
+| Claude API wrapper with retry + error handling | internal/brain/llm.go |
+| Telegram Bot framework + conversation state machine | internal/bot/ |
+| Employee registration (/addemployee + /join) | internal/bot/commands.go |
+| Report Collector (multi-turn conversation) | internal/report/collector.go |
+| Chase logic (mentor-driven escalation + cultural) | internal/report/chaser.go |
+| Summary generation (mentor-driven focus) | internal/report/summarizer.go |
+| Scheduler (remind/chase/summary + missed job catch-up) | internal/scheduler/jobs.go |
+| Bot commands: /start /status /help /addemployee /diagnostics | internal/bot/commands.go |
+| Health check endpoint (/healthz) | cmd/brain/main.go |
+| Structured logging (slog) | throughout |
 
 **Done when:**
 - Own Telegram group connected
-- Mentor-specific check-in questions sent
+- Employees register via /join invite flow
+- Mentor-specific check-in questions sent via DM
+- Multi-turn report collection with conversation state
 - Chase uses mentor strategy + cultural adaptation
 - Boss receives mentor-focused AI summary
-- Switching Inamori ↔ Dalio visibly changes everything
+- Switching Inamori ↔ Dalio visibly changes questions, chase style, summary
+- /status and /diagnostics work
+- All secrets encrypted in DB
+- Errors handled gracefully (Claude down, Telegram failure, etc.)
 
-#### Phase 2: Full Mentor + Culture (Week 3-4)
+#### Phase 2: Full Mentor + Culture (Week 4-5)
 
-**Goal:** Complete strategy system with blending, custom mentors, proactive actions.
+**Goal:** Complete strategy system with 4 mentors, 4 cultures, proactive actions. Custom mentors deferred to Phase 3.
 
 | Task | Output |
 |------|--------|
-| 4 mentor YAMLs (Inamori/Dalio/Grove/Ren) | configs/mentors/ |
+| 4 mentor YAMLs (Inamori/Dalio/Grove/Ren) with full strategy | configs/mentors/ |
 | 4 culture packs (PH/SG/ID/LK) | configs/cultures/ |
-| Mentor blending (weighted mix) | brain/mentor.go |
-| Custom mentor (name → Claude → YAML) | brain/mentor.go |
-| Proactive actions engine | scheduler/jobs.go |
-| Trigger rules engine | brain/engine.go |
+| Mentor blending (weighted mix with clear semantics) | brain/mentor.go |
+| Proactive actions engine (weekly/monthly) | scheduler/jobs.go |
+| Trigger rules engine (event → action) | brain/engine.go |
 | Blocker analysis + sentiment detection | report/summarizer.go |
 | Bot: /mentor /culture /blend | bot/commands.go |
+| Employee profile (submission history, sentiment trend) | DB queries |
 
 **Done when:**
-- Switching mentors changes questions + chase + summary
-- Culture adaptation works per employee
-- Custom mentor creation works
-- Mentor blending works
-- Proactive actions fire on schedule
+- 4 mentors fully operational with distinct strategies
+- Culture adaptation per employee
+- Mentor blending (70/30) works with clear question/chase/summary behavior
+- Proactive actions fire (weekly recognition, etc.)
+- Triggers work (3 consecutive misses → manager notification)
 
-#### Phase 3: Open Source + Dashboard (Week 5-7)
+#### Phase 3: Open Source + Dashboard (Week 6-8)
 
-**Goal:** Distributable open-source. docker compose up.
+**Goal:** Distributable open-source project. docker compose up.
 
 | Task | Output |
 |------|--------|
-| Multi-tenant (tenant_id + RLS) | DB + middleware |
-| REST API (Gin) | api/ |
+| PostgreSQL RLS policies | sql/migrations/ |
+| REST API (Gin): tenant/employee/report/config CRUD | api/ |
 | Vue3 Web Dashboard | frontend/ |
-| BYOK (encrypted key per tenant) | pkg/crypto.go |
-| Onboarding flow | API + frontend |
-| Docker one-click deploy | docker-compose.yml |
-| Open source prep (README, LICENSE) | root |
+| BYOK onboarding in dashboard | frontend + api |
+| Custom mentor creation (structured form, not AI-generated) | frontend + api |
+| Docker one-click deploy | docker-compose.yml + Dockerfile |
+| Open source prep (README, CONTRIBUTING, LICENSE Apache 2.0) | root |
+| Usage tracking (API calls per tenant) | DB + middleware |
 | GitHub Actions CI | .github/workflows/ |
+| Rate limiting (Redis-based per tenant) | internal/pkg/ |
+| Data retention config (default 90 days logs, 1 year reports) | scheduler/jobs.go |
+| Prometheus metrics endpoint | api/ |
 
 **Done when:**
 - Anyone: fork → clone → docker compose up → connect Telegram
 - Web UI handles all configuration
-- Multi-tenant isolation works
+- Multi-tenant isolation with RLS
+- Rate limiting active per tenant
 
-#### Phase 4: Multi-Channel + Agents (Week 8-10)
+#### Phase 4: Multi-Channel + Agents (Week 9-11)
 
-**Goal:** Slack/Lark support. Boss NL commands.
+**Goal:** Slack/Lark support. Boss natural language commands.
 
 | Task | Output |
 |------|--------|
-| Channel abstraction (Adapter interface) | channel/adapter.go |
-| Slack + Lark adapters | channel/ |
-| Agent Orchestrator | brain/orchestrator.go |
-| Chief of Staff Agent | brain/chief.go |
-| Alert Agent | report/alert.go |
-| More Skills (policy, perf review) | internal/skills/ |
+| Channel abstraction (Adapter interface: Send/Receive/Reply) | channel/adapter.go |
+| Slack adapter (Slack Bot + Events API) | channel/slack.go |
+| Lark adapter (Lark Open API) | channel/lark.go |
+| Multi-channel routing (one tenant, multiple channels) | channel/router.go |
+| Agent Orchestrator (intent detection → sub-task dispatch) | brain/orchestrator.go |
+| Chief of Staff: boss NL → structured action | brain/chief.go |
+| Alert Agent (anomaly detection + proactive warning) | report/alert.go |
+| Custom mentor via AI (name → Claude extracts philosophy → form) | brain/mentor.go |
+| Redis pub/sub for internal event bus | internal/events/ |
 
 **Done when:**
-- Slack + Telegram simultaneously
-- Boss NL commands work
-- Proactive anomaly alerts
+- Slack + Telegram connected, messages unified
+- Boss: "Ask John about project progress" → Bot DMs John → reports back
+- Boss: "Announce tomorrow is holiday" → multi-channel broadcast
+- System proactively warns about anomalies (3-day miss, sentiment drop)
 
-#### Phase 5: Cloud SaaS (Week 11-13)
+#### Phase 5: Cloud SaaS (Week 12-14)
 
 **Goal:** Revenue-generating cloud service.
 
-Landing page, Stripe billing, analytics dashboard, 8 mentors, 6 culture packs, SSO/RBAC.
+Landing page, user registration (email+OAuth), Stripe billing, analytics dashboard, 8 mentors (add 孙正义/Jobs/Bezos/马云), 6 culture packs (add MY/CN), SSO/RBAC, webhook security, health monitoring.
 
 ---
 
@@ -343,21 +601,30 @@ Landing page, Stripe billing, analytics dashboard, 8 mentors, 6 culture packs, S
 
 **Open Source (Apache 2.0, self-hosted)**
 - Complete Bot + API + Dashboard
-- 4 mentors + 4 culture packs
-- Single tenant, Telegram + Slack
+- 2 mentors (Inamori + Dalio) + 2 culture packs (PH + SG)
+- Single tenant, up to 10 employees
+- Telegram only
 - Docker one-click deploy
 
-**Cloud Pro ($29/mo, ≤20 people)**
-- Cloud hosted, no maintenance
-- 8 mentors + custom mentors
-- 6 cultures + custom cultures
-- Multi-channel (+Lark/DingTalk)
-- Agent orchestration + Analytics
+**Cloud Pro ($29/mo, up to 20 people)**
+- Cloud hosted, no server maintenance
+- All 4+ mentors + custom mentor creation
+- All 4+ culture packs + custom cultures
+- Multi-channel (Telegram + Slack)
+- Mentor blending
+- Proactive actions + trigger rules
+- Analytics dashboard
 
-**Cloud Enterprise ($99/mo, unlimited)**
-- Multi-tenant, BYOK, SSO + RBAC
+**Cloud Enterprise ($299/mo, up to 100 people)**
+- Everything in Pro
+- Multi-tenant (manage multiple teams/departments)
+- BYOK (use your own API Key)
+- SSO + RBAC
+- Agent orchestration (boss NL commands)
 - Custom Skills plugins
+- All channels (+ Lark/DingTalk)
 - SLA + priority support
+- Custom pricing for 100+ people
 
 ---
 
@@ -366,8 +633,12 @@ Landing page, Stripe billing, analytics dashboard, 8 mentors, 6 culture packs, S
 | Risk | Mitigation |
 |------|------------|
 | Claude API cost | BYOK — tenants pay own AI costs |
-| Mentor YAML too rigid | YAML as hints, Claude reasons dynamically |
-| Cultural errors | Forbidden patterns + human review |
-| Telegram rate limits | Queue + batch messages |
-| Open source forks | Move fast, community, cloud network effects |
-| Scope creep | Clear DoD per phase |
+| Claude API down | Retry 3x, fallback to raw data with "AI unavailable" note |
+| Mentor YAML too rigid | YAML as structured hints, Claude reasons dynamically within framework |
+| Cultural adaptation errors | Forbidden patterns + human review for new cultures |
+| Telegram rate limits | Redis message queue with rate-aware batching |
+| Open source forks | Move fast, build community, cloud has network effects (shared mentors, benchmarks) |
+| Scope creep | Each phase has clear DoD; don't start next until current passes |
+| Security: stored secrets | AES-256-GCM envelope encryption, master key from env var |
+| Data privacy (GDPR) | Configurable retention, tenant data export, deletion cascade |
+| Runaway AI costs | Per-tenant daily API call budget with configurable limit |
