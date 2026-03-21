@@ -1,8 +1,12 @@
 package brain
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"sync"
+
+	"github.com/tonypk/ai-management-brain/internal/memory"
 )
 
 // ValidMentors lists all available mentor IDs.
@@ -36,8 +40,19 @@ var ValidCultures = map[string]bool{
 
 // Engine assembles mentor strategy + culture pack into executable decisions.
 type Engine struct {
-	mentor  *MentorConfig
-	culture *CulturePack
+	mentor       *MentorConfig
+	culture      *CulturePack
+	memoryEngine *memory.MemoryEngine // optional, nil = memory disabled
+}
+
+// SetMemoryEngine injects the memory engine for prompt enrichment.
+func (e *Engine) SetMemoryEngine(me *memory.MemoryEngine) {
+	e.memoryEngine = me
+}
+
+// MemoryEngine returns the associated memory engine (may be nil).
+func (e *Engine) MemoryEngine() *memory.MemoryEngine {
+	return e.memoryEngine
 }
 
 // NewEngine creates an Engine by loading the given mentor and culture configs.
@@ -60,8 +75,19 @@ func (e *Engine) MentorID() string {
 
 // EngineFactory creates Engine instances with caching.
 type EngineFactory struct {
-	mu    sync.RWMutex
-	cache map[string]*Engine
+	mu           sync.RWMutex
+	cache        map[string]*Engine
+	memoryEngine *memory.MemoryEngine // shared across all engines
+}
+
+// SetMemoryEngine injects the memory engine into the factory and all cached engines.
+func (f *EngineFactory) SetMemoryEngine(me *memory.MemoryEngine) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.memoryEngine = me
+	for _, e := range f.cache {
+		e.memoryEngine = me
+	}
 }
 
 // NewEngineFactory creates a new factory.
@@ -83,6 +109,7 @@ func (f *EngineFactory) ForTenant(mentorID, cultureCode string) (*Engine, error)
 	if err != nil {
 		return nil, err
 	}
+	e.memoryEngine = f.memoryEngine
 
 	f.mu.Lock()
 	f.cache[key] = e
@@ -113,6 +140,7 @@ func (f *EngineFactory) ForBlend(primaryID, secondaryID string, weight float64, 
 	if err != nil {
 		return nil, err
 	}
+	e.memoryEngine = f.memoryEngine
 
 	f.mu.Lock()
 	f.cache[key] = e
@@ -251,6 +279,29 @@ func (e *Engine) BuildSystemPrompt() string {
 			prompt += fmt.Sprintf("- %s\n", p)
 		}
 	}
+	return prompt
+}
+
+// BuildSystemPromptWithMemory assembles the system prompt and injects relevant memories.
+// If the memory engine is nil/disabled or recall fails, it falls back to the base prompt.
+func (e *Engine) BuildSystemPromptWithMemory(ctx context.Context, tenantID, employeeID, queryText string) string {
+	prompt := e.BuildSystemPrompt()
+
+	if e.memoryEngine == nil || !e.memoryEngine.Enabled() {
+		return prompt
+	}
+
+	result, err := e.memoryEngine.RecallForMentor(ctx, tenantID, employeeID, queryText)
+	if err != nil {
+		slog.Warn("memory recall failed, using base prompt", "error", err)
+		return prompt
+	}
+
+	memorySection := memory.FormatForPrompt(result)
+	if memorySection != "" {
+		prompt += "\n\n" + memorySection + "\n"
+	}
+
 	return prompt
 }
 

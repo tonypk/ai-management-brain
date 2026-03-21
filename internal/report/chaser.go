@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
+	"github.com/tonypk/ai-management-brain/internal/events"
 )
 
 // EmployeeInfo holds basic info about an employee for chase operations.
@@ -38,17 +39,28 @@ type MessageSender interface {
 	SendMessage(chatID int64, text string) error
 }
 
+// EventBus sends events for chase operations.
+type EventBus interface {
+	PublishPayload(ctx context.Context, eventType events.EventType, tenantID string, payload any) error
+}
+
 // Chaser handles chasing employees who haven't submitted reports.
 type Chaser struct {
-	db      ChaserDB
-	llm     *brain.LLMService
-	sender  MessageSender
-	factory *brain.EngineFactory
+	db       ChaserDB
+	llm      *brain.LLMService
+	sender   MessageSender
+	factory  *brain.EngineFactory
+	eventBus EventBus
 }
 
 // NewChaser creates a new chaser with an EngineFactory for per-employee culture support.
 func NewChaser(db ChaserDB, llm *brain.LLMService, sender MessageSender, factory *brain.EngineFactory) *Chaser {
-	return &Chaser{db: db, llm: llm, sender: sender, factory: factory}
+	return &Chaser{db: db, llm: llm, sender: sender, factory: factory, eventBus: nil}
+}
+
+// SetEventBus sets the event bus for emitting chase events.
+func (c *Chaser) SetEventBus(bus EventBus) {
+	c.eventBus = bus
 }
 
 // ChaseAll chases all employees without reports for the given date.
@@ -111,6 +123,9 @@ func (c *Chaser) ChaseAll(ctx context.Context, tenantID, date, mentorID string) 
 		}); err != nil {
 			slog.Error("create chase log", "employee_id", emp.ID, "error", err)
 		}
+
+		// TODO: emit ChaseCompleted event from chase handler
+		// Requires modifying CreateChaseLog to return the created log ID
 	}
 
 	return nil

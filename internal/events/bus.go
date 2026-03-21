@@ -18,6 +18,7 @@ const (
 	ReportSubmitted  EventType = "report.submitted"
 	ReportAnalyzed   EventType = "report.analyzed"
 	ChaseTriggered   EventType = "chase.triggered"
+	ChaseCompleted   EventType = "chase.completed"
 	SummaryGenerated EventType = "summary.generated"
 	AlertFired       EventType = "alert.fired"
 	MentorChanged    EventType = "mentor.changed"
@@ -53,6 +54,17 @@ type AlertFiredPayload struct {
 	AlertType    string `json:"alert_type"` // "consecutive_miss", "sentiment_drop", "blocker_surge"
 	Message      string `json:"message"`
 	Severity     string `json:"severity"` // "warning", "critical"
+}
+
+// ChaseCompletedPayload is sent when a chase sequence completes for an employee.
+type ChaseCompletedPayload struct {
+	EmployeeID   string `json:"employee_id"`
+	EmployeeName string `json:"employee_name"`
+	ReportDate   string `json:"report_date"`
+	ChaseLogID   string `json:"chase_log_id"`
+	Step         int    `json:"step"`
+	Action       string `json:"action"`
+	Message      string `json:"message"`
 }
 
 // Handler processes events.
