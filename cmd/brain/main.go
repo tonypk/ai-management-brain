@@ -175,7 +175,29 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
 `
-	_, err := pool.Exec(ctx, migrationSQL)
+	if _, err := pool.Exec(ctx, migrationSQL); err != nil {
+		return err
+	}
+
+	// Migration 000002: API Keys + tenant plan column
+	migration002 := `
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
+CREATE TABLE IF NOT EXISTS api_keys (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id      UUID NOT NULL REFERENCES users(id),
+    tenant_id    UUID NOT NULL REFERENCES tenants(id),
+    prefix       TEXT NOT NULL,
+    key_hash     TEXT NOT NULL,
+    name         TEXT NOT NULL DEFAULT 'default',
+    scopes       TEXT[] NOT NULL DEFAULT '{}',
+    is_active    BOOLEAN NOT NULL DEFAULT true,
+    last_used_at TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id) WHERE is_active = true;
+`
+	_, err := pool.Exec(ctx, migration002)
 	return err
 }
 
