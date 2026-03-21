@@ -49,9 +49,20 @@ type OrgUnit struct {
 
 // SupportRole is a cross-cutting support role (C-level, advisor, etc.).
 type SupportRole struct {
-	Title string `json:"title"`
-	Type  string `json:"type"`
-	Scope string `json:"scope"`
+	Title       string              `json:"title"`
+	TitleEn     string              `json:"title_en,omitempty"`
+	RoleID      string              `json:"role_id,omitempty"`
+	Type        string              `json:"type"`
+	Scope       string              `json:"scope"`
+	Personality string              `json:"personality,omitempty"`
+	Capabilities []RoleCapability   `json:"capabilities,omitempty"`
+}
+
+// RoleCapability defines an action primitive assigned to an AI role.
+type RoleCapability struct {
+	Action   string `json:"action"`
+	Schedule string `json:"schedule,omitempty"`
+	Trigger  string `json:"trigger,omitempty"`
 }
 
 // KPIDefinition defines a single KPI metric.
@@ -151,10 +162,29 @@ func buildOrgSystemPrompt(mentor *MentorConfig) string {
 - 组织结构（扁平 / 层级 / 矩阵 / 阿米巴 / 轮值 / 自定义）
 - 是否需要 C-level（小团队可能不需要，你来决定）
 - 哪些角色用 AI 代理、哪些必须真人
+- AI 角色的名称、职责、性格完全由你自由定义
 - 企业文化、会议节奏、KPI 体系、预警规则
 - 每个角色的 daily check-in 问题（不是一刀切）
 
 重要：根据这家公司的实际情况设计，不要默认套用传统企业结构。
+
+对于 type 为 "ai" 的 support_roles，你需要从以下**动作原语**中选择能力：
+- chase_missing: 追踪未提交报告的员工并发送提醒
+- daily_summary: 生成每日团队状态摘要
+- weekly_summary: 生成每周运营回顾
+- check_alerts: 检查告警条件并创建建议
+- create_suggestion: 生成战略建议供管理者审批
+- send_branded_msg: 以角色身份发送消息给管理者
+
+每个 AI 角色需要：
+- role_id: 唯一标识（以 ai- 开头）
+- title: 中文角色名
+- title_en: 英文角色名
+- scope: 职责范围描述
+- personality: 沟通风格
+- capabilities: 能力列表（action + schedule 或 trigger）
+  - schedule 用 cron 表达式（如 "0 8 * * *"）
+  - trigger 用事件名（如 "alert.fired"）
 
 用以下 JSON 格式回复（不要包含其他文本）:
 {
@@ -166,7 +196,15 @@ func buildOrgSystemPrompt(mentor *MentorConfig) string {
       {"name": "单元名", "leader_type": "leader类型", "leader_role": "角色", "size": 5, "kpis": ["kpi1"]}
     ],
     "support_roles": [
-      {"title": "角色名", "type": "human/ai", "scope": "职责范围"}
+      {
+        "title": "中文角色名", "title_en": "English Title", "role_id": "ai-xxx",
+        "type": "ai", "scope": "职责范围", "personality": "沟通风格",
+        "capabilities": [
+          {"action": "daily_summary", "schedule": "0 8 * * *"},
+          {"action": "check_alerts", "trigger": "alert.fired"}
+        ]
+      },
+      {"title": "角色名", "type": "human", "scope": "职责范围"}
     ]
   },
   "culture_principles": ["原则1", "原则2"],

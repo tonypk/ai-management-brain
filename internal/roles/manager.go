@@ -62,30 +62,42 @@ func (m *Manager) ActivateForTenant(ctx context.Context, tenantID string, plan *
 			continue
 		}
 
-		// Map support role title to a registered role definition
-		def := matchRole(role.Title)
-		if def == nil {
-			slog.Info("no registry match for AI role", "title", role.Title)
+		// Build DynamicRoleConfig from plan's support role
+		cfg := buildDynamicConfig(role)
+
+		// Validate capabilities — skip unknown actions
+		validCaps := make([]DynamicCapability, 0, len(cfg.Capabilities))
+		for _, cap := range cfg.Capabilities {
+			if ValidAction(cap.Action) {
+				validCaps = append(validCaps, cap)
+			} else {
+				slog.Warn("skipping unknown action primitive", "role", cfg.RoleID, "action", cap.Action)
+			}
+		}
+		cfg.Capabilities = validCaps
+
+		if len(cfg.Capabilities) == 0 {
+			slog.Info("AI role has no valid capabilities, skipping", "role_id", cfg.RoleID)
 			continue
 		}
 
 		// Upsert DB record
-		configJSON, _ := json.Marshal(map[string]string{"scope": role.Scope})
+		configJSON, _ := json.Marshal(cfg)
 		_, err := m.cfg.Queries.CreateAIRoleInstance(ctx, sqlc.CreateAIRoleInstanceParams{
 			TenantID: tid,
-			RoleID:   def.RoleID,
-			Title:    role.Title,
+			RoleID:   cfg.RoleID,
+			Title:    cfg.TitleEn,
 			MentorID: mentorID,
 			Config:   configJSON,
 		})
 		if err != nil {
-			slog.Error("create ai role instance", "role_id", def.RoleID, "error", err)
+			slog.Error("create ai role instance", "role_id", cfg.RoleID, "error", err)
 			continue
 		}
 
 		// Create and register agent
-		if err := m.registerAgent(ctx, def, tenantID, mentorID); err != nil {
-			slog.Error("register agent", "role_id", def.RoleID, "error", err)
+		if err := m.registerAgent(ctx, cfg, tenantID, mentorID); err != nil {
+			slog.Error("register agent", "role_id", cfg.RoleID, "error", err)
 		}
 	}
 
@@ -105,13 +117,21 @@ func (m *Manager) LoadExistingForTenant(ctx context.Context, tenantID string) er
 	}
 
 	for _, role := range roles {
-		def := LookupDefinition(role.RoleID)
-		if def == nil {
-			slog.Warn("unknown role in DB", "role_id", role.RoleID)
+		var cfg DynamicRoleConfig
+		if err := json.Unmarshal(role.Config, &cfg); err != nil {
+			slog.Error("unmarshal role config", "role_id", role.RoleID, "error", err)
 			continue
 		}
 
-		if err := m.registerAgent(ctx, def, tenantID, role.MentorID); err != nil {
+		// Fill in role_id from DB if not in config
+		if cfg.RoleID == "" {
+			cfg.RoleID = role.RoleID
+		}
+		if cfg.TitleEn == "" {
+			cfg.TitleEn = role.Title
+		}
+
+		if err := m.registerAgent(ctx, &cfg, tenantID, role.MentorID); err != nil {
 			slog.Error("load existing agent", "role_id", role.RoleID, "error", err)
 		}
 	}
@@ -135,49 +155,44 @@ func (m *Manager) ListAgents() []string {
 }
 
 // registerAgent creates an agent, adds cron jobs, and subscribes to events.
-func (m *Manager) registerAgent(ctx context.Context, def *RoleDefinition, tenantID, mentorID string) error {
+func (m *Manager) registerAgent(ctx context.Context, cfg *DynamicRoleConfig, tenantID, mentorID string) error {
 	deps := m.buildDeps()
-	agent, err := NewRoleAgent(def, tenantID, mentorID, deps)
+	agent, err := NewRoleAgent(cfg, tenantID, mentorID, deps)
 	if err != nil {
 		return err
 	}
 
 	m.mu.Lock()
-	m.agents[def.RoleID] = agent
+	m.agents[cfg.RoleID] = agent
 	m.mu.Unlock()
 
 	// Register capabilities
-	for _, cap := range def.Capabilities {
-		if cap.Mode != AutoExecute {
-			continue
-		}
-
-		capName := cap.Name
+	for _, cap := range cfg.Capabilities {
+		actionName := cap.Action
 
 		// Cron-based capabilities
-		if cap.CronExpr != "" {
-			jobName := fmt.Sprintf("role_%s_%s", def.RoleID, capName)
-			if err := m.cfg.Scheduler.AddJob(jobName, cap.CronExpr, func(ctx context.Context) error {
-				return agent.RunCapability(ctx, capName)
+		if cap.Schedule != "" {
+			jobName := fmt.Sprintf("role_%s_%s", cfg.RoleID, actionName)
+			if err := m.cfg.Scheduler.AddJob(jobName, cap.Schedule, func(ctx context.Context) error {
+				return agent.RunCapability(ctx, actionName)
 			}); err != nil {
 				slog.Error("register role cron", "job", jobName, "error", err)
 			} else {
-				slog.Info("registered role cron", "job", jobName, "cron", cap.CronExpr)
+				slog.Info("registered role cron", "job", jobName, "cron", cap.Schedule)
 			}
 		}
 
 		// Event-based capabilities
-		for _, trigger := range cap.EventTriggers {
-			eventType := events.EventType(trigger)
-			capNameCopy := capName
+		if cap.Trigger != "" {
+			eventType := events.EventType(cap.Trigger)
+			actionCopy := actionName
 			m.cfg.EventBus.Subscribe(eventType, func(ctx context.Context, event events.Event) error {
-				// Only process events for our tenant
 				if event.TenantID != tenantID {
 					return nil
 				}
-				return agent.RunCapability(ctx, capNameCopy)
+				return agent.RunCapability(ctx, actionCopy)
 			})
-			slog.Info("subscribed role to event", "role", def.RoleID, "event", trigger)
+			slog.Info("subscribed role to event", "role", cfg.RoleID, "event", cap.Trigger)
 		}
 	}
 
@@ -199,61 +214,62 @@ func (m *Manager) buildDeps() *AgentDeps {
 	}
 }
 
-// matchRole maps a plan support role title to a registry definition.
-// It checks if the title contains known keywords.
-func matchRole(title string) *RoleDefinition {
-	// Direct lookup first
-	for _, def := range Registry {
-		if def.DefaultTitle == title {
-			return &def
+// buildDynamicConfig creates a DynamicRoleConfig from a plan's SupportRole.
+func buildDynamicConfig(role brain.SupportRole) *DynamicRoleConfig {
+	roleID := role.RoleID
+	if roleID == "" {
+		// Generate a role_id from title if LLM didn't provide one
+		roleID = "ai-" + sanitizeID(role.TitleEn)
+		if roleID == "ai-" {
+			roleID = "ai-" + sanitizeID(role.Title)
 		}
 	}
 
-	// Keyword matching for common variations
-	keywords := map[string]string{
-		"COO":             "ai-coo",
-		"Operations":      "ai-coo",
-		"运营":              "ai-coo",
-		"Chief Operating": "ai-coo",
-	}
-	for keyword, roleID := range keywords {
-		if containsCI(title, keyword) {
-			def := LookupDefinition(roleID)
-			return def
-		}
+	titleEn := role.TitleEn
+	if titleEn == "" {
+		titleEn = role.Title
 	}
 
-	return nil
+	caps := make([]DynamicCapability, 0, len(role.Capabilities))
+	for _, c := range role.Capabilities {
+		caps = append(caps, DynamicCapability{
+			Action:   c.Action,
+			Schedule: c.Schedule,
+			Trigger:  c.Trigger,
+		})
+	}
+
+	return &DynamicRoleConfig{
+		Title:        role.Title,
+		TitleEn:      titleEn,
+		RoleID:       roleID,
+		Scope:        role.Scope,
+		Personality:  role.Personality,
+		Capabilities: caps,
+	}
 }
 
-// containsCI checks if s contains substr (case-insensitive).
-func containsCI(s, substr string) bool {
-	sLower := make([]byte, len(s))
-	subLower := make([]byte, len(substr))
-	for i, c := range []byte(s) {
+// sanitizeID converts a string to a simple kebab-case ID.
+func sanitizeID(s string) string {
+	result := make([]byte, 0, len(s))
+	prevDash := false
+	for _, c := range []byte(s) {
 		if c >= 'A' && c <= 'Z' {
-			sLower[i] = c + 32
-		} else {
-			sLower[i] = c
+			result = append(result, c+32)
+			prevDash = false
+		} else if c >= 'a' && c <= 'z' || c >= '0' && c <= '9' {
+			result = append(result, c)
+			prevDash = false
+		} else if !prevDash && len(result) > 0 {
+			result = append(result, '-')
+			prevDash = true
 		}
 	}
-	for i, c := range []byte(substr) {
-		if c >= 'A' && c <= 'Z' {
-			subLower[i] = c + 32
-		} else {
-			subLower[i] = c
-		}
+	// Trim trailing dash
+	if len(result) > 0 && result[len(result)-1] == '-' {
+		result = result[:len(result)-1]
 	}
-	return len(subLower) > 0 && contains(string(sLower), string(subLower))
-}
-
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return string(result)
 }
 
 // sqlcQueriesAdapter adapts *sqlc.Queries to QueriesIface.

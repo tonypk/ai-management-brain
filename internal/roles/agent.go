@@ -15,9 +15,9 @@ type RoleAgent struct {
 	MentorID string
 	TenantID string
 
-	definition *RoleDefinition
-	engine     *brain.Engine
-	caps       *capabilityRunner
+	config *DynamicRoleConfig
+	engine *brain.Engine
+	deps   *AgentDeps
 }
 
 // AgentDeps holds the shared dependencies injected into a RoleAgent.
@@ -90,38 +90,63 @@ type CreateSuggestionParams struct {
 	ContextData []byte
 }
 
-// NewRoleAgent creates a new agent from a role definition.
-func NewRoleAgent(def *RoleDefinition, tenantID, mentorID string, deps *AgentDeps) (*RoleAgent, error) {
+// NewRoleAgent creates a new agent from a dynamic role config.
+func NewRoleAgent(cfg *DynamicRoleConfig, tenantID, mentorID string, deps *AgentDeps) (*RoleAgent, error) {
 	engine, err := deps.EngineFactory.ForTenant(mentorID, "default")
 	if err != nil {
-		return nil, fmt.Errorf("load engine for role %s: %w", def.RoleID, err)
+		return nil, fmt.Errorf("load engine for role %s: %w", cfg.RoleID, err)
 	}
 
-	agent := &RoleAgent{
-		RoleID:     def.RoleID,
-		Title:      def.DefaultTitle,
-		MentorID:   mentorID,
-		TenantID:   tenantID,
-		definition: def,
-		engine:     engine,
-	}
-	agent.caps = newCapabilityRunner(agent, deps)
-	return agent, nil
+	return &RoleAgent{
+		RoleID:   cfg.RoleID,
+		Title:    cfg.TitleEn,
+		MentorID: mentorID,
+		TenantID: tenantID,
+		config:   cfg,
+		engine:   engine,
+		deps:     deps,
+	}, nil
 }
 
 // SystemPrompt builds the role-specific system prompt.
 func (a *RoleAgent) SystemPrompt() string {
 	base := a.engine.BuildSystemPrompt()
-	return fmt.Sprintf("%s\n\n--- Role Identity ---\nYou are the AI %s for this organization.\nYour role: operational oversight, team performance tracking, and process improvement.\nSpeak from the perspective of a %s. Be concise and actionable.", base, a.Title, a.Title)
+
+	title := a.config.TitleEn
+	if title == "" {
+		title = a.config.Title
+	}
+
+	scope := a.config.Scope
+	personality := a.config.Personality
+
+	prompt := fmt.Sprintf("%s\n\n--- Role Identity ---\nYou are the AI %s for this organization.", base, title)
+	if scope != "" {
+		prompt += fmt.Sprintf("\nResponsibilities: %s", scope)
+	}
+	if personality != "" {
+		prompt += fmt.Sprintf("\nCommunication style: %s", personality)
+	}
+	prompt += "\nBe concise and actionable."
+	return prompt
 }
 
 // Brand prefixes a message with the role title.
 func (a *RoleAgent) Brand(msg string) string {
-	return fmt.Sprintf("[%s]\n\n%s", a.Title, msg)
+	title := a.config.TitleEn
+	if title == "" {
+		title = a.config.Title
+	}
+	return fmt.Sprintf("[%s]\n\n%s", title, msg)
 }
 
-// RunCapability dispatches execution of a named capability.
-func (a *RoleAgent) RunCapability(ctx context.Context, name string) error {
-	slog.Info("role agent running capability", "role", a.RoleID, "capability", name, "tenant", a.TenantID)
-	return a.caps.Run(ctx, name)
+// RunCapability dispatches execution of a named action primitive.
+func (a *RoleAgent) RunCapability(ctx context.Context, actionName string) error {
+	slog.Info("role agent running capability", "role", a.RoleID, "action", actionName, "tenant", a.TenantID)
+
+	fn, ok := ActionRegistry[actionName]
+	if !ok {
+		return fmt.Errorf("unknown action primitive: %s", actionName)
+	}
+	return fn(ctx, a, a.deps)
 }
