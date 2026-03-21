@@ -54,7 +54,7 @@ CREATE TABLE memories (
     -- Content
     content      TEXT NOT NULL,
     summary      TEXT,
-    embedding    vector(1024) NOT NULL,
+    embedding    vector(1024),            -- Nullable: allows storage when Voyage API unavailable
 
     -- Scoring & lifecycle
     importance   FLOAT DEFAULT 0.5,       -- 0.0-1.0
@@ -67,15 +67,34 @@ CREATE TABLE memories (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Vector similarity search (cosine distance)
-CREATE INDEX idx_memories_embedding ON memories
-    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- NOTE: Skip vector index on initial deployment (empty table).
+-- Add IVFFlat index via migration once row count exceeds 1,000:
+--   CREATE INDEX idx_memories_embedding ON memories
+--       USING ivfflat (embedding vector_cosine_ops) WITH (lists = 30);
+-- Until then, exact cosine distance on small datasets is fast enough.
 
 -- Query indexes
 CREATE INDEX idx_memories_tenant_type ON memories(tenant_id, memory_type, memory_tier);
 CREATE INDEX idx_memories_employee ON memories(employee_id) WHERE employee_id IS NOT NULL;
 CREATE INDEX idx_memories_expires ON memories(expires_at) WHERE expires_at IS NOT NULL;
 CREATE INDEX idx_memories_merged ON memories(merged_into) WHERE merged_into IS NOT NULL;
+```
+
+### Vector Search Query (with tenant isolation)
+
+All vector similarity searches MUST filter by `tenant_id` to enforce tenant isolation:
+
+```sql
+-- name: SearchMemoriesBySimilarity :many
+SELECT id, content, summary, importance, memory_type, memory_tier, employee_id, created_at,
+       1 - (embedding <=> @query_embedding::vector) AS similarity
+FROM memories
+WHERE tenant_id = @tenant_id
+  AND embedding IS NOT NULL
+  AND merged_into IS NULL
+  AND (expires_at IS NULL OR expires_at > NOW())
+ORDER BY embedding <=> @query_embedding::vector
+LIMIT @max_results;
 ```
 
 ### Memory Types
@@ -94,6 +113,58 @@ CREATE INDEX idx_memories_merged ON memories(merged_into) WHERE merged_into IS N
 | Long-term | `long_term` | Permanent | AI-consolidated stable insights |
 | Profile | `profile` | Permanent, periodically refreshed | Core employee/org characteristic summaries |
 
+### Per-Tenant Limits
+
+To prevent resource exhaustion on t3a.small:
+
+| Tier | Max per tenant | Enforcement |
+|------|----------------|-------------|
+| Free | 5,000 memories | Prune oldest short-term when exceeded |
+| Pro | 20,000 memories | Same |
+| Enterprise | 100,000 memories | Same |
+
+---
+
+## Data Types
+
+### Memory Struct
+
+```go
+type Memory struct {
+    ID          string
+    TenantID    string
+    MemoryType  string     // employee_insight | strategy_result | org_knowledge
+    MemoryTier  string     // short_term | long_term | profile
+    EmployeeID  string     // empty if not employee-specific
+    SourceType  string
+    SourceID    string
+    Content     string
+    Summary     string
+    Embedding   []float32  // nil when pending backfill
+    Importance  float64
+    AccessCount int
+    Metadata    map[string]any
+    ExpiresAt   *time.Time
+    MergedInto  string     // empty if not merged
+    CreatedAt   time.Time
+    UpdatedAt   time.Time
+}
+```
+
+Note: Service-layer uses `string` IDs (matching existing codebase pattern in `report.DBAdapter`). Conversion to `pgtype.UUID` happens at the database adapter boundary.
+
+### Consolidation Task Type
+
+```go
+type ConsolidationTask string
+
+const (
+    ConsolidationClean     ConsolidationTask = "clean"
+    ConsolidationMerge     ConsolidationTask = "merge"
+    ConsolidationRebuild   ConsolidationTask = "rebuild"
+)
+```
+
 ---
 
 ## Component Architecture
@@ -102,14 +173,19 @@ CREATE INDEX idx_memories_merged ON memories(merged_into) WHERE merged_into IS N
 
 ```
 internal/memory/
-├── engine.go          # MemoryEngine — unified entry point
-├── store.go           # MemoryStore — database operations (sqlc-generated)
-├── embedder.go        # Embedder — Voyage AI client
-├── retriever.go       # Retriever — semantic search + ranking
-├── extractor.go       # Extractor — extract memories from reports/chases/summaries
-├── consolidator.go    # Consolidator — periodic merge/upgrade/decay
-├── profile.go         # ProfileBuilder — employee profile generation
-└── engine_test.go     # Tests
+├── engine.go            # MemoryEngine — unified entry point
+├── store.go             # MemoryStore — database adapter (pgtype conversion)
+├── embedder.go          # Embedder — Voyage AI client
+├── retriever.go         # Retriever — semantic search + ranking
+├── extractor.go         # Extractor — extract memories from reports/chases/summaries
+├── consolidator.go      # Consolidator — periodic merge/upgrade/decay
+├── profile.go           # ProfileBuilder — employee profile generation
+├── embedder_test.go     # Tests per component
+├── retriever_test.go
+├── extractor_test.go
+├── consolidator_test.go
+├── profile_test.go
+└── engine_test.go
 ```
 
 ### Component Responsibilities
@@ -121,7 +197,7 @@ Wraps the Voyage AI API for generating text embeddings.
 - Model: `voyage-3-lite` (1024 dimensions, fast and cost-effective)
 - Supports batch embedding (up to 128 texts per call)
 - In-memory cache for identical texts within a session
-- Graceful degradation: if Voyage API unavailable, store memory without embedding and backfill later
+- Graceful degradation: if Voyage API unavailable, return nil embedding (memory stored without vector, backfilled later)
 
 ```go
 type Embedder interface {
@@ -134,10 +210,12 @@ type Embedder interface {
 
 Listens to system events and extracts memories from various sources.
 
-- **Report submitted** → Extract employee insights (sentiment, blockers, achievements)
-- **Chase completed** → Extract strategy results (which approach, what response)
-- **Summary generated** → Extract organizational knowledge (team patterns, project status)
+- **`report.submitted`** → Extract employee insights (sentiment, blockers, achievements)
+- **`chase.completed`** (new event type, must be added to event bus) → Extract strategy results
+- **`summary.generated`** → Extract organizational knowledge (team patterns, project status)
 - Uses Claude for structured extraction: "Extract memorable insights from this report"
+
+Note: The existing event bus defines `ChaseTriggered` but not `ChaseCompleted`. A new `ChaseCompleted EventType = "chase.completed"` must be added to `internal/events/bus.go`, and the chaser module must emit it after completing a chase sequence.
 
 ```go
 type Extractor interface {
@@ -152,7 +230,7 @@ type Extractor interface {
 Performs semantic search to find relevant memories for a given context.
 
 - Input: conversation context + employee ID + tenant ID
-- Flow: generate embedding → pgvector cosine similarity search → importance-weighted ranking → return top-K
+- Flow: generate embedding → pgvector cosine similarity search (filtered by tenant_id) → importance-weighted ranking → return top-K
 - Budget: max 5 memories, max 800 tokens total
 
 ```go
@@ -161,9 +239,9 @@ type Retriever interface {
 }
 
 type RecallQuery struct {
-    TenantID   uuid.UUID
-    EmployeeID uuid.UUID
-    Context    string   // Current conversation context
+    TenantID   string
+    EmployeeID string
+    QueryText  string   // Current conversation context
     MaxResults int      // Default: 5
     MaxTokens  int      // Default: 800
 }
@@ -187,9 +265,10 @@ Periodic maintenance of the memory store.
 
 Merge logic:
 1. Group short-term memories by employee
-2. Cluster similar memories using embedding cosine similarity (threshold: 0.85)
-3. For each cluster, call Claude: "Consolidate these observations into one higher-level insight"
-4. Create new `long_term` memory, mark originals with `merged_into`
+2. Cap at 200 short-term memories per employee per run (process oldest first if exceeded)
+3. Cluster similar memories using embedding cosine similarity (threshold: 0.85)
+4. For each cluster, call Claude: "Consolidate these observations into one higher-level insight"
+5. Create new `long_term` memory, mark originals with `merged_into`
 
 #### ProfileBuilder (`profile.go`)
 
@@ -201,8 +280,8 @@ Generates and maintains employee characteristic summaries.
 
 ```go
 type ProfileBuilder interface {
-    Build(ctx context.Context, employeeID uuid.UUID) (*Memory, error)
-    Refresh(ctx context.Context, employeeID uuid.UUID) (*Memory, error)
+    Build(ctx context.Context, employeeID string) (*Memory, error)
+    Refresh(ctx context.Context, employeeID string) (*Memory, error)
 }
 ```
 
@@ -221,13 +300,15 @@ type MemoryEngine struct {
 }
 
 // Called by brain engine before generating mentor response
-func (e *MemoryEngine) RecallForMentor(ctx context.Context, tenantID, employeeID uuid.UUID, context string) (*RecallResult, error)
+func (e *MemoryEngine) RecallForMentor(ctx context.Context, tenantID, employeeID, queryText string) (*RecallResult, error)
 
-// Called by event handlers after report/chase/summary
-func (e *MemoryEngine) ExtractAndStore(ctx context.Context, source interface{}) error
+// Called by event handlers after report/chase/summary (typed methods, no interface{})
+func (e *MemoryEngine) ExtractFromReport(ctx context.Context, report *Report) error
+func (e *MemoryEngine) ExtractFromChase(ctx context.Context, chase *ChaseLog) error
+func (e *MemoryEngine) ExtractFromSummary(ctx context.Context, summary *Summary) error
 
 // Called by scheduler for periodic maintenance
-func (e *MemoryEngine) RunConsolidation(ctx context.Context, taskType string) error
+func (e *MemoryEngine) RunConsolidation(ctx context.Context, task ConsolidationTask) error
 ```
 
 ---
@@ -295,8 +376,8 @@ Integrated into existing `internal/scheduler/`:
 ```
 For each tenant:
   For each employee with short_term memories:
-    1. Fetch all short_term memories (not yet merged)
-    2. Compute pairwise cosine similarity
+    1. Fetch short_term memories not yet merged (cap: 200 per employee, oldest first)
+    2. Compute pairwise cosine similarity (max 200*200 = 40,000 comparisons)
     3. Cluster memories with similarity > 0.85
     4. For each cluster (size >= 2):
        a. Call Claude: "Merge these observations into one insight"
@@ -309,20 +390,107 @@ For each tenant:
 
 ---
 
+## sqlc Queries
+
+New file: `sql/queries/memories.sql`
+
+```sql
+-- name: CreateMemory :one
+INSERT INTO memories (tenant_id, memory_type, memory_tier, employee_id, source_type, source_id,
+    content, summary, embedding, importance, metadata, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING *;
+
+-- name: GetMemory :one
+SELECT * FROM memories WHERE id = $1 AND tenant_id = $2;
+
+-- name: ListMemoriesByTenant :many
+SELECT * FROM memories
+WHERE tenant_id = $1
+  AND ($2 = '' OR memory_type = $2)
+  AND ($3 = '' OR memory_tier = $3)
+  AND ($4 = '' OR employee_id::text = $4)
+  AND merged_into IS NULL
+ORDER BY created_at DESC
+LIMIT $5 OFFSET $6;
+
+-- name: SearchMemoriesBySimilarity :many
+SELECT id, tenant_id, memory_type, memory_tier, employee_id, content, summary,
+       importance, metadata, created_at,
+       1 - (embedding <=> @query_embedding::vector) AS similarity
+FROM memories
+WHERE tenant_id = @tenant_id
+  AND embedding IS NOT NULL
+  AND merged_into IS NULL
+  AND (expires_at IS NULL OR expires_at > NOW())
+  AND (@employee_filter = '' OR employee_id::text = @employee_filter)
+ORDER BY embedding <=> @query_embedding::vector
+LIMIT @max_results;
+
+-- name: UpdateMemoryMergedInto :exec
+UPDATE memories SET merged_into = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: DeleteExpiredMemories :execrows
+DELETE FROM memories WHERE expires_at < NOW() AND merged_into IS NULL;
+
+-- name: DeleteMemory :exec
+DELETE FROM memories WHERE id = $1 AND tenant_id = $2;
+
+-- name: CountMemoriesByTenant :one
+SELECT COUNT(*) FROM memories WHERE tenant_id = $1 AND merged_into IS NULL;
+
+-- name: ListShortTermByEmployee :many
+SELECT * FROM memories
+WHERE tenant_id = $1
+  AND employee_id::text = $2
+  AND memory_tier = 'short_term'
+  AND merged_into IS NULL
+ORDER BY created_at ASC
+LIMIT 200;
+
+-- name: ListLongTermByEmployee :many
+SELECT * FROM memories
+WHERE tenant_id = $1
+  AND employee_id::text = $2
+  AND memory_tier = 'long_term'
+  AND merged_into IS NULL
+ORDER BY importance DESC, created_at DESC;
+
+-- name: GetProfileByEmployee :one
+SELECT * FROM memories
+WHERE tenant_id = $1
+  AND employee_id::text = $2
+  AND memory_tier = 'profile'
+  AND merged_into IS NULL
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: BackfillEmbedding :exec
+UPDATE memories SET embedding = $2, updated_at = NOW()
+WHERE id = $1 AND embedding IS NULL;
+```
+
+Note: pgvector `vector` type may need a custom type override in `sqlc.yaml`. If sqlc does not natively support the `vector` type, the `SearchMemoriesBySimilarity` and `BackfillEmbedding` queries can use raw `pgx` queries alongside sqlc for standard CRUD operations.
+
+---
+
 ## REST API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/v1/memories` | List memories (filter by type, tier, employee_id, date range) |
-| GET | `/api/v1/memories/:id` | Get single memory detail |
-| POST | `/api/v1/memories/search` | Semantic search (body: `{query: string, limit: int}`) |
-| DELETE | `/api/v1/memories/:id` | Delete a memory manually |
-| GET | `/api/v1/employees/:id/profile` | Get employee AI profile |
-| POST | `/api/v1/memories/consolidate` | Manually trigger consolidation (debug/admin) |
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/api/v1/memories` | List memories (filter by type, tier, employee_id, date range) | `AuthMiddleware` |
+| GET | `/api/v1/memories/:id` | Get single memory detail | `AuthMiddleware` |
+| POST | `/api/v1/memories/search` | Semantic search (body: `{query: string, limit: int}`) | `AuthMiddleware`, rate limit 10 req/min |
+| DELETE | `/api/v1/memories/:id` | Delete a memory manually | `RequireRole("boss")` |
+| GET | `/api/v1/employees/:id/profile` | Get employee AI profile | `AuthMiddleware` |
+| POST | `/api/v1/memories/consolidate` | Manually trigger consolidation (admin only) | `RequireRole("boss")` |
+
+All endpoints are under the `protected` route group with `AuthMiddleware`.
 
 ### Pagination
 
-All list endpoints support cursor-based pagination:
+All list endpoints support page-based pagination (matching existing codebase pattern):
+
 ```json
 {
   "data": [...],
@@ -343,10 +511,11 @@ All list endpoints support cursor-based pagination:
 |-----------------|-------------|
 | `internal/brain/engine.go` | Call `MemoryEngine.RecallForMentor()` before generating response |
 | `internal/brain/llm.go` | Add `<memory>` section to prompt template |
-| `internal/report/` | After report submission, call `MemoryEngine.ExtractAndStore()` |
+| `internal/report/` | After report submission, call `MemoryEngine.ExtractFromReport()` |
 | `internal/scheduler/` | Add 3 new consolidation cron jobs |
-| `internal/events/` | Emit events for report/chase/summary completion; memory engine subscribes |
-| `internal/api/router.go` | Register new `/api/v1/memories` routes |
+| `internal/events/bus.go` | Add `ChaseCompleted EventType = "chase.completed"` constant |
+| `internal/bot/` (or chaser) | Emit `ChaseCompleted` event after finishing a chase sequence |
+| `internal/api/router.go` | Register new `/api/v1/memories` routes under `protected` group |
 
 ---
 
@@ -354,11 +523,12 @@ All list endpoints support cursor-based pagination:
 
 | Failure | Behavior |
 |---------|----------|
-| Voyage AI unavailable | Store memory without embedding; background job backfills later |
+| Voyage AI unavailable | Store memory with `embedding = NULL`; background job backfills via `BackfillEmbedding` query |
 | Claude API unavailable | Skip current consolidation round; retry next schedule |
 | pgvector query slow | Log warning, reduce top-K from 5 to 3 |
 | Embedding dimension mismatch | Reject and log; do not store corrupted vectors |
 | Memory extraction returns empty | Normal — not all reports contain notable insights |
+| Tenant memory limit exceeded | Prune oldest short-term memories (FIFO) |
 
 ---
 
@@ -377,6 +547,7 @@ MEMORY_MAX_RECALL=5                # Max memories per retrieval
 MEMORY_MAX_TOKENS=800              # Token budget for memory injection
 MEMORY_SHORT_TERM_DAYS=30          # Short-term expiry
 MEMORY_CONSOLIDATION_THRESHOLD=0.85 # Cosine similarity for merging
+MEMORY_MAX_PER_TENANT=20000        # Per-tenant memory limit
 ```
 
 ---
@@ -393,18 +564,25 @@ Three new pages in the Vue3 SPA:
 
 ## Migration Plan
 
-Single migration file: `sql/migrations/000005_memories.up.sql`
+Two migration files:
 
-Steps:
+**`sql/migrations/000005_memories.up.sql`:**
 1. Enable pgvector extension
-2. Create `memories` table with all indexes
+2. Create `memories` table with query indexes (no vector index yet)
 3. No data migration needed (new feature)
+
+**`sql/migrations/000005_memories.down.sql`:**
+```sql
+DROP TABLE IF EXISTS memories;
+-- Note: do NOT drop the vector extension as other tables may use it in the future
+```
 
 ---
 
 ## Testing Strategy
 
-- **Unit tests**: Each component (Embedder, Extractor, Retriever, Consolidator, ProfileBuilder)
+- **Unit tests per component**: `embedder_test.go`, `retriever_test.go`, `extractor_test.go`, `consolidator_test.go`, `profile_test.go`, `engine_test.go`
 - **Integration tests**: Full flow — report → extract → store → recall → inject
 - **Mock Voyage API**: Use recorded responses for deterministic tests
+- **Mock Claude API**: Use canned responses for extractor and consolidator tests
 - **Target**: 80%+ coverage for `internal/memory/` package
