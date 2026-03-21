@@ -456,6 +456,7 @@ var mentorDescriptions = map[string]mentorInfo{
 	"jobs":    {ID: "jobs", Name: "Steve Jobs", Description: "Apple - Pursuit of simplicity, reality distortion field"},
 	"bezos":   {ID: "bezos", Name: "Jeff Bezos", Description: "Amazon - Day 1 mentality, customer obsession"},
 	"ma":      {ID: "ma", Name: "Jack Ma", Description: "Alibaba - Embrace change, customer first, teamwork"},
+	"musk":    {ID: "musk", Name: "Elon Musk", Description: "Tesla/SpaceX - First principles thinking, urgency, 10x moonshots"},
 }
 
 // handleGetMentor returns the current mentor and available mentors list.

@@ -23,7 +23,7 @@ curl http://localhost/healthz
 # {"db":"ok","redis":"ok","status":"ok"}
 ```
 
-**8 Management Mentors:** Inamori (稻盛和夫) · Dalio · Grove · Ren (任正非) · Son (孙正义) · Jobs · Bezos · Ma (马云)
+**9 Management Mentors:** Inamori (稻盛和夫) · Dalio · Grove · Ren (任正非) · Son (孙正义) · Jobs · Bezos · Ma (马云) · Musk (马斯克)
 
 **6 Culture Packs:** Philippines · Singapore · Indonesia · Sri Lanka · Malaysia · China
 
