@@ -8,33 +8,24 @@ import (
 	"testing"
 )
 
-func TestVoyageEmbedder_Embed(t *testing.T) {
+func TestHuggingFaceEmbedder_Embed(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/embeddings" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.Header.Get("Authorization") != "Bearer test-key" {
-			t.Errorf("unexpected auth header")
+		if r.Method != "POST" {
+			t.Errorf("unexpected method: %s", r.Method)
 		}
 
-		var req map[string]any
+		var req hfRequest
 		json.NewDecoder(r.Body).Decode(&req)
 
-		if req["model"] != "voyage-3-lite" {
-			t.Errorf("unexpected model: %v", req["model"])
-		}
-
-		resp := map[string]any{
-			"data": []map[string]any{
-				{"embedding": []float64{0.1, 0.2, 0.3}},
-			},
-			"usage": map[string]any{"total_tokens": 10},
+		// Return sentence embeddings: [][]float64
+		resp := [][]float64{
+			{0.1, 0.2, 0.3},
 		}
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
-	embedder := NewVoyageEmbedder("test-key", "voyage-3-lite", 128)
+	embedder := NewHuggingFaceEmbedder("test-model", 128)
 	embedder.baseURL = server.URL
 
 	vec, err := embedder.Embed(context.Background(), "hello world")
@@ -49,28 +40,22 @@ func TestVoyageEmbedder_Embed(t *testing.T) {
 	}
 }
 
-func TestVoyageEmbedder_EmbedBatch(t *testing.T) {
+func TestHuggingFaceEmbedder_EmbedBatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req map[string]any
+		var req hfRequest
 		json.NewDecoder(r.Body).Decode(&req)
 
-		inputs := req["input"].([]any)
-		data := make([]map[string]any, len(inputs))
+		inputs := req.Inputs.([]any)
+		data := make([][]float64, len(inputs))
 		for i := range inputs {
-			data[i] = map[string]any{
-				"embedding": []float64{float64(i) * 0.1, float64(i) * 0.2, float64(i) * 0.3},
-			}
+			data[i] = []float64{float64(i) * 0.1, float64(i) * 0.2, float64(i) * 0.3}
 		}
 
-		resp := map[string]any{
-			"data":  data,
-			"usage": map[string]any{"total_tokens": 20},
-		}
-		json.NewEncoder(w).Encode(resp)
+		json.NewEncoder(w).Encode(data)
 	}))
 	defer server.Close()
 
-	embedder := NewVoyageEmbedder("test-key", "voyage-3-lite", 128)
+	embedder := NewHuggingFaceEmbedder("test-model", 128)
 	embedder.baseURL = server.URL
 
 	vecs, err := embedder.EmbedBatch(context.Background(), []string{"hello", "world"})
@@ -82,8 +67,8 @@ func TestVoyageEmbedder_EmbedBatch(t *testing.T) {
 	}
 }
 
-func TestVoyageEmbedder_EmptyInput(t *testing.T) {
-	embedder := NewVoyageEmbedder("test-key", "voyage-3-lite", 128)
+func TestHuggingFaceEmbedder_EmptyInput(t *testing.T) {
+	embedder := NewHuggingFaceEmbedder("test-model", 128)
 
 	_, err := embedder.Embed(context.Background(), "")
 	if err == nil {

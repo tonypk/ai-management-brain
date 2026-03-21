@@ -35,10 +35,9 @@ type Config struct {
 	SignalPhone  string // registered phone number, e.g. "+639123456789"
 	SignalAPIURL string // signal-cli-rest-api URL, e.g. "http://signal-cli:8080"
 
-	// Voyage AI
-	VoyageAPIKey    string
-	VoyageModel     string
-	VoyageBatchSize int
+	// Embedding (free HuggingFace Inference API)
+	EmbeddingModel string
+	EmbeddingBatch int
 
 	// Memory Engine
 	MemoryMaxRecall              int
@@ -131,10 +130,9 @@ func Load() (*Config, error) {
 	cfg.SignalPhone = os.Getenv("SIGNAL_PHONE")
 	cfg.SignalAPIURL = getEnv("SIGNAL_API_URL", "http://signal-cli:8080")
 
-	// Voyage AI (optional — memory features disabled without it)
-	cfg.VoyageAPIKey = os.Getenv("VOYAGE_API_KEY")
-	cfg.VoyageModel = getEnv("VOYAGE_MODEL", "voyage-3-lite")
-	cfg.VoyageBatchSize = getEnvInt("VOYAGE_BATCH_SIZE", 128)
+	// Embedding model (free HuggingFace Inference API)
+	cfg.EmbeddingModel = getEnv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+	cfg.EmbeddingBatch = getEnvInt("EMBEDDING_BATCH_SIZE", 32)
 
 	// Memory Engine defaults
 	cfg.MemoryMaxRecall = getEnvInt("MEMORY_MAX_RECALL", 5)

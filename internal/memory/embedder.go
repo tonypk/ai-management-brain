@@ -16,40 +16,33 @@ type Embedder interface {
 	EmbedBatch(ctx context.Context, texts []string) ([][]float32, error)
 }
 
-// VoyageEmbedder calls the Voyage AI embeddings API.
-type VoyageEmbedder struct {
-	apiKey    string
+// HuggingFaceEmbedder calls the free HuggingFace Inference API for sentence embeddings.
+// Default model: sentence-transformers/all-MiniLM-L6-v2 (384 dimensions).
+type HuggingFaceEmbedder struct {
 	model     string
 	batchSize int
 	baseURL   string
 	client    *http.Client
 }
 
-func NewVoyageEmbedder(apiKey, model string, batchSize int) *VoyageEmbedder {
-	return &VoyageEmbedder{
-		apiKey:    apiKey,
+func NewHuggingFaceEmbedder(model string, batchSize int) *HuggingFaceEmbedder {
+	if model == "" {
+		model = "sentence-transformers/all-MiniLM-L6-v2"
+	}
+	return &HuggingFaceEmbedder{
 		model:     model,
 		batchSize: batchSize,
-		baseURL:   "https://api.voyageai.com",
-		client:    &http.Client{Timeout: 30 * time.Second},
+		baseURL:   "https://api-inference.huggingface.co",
+		client:    &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
-type voyageRequest struct {
-	Input []string `json:"input"`
-	Model string   `json:"model"`
+type hfRequest struct {
+	Inputs  any            `json:"inputs"`
+	Options map[string]any `json:"options,omitempty"`
 }
 
-type voyageResponse struct {
-	Data []struct {
-		Embedding []float64 `json:"embedding"`
-	} `json:"data"`
-	Usage struct {
-		TotalTokens int `json:"total_tokens"`
-	} `json:"usage"`
-}
-
-func (e *VoyageEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+func (e *HuggingFaceEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	if text == "" {
 		return nil, fmt.Errorf("empty input text")
 	}
@@ -61,7 +54,7 @@ func (e *VoyageEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 	return vecs[0], nil
 }
 
-func (e *VoyageEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+func (e *HuggingFaceEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return nil, fmt.Errorf("empty input texts")
 	}
@@ -85,10 +78,10 @@ func (e *VoyageEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]fl
 	return allResults, nil
 }
 
-func (e *VoyageEmbedder) callAPI(ctx context.Context, texts []string) ([][]float32, error) {
-	reqBody := voyageRequest{
-		Input: texts,
-		Model: e.model,
+func (e *HuggingFaceEmbedder) callAPI(ctx context.Context, texts []string) ([][]float32, error) {
+	reqBody := hfRequest{
+		Inputs:  texts,
+		Options: map[string]any{"wait_for_model": true},
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -96,12 +89,12 @@ func (e *VoyageEmbedder) callAPI(ctx context.Context, texts []string) ([][]float
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", e.baseURL+"/v1/embeddings", bytes.NewReader(body))
+	url := fmt.Sprintf("%s/pipeline/feature-extraction/%s", e.baseURL, e.model)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+e.apiKey)
 
 	resp, err := e.client.Do(req)
 	if err != nil {
@@ -115,18 +108,19 @@ func (e *VoyageEmbedder) callAPI(ctx context.Context, texts []string) ([][]float
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("voyage API error %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("huggingface API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	var voyageResp voyageResponse
-	if err := json.Unmarshal(respBody, &voyageResp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
+	// HuggingFace returns [][]float64 for sentence-transformers models
+	var embeddings [][]float64
+	if err := json.Unmarshal(respBody, &embeddings); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w (body: %s)", err, string(respBody))
 	}
 
-	results := make([][]float32, len(voyageResp.Data))
-	for i, d := range voyageResp.Data {
-		vec := make([]float32, len(d.Embedding))
-		for j, v := range d.Embedding {
+	results := make([][]float32, len(embeddings))
+	for i, emb := range embeddings {
+		vec := make([]float32, len(emb))
+		for j, v := range emb {
 			vec[j] = float32(v)
 		}
 		results[i] = vec

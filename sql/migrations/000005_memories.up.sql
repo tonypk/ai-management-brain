@@ -10,7 +10,7 @@ CREATE TABLE memories (
     source_id    UUID,
     content      TEXT NOT NULL,
     summary      TEXT,
-    embedding    vector(1024),
+    embedding    vector(384),
     importance   FLOAT DEFAULT 0.5,
     access_count INT DEFAULT 0,
     metadata     JSONB DEFAULT '{}',

@@ -283,7 +283,7 @@ CREATE TABLE IF NOT EXISTS memories (
     source_id    UUID,
     content      TEXT NOT NULL,
     summary      TEXT,
-    embedding    vector(1024),
+    embedding    vector(384),
     importance   FLOAT DEFAULT 0.5,
     access_count INT DEFAULT 0,
     metadata     JSONB DEFAULT '{}',
@@ -297,7 +297,13 @@ CREATE INDEX IF NOT EXISTS idx_memories_employee ON memories(employee_id) WHERE 
 CREATE INDEX IF NOT EXISTS idx_memories_expires ON memories(expires_at) WHERE expires_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_memories_merged ON memories(merged_into) WHERE merged_into IS NOT NULL;
 `
-	_, err := pool.Exec(ctx, migration005)
+	if _, err := pool.Exec(ctx, migration005); err != nil {
+		return err
+	}
+
+	// Migration 000006: Change vector dimension from 1024 to 384 (HuggingFace all-MiniLM-L6-v2)
+	migration006 := `ALTER TABLE memories ALTER COLUMN embedding TYPE vector(384);`
+	_, err := pool.Exec(ctx, migration006)
 	return err
 }
 
@@ -402,17 +408,17 @@ func main() {
 	botDB := bot.NewDBAdapter(queries)
 	reportDB := report.NewDBAdapter(queries)
 
-	// Initialize memory engine (conditional on VOYAGE_API_KEY + ANTHROPIC_API_KEY)
+	// Initialize memory engine (requires ANTHROPIC_API_KEY; uses free HuggingFace embeddings)
 	var memEngine *memory.MemoryEngine
 	var memStore *memory.MemoryStore
-	if cfg.VoyageAPIKey != "" && cfg.AnthropicKey != "" {
+	if cfg.AnthropicKey != "" {
 		memLLM, err := brain.NewAnthropicClient(cfg.AnthropicKey)
 		if err != nil {
 			slog.Error("failed to create memory LLM client", "error", err)
 			os.Exit(1)
 		}
 
-		embedder := memory.NewVoyageEmbedder(cfg.VoyageAPIKey, cfg.VoyageModel, cfg.VoyageBatchSize)
+		embedder := memory.NewHuggingFaceEmbedder(cfg.EmbeddingModel, cfg.EmbeddingBatch)
 		memStore = memory.NewMemoryStore(queries, pool)
 		extractor := memory.NewExtractor(memLLM, embedder)
 		retriever := memory.NewRetriever(memStore, embedder, cfg.MemoryMaxRecall, cfg.MemoryMaxTokens)
@@ -423,13 +429,9 @@ func main() {
 		// Inject memory engine into brain engine factory
 		engineFactory.SetMemoryEngine(memEngine)
 
-		slog.Info("memory engine enabled", "voyage_model", cfg.VoyageModel)
+		slog.Info("memory engine enabled", "embedding_model", cfg.EmbeddingModel)
 	} else {
-		if cfg.VoyageAPIKey == "" {
-			slog.Info("memory engine disabled (no VOYAGE_API_KEY)")
-		} else {
-			slog.Info("memory engine disabled (no ANTHROPIC_API_KEY)")
-		}
+		slog.Info("memory engine disabled (no ANTHROPIC_API_KEY)")
 	}
 
 	// Create report collector with default questions (overridden per-remind)
