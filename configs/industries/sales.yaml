@@ -1,0 +1,78 @@
+id: sales
+name: 销售/贸易
+name_en: Sales / Trading
+version: 1
+
+keywords:
+  - sales
+  - trading
+  - commerce
+  - retail
+  - wholesale
+  - 销售
+  - 贸易
+  - 商贸
+  - 零售
+  - 批发
+  - 外贸
+  - 电商
+  - ecommerce
+
+kpi_reference:
+  - name: "成交额 (Revenue)"
+    frequency: daily
+    description: "每日/每月成交总额"
+  - name: "转化率 (Conversion Rate)"
+    frequency: weekly
+    description: "从商机到成交的转化比例"
+  - name: "Pipeline 价值"
+    frequency: weekly
+    description: "在跟进商机的总金额"
+  - name: "客均价 (Average Deal Size)"
+    frequency: monthly
+    description: "平均每单成交金额"
+  - name: "回款率"
+    frequency: monthly
+    description: "应收账款回收比例"
+  - name: "新客户获取数"
+    frequency: weekly
+    description: "每周新增客户数量"
+
+role_reference:
+  - title: "销售经理"
+    type: human
+  - title: "客户经理"
+    type: human
+  - title: "市场专员"
+    type: human_or_ai
+  - title: "售后主管"
+    type: human
+  - title: "商务助理"
+    type: human_or_ai
+
+question_reference:
+  - "今天拜访/联系了多少客户？"
+  - "Pipeline 有什么变化？新增或丢失的商机？"
+  - "有没有即将成交的大单？"
+  - "客户反馈或投诉有哪些？"
+  - "竞争对手有什么新动向？"
+
+alert_reference:
+  - condition: "Pipeline 总值连续 2 周下降"
+    action: "通知销售经理加大获客力度"
+  - condition: "月成交率低于目标 70%"
+    action: "分析丢单原因 + 辅导方案"
+  - condition: "大客户 30 天无联系"
+    action: "提醒客户经理主动跟进"
+  - condition: "回款逾期超过 60 天"
+    action: "通知财务 + 升级催收"
+  - condition: "客户投诉未处理超过 48 小时"
+    action: "升级至售后主管"
+
+common_pain_points:
+  - "获客成本越来越高"
+  - "销售流程长，成交周期慢"
+  - "回款困难，现金流压力"
+  - "销售人员流动性大"
+  - "客户关系管理不系统"
+  - "竞争加剧，利润下降"

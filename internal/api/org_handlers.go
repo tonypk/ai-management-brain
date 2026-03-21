@@ -153,8 +153,11 @@ func handleWizardAnswer(queries *sqlc.Queries, wizard *brain.OrgWizard) gin.Hand
 			return
 		}
 
+		// Try to match industry from conversation context
+		industry := matchIndustryFromHistory(history, req.Answer)
+
 		// Process the answer
-		resp, err := wizard.ProcessAnswer(c.Request.Context(), mentor, history, req.Answer)
+		resp, err := wizard.ProcessAnswer(c.Request.Context(), mentor, history, req.Answer, industry)
 		if err != nil {
 			slog.Error("wizard process answer", "error", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process answer"})
@@ -340,6 +343,24 @@ func handleUpdatePlan(queries *sqlc.Queries, engine *brain.OrgEngine) gin.Handle
 			},
 		})
 	}
+}
+
+// matchIndustryFromHistory scans wizard conversation history and the current answer
+// for industry keywords and returns the matching template (or nil).
+func matchIndustryFromHistory(history []brain.WizardMessage, currentAnswer string) *brain.IndustryTemplate {
+	// Check current answer first (most recent context)
+	if tmpl := brain.MatchIndustry(currentAnswer); tmpl != nil {
+		return tmpl
+	}
+	// Scan previous user messages
+	for _, msg := range history {
+		if msg.Role == "user" {
+			if tmpl := brain.MatchIndustry(msg.Content); tmpl != nil {
+				return tmpl
+			}
+		}
+	}
+	return nil
 }
 
 // handleActivatePlan changes the plan status from draft to active

@@ -1,0 +1,76 @@
+id: manufacturing
+name: 制造业
+name_en: Manufacturing
+version: 1
+
+keywords:
+  - manufacturing
+  - factory
+  - production
+  - 制造
+  - 工厂
+  - 生产
+  - 加工
+  - 组装
+  - assembly
+  - 车间
+  - workshop
+
+kpi_reference:
+  - name: "产量 (Output)"
+    frequency: daily
+    description: "日产量/月产量，对比计划完成率"
+  - name: "良品率 (Yield Rate)"
+    frequency: daily
+    description: "合格品占总产量的比率，目标 >98%"
+  - name: "设备稼动率 (OEE)"
+    frequency: weekly
+    description: "设备综合效率，反映设备利用程度"
+  - name: "安全事故率"
+    frequency: monthly
+    description: "每百万工时的安全事故数"
+  - name: "库存周转率"
+    frequency: monthly
+    description: "库存流转速度，越高越好"
+  - name: "交货准时率"
+    frequency: weekly
+    description: "按时交货的订单比例"
+
+role_reference:
+  - title: "生产主管"
+    type: human
+  - title: "质量经理"
+    type: human
+  - title: "设备工程师"
+    type: human
+  - title: "仓储管理"
+    type: human_or_ai
+  - title: "安全专员"
+    type: human
+
+question_reference:
+  - "今日产量达标了吗？有什么异常？"
+  - "有没有质量问题或客户投诉？"
+  - "设备运行状态如何？有停机吗？"
+  - "原材料库存够用几天？"
+  - "安全方面有什么需要注意的？"
+
+alert_reference:
+  - condition: "良品率低于 95%"
+    action: "立即通知质量经理排查"
+  - condition: "发生安全事故"
+    action: "停产检查 + 通知管理层"
+  - condition: "设备非计划停机超过 2 小时"
+    action: "通知设备工程师 + 评估影响"
+  - condition: "原材料库存低于安全库存"
+    action: "通知采购 + 调整生产计划"
+  - condition: "交货延迟风险"
+    action: "通知客户 + 加班方案评估"
+
+common_pain_points:
+  - "用工成本持续上涨"
+  - "质量控制不稳定"
+  - "设备老化维护成本高"
+  - "环保合规压力"
+  - "供应链不稳定"
+  - "数字化转型困难"

@@ -257,7 +257,7 @@ func TestManagementPlan_JSON_RoundTrip(t *testing.T) {
 
 func TestOrgEngine_GeneratePlan_NilMentor(t *testing.T) {
 	engine := NewOrgEngine(nil)
-	_, err := engine.GeneratePlan(context.Background(), nil, CompanyProfile{})
+	_, err := engine.GeneratePlan(context.Background(), nil, CompanyProfile{}, nil)
 	if err == nil {
 		t.Fatal("expected error for nil mentor")
 	}

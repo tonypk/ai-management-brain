@@ -1,0 +1,77 @@
+id: saas
+name: 科技/SaaS
+name_en: Technology / SaaS
+version: 1
+
+keywords:
+  - saas
+  - software
+  - technology
+  - tech
+  - internet
+  - app
+  - platform
+  - startup
+  - 软件
+  - 科技
+  - 互联网
+  - 创业
+  - IT
+  - 技术
+  - 开发
+
+kpi_reference:
+  - name: "MRR (Monthly Recurring Revenue)"
+    frequency: monthly
+    description: "月度经常性收入，SaaS 核心指标"
+  - name: "Churn Rate"
+    frequency: monthly
+    description: "客户流失率，低于 5% 为健康"
+  - name: "Sprint Velocity"
+    frequency: weekly
+    description: "每个迭代完成的故事点/任务数"
+  - name: "Bug Resolution Time"
+    frequency: weekly
+    description: "Bug 从提交到修复的平均时间"
+  - name: "NPS (Net Promoter Score)"
+    frequency: quarterly
+    description: "净推荐值，衡量客户满意度"
+  - name: "CAC (Customer Acquisition Cost)"
+    frequency: monthly
+    description: "获客成本"
+
+role_reference:
+  - title: "Product Manager"
+    type: human
+  - title: "Tech Lead"
+    type: human
+  - title: "DevOps Engineer"
+    type: human_or_ai
+  - title: "UI/UX Designer"
+    type: human
+  - title: "Customer Success Manager"
+    type: human_or_ai
+
+question_reference:
+  - "今天 deploy/发布了什么？有什么阻塞？"
+  - "代码 review 进度如何？有积压吗？"
+  - "客户反馈有什么值得关注的？"
+  - "Sprint 目标完成进度怎样？"
+
+alert_reference:
+  - condition: "客户流失率连续 2 周上升"
+    action: "通知 CEO + AI COO 分析原因"
+  - condition: "代码 review 积压超过 3 天"
+    action: "提醒 Tech Lead 安排 review"
+  - condition: "Sprint velocity 连续 2 个迭代下降"
+    action: "建议开 retrospective"
+  - condition: "线上 bug 数量突增"
+    action: "启动紧急排查"
+
+common_pain_points:
+  - "招聘技术人才困难"
+  - "产品迭代速度不够快"
+  - "客户留存率低"
+  - "技术债务积累严重"
+  - "产品和市场匹配度不确定"
+  - "远程团队协作效率"

@@ -82,13 +82,15 @@ func (w *OrgWizard) Start(ctx context.Context, mentor *MentorConfig) (*WizardRes
 }
 
 // ProcessAnswer processes a user's answer and returns the next question or the final plan.
-func (w *OrgWizard) ProcessAnswer(ctx context.Context, mentor *MentorConfig, history []WizardMessage, answer string) (*WizardResponse, error) {
+// industry is optional — when non-nil, pain points are injected into the wizard prompt and
+// industry context is passed through to plan generation.
+func (w *OrgWizard) ProcessAnswer(ctx context.Context, mentor *MentorConfig, history []WizardMessage, answer string, industry *IndustryTemplate) (*WizardResponse, error) {
 	if mentor == nil {
 		return nil, fmt.Errorf("mentor config is required")
 	}
 
 	// Build conversation messages for Claude
-	systemPrompt := buildWizardSystemPrompt(mentor)
+	systemPrompt := buildWizardSystemPrompt(mentor) + BuildPainPointsContext(industry)
 
 	var sb strings.Builder
 	for _, msg := range history {
@@ -117,7 +119,12 @@ func (w *OrgWizard) ProcessAnswer(ctx context.Context, mentor *MentorConfig, his
 
 	// If the mentor has enough info, generate the plan
 	if parsed.Status == "ready" && parsed.Profile != nil {
-		plan, err := w.orgEngine.GeneratePlan(ctx, mentor, *parsed.Profile)
+		// Re-match industry from profile in case it wasn't matched earlier
+		ind := industry
+		if ind == nil && parsed.Profile.Industry != "" {
+			ind = MatchIndustry(parsed.Profile.Industry)
+		}
+		plan, err := w.orgEngine.GeneratePlan(ctx, mentor, *parsed.Profile, ind)
 		if err != nil {
 			return nil, fmt.Errorf("generate plan: %w", err)
 		}

@@ -131,7 +131,7 @@ func TestOrgWizard_Start_NilMentor(t *testing.T) {
 
 func TestOrgWizard_ProcessAnswer_NilMentor(t *testing.T) {
 	wizard := NewOrgWizard(nil)
-	_, err := wizard.ProcessAnswer(nil, nil, nil, "answer")
+	_, err := wizard.ProcessAnswer(nil, nil, nil, "answer", nil)
 	if err == nil {
 		t.Fatal("expected error for nil mentor")
 	}

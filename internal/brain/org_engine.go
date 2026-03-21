@@ -89,12 +89,13 @@ func NewOrgEngine(llm *AnthropicClient) *OrgEngine {
 }
 
 // GeneratePlan creates a complete management plan based on mentor philosophy and company profile.
-func (e *OrgEngine) GeneratePlan(ctx context.Context, mentor *MentorConfig, profile CompanyProfile) (*ManagementPlan, error) {
+// industry is optional — when non-nil, industry-specific context is injected into the LLM prompt.
+func (e *OrgEngine) GeneratePlan(ctx context.Context, mentor *MentorConfig, profile CompanyProfile, industry *IndustryTemplate) (*ManagementPlan, error) {
 	if mentor == nil {
 		return nil, fmt.Errorf("mentor config is required")
 	}
 
-	systemPrompt := buildOrgSystemPrompt(mentor)
+	systemPrompt := buildOrgSystemPrompt(mentor) + BuildIndustryContext(industry)
 	userPrompt := buildOrgUserPrompt(profile)
 
 	resp, err := e.llm.ChatLong(ctx, systemPrompt, userPrompt)

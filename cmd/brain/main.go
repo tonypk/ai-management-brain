@@ -332,6 +332,11 @@ func main() {
 
 	redisClient := &redisWrapper{client: rdb}
 
+	// Load industry templates
+	if err := brain.LoadIndustries(); err != nil {
+		slog.Warn("failed to load industry templates", "error", err)
+	}
+
 	// Create engine factory (dynamic mentor+culture per tenant)
 	engineFactory := brain.NewEngineFactory()
 
