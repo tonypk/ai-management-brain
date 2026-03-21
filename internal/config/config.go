@@ -34,6 +34,18 @@ type Config struct {
 	// Signal (optional)
 	SignalPhone  string // registered phone number, e.g. "+639123456789"
 	SignalAPIURL string // signal-cli-rest-api URL, e.g. "http://signal-cli:8080"
+
+	// Voyage AI
+	VoyageAPIKey    string
+	VoyageModel     string
+	VoyageBatchSize int
+
+	// Memory Engine
+	MemoryMaxRecall              int
+	MemoryMaxTokens              int
+	MemoryShortTermDays          int
+	MemoryConsolidationThreshold float64
+	MemoryMaxPerTenant           int
 }
 
 func Load() (*Config, error) {
@@ -119,6 +131,18 @@ func Load() (*Config, error) {
 	cfg.SignalPhone = os.Getenv("SIGNAL_PHONE")
 	cfg.SignalAPIURL = getEnv("SIGNAL_API_URL", "http://signal-cli:8080")
 
+	// Voyage AI (optional — memory features disabled without it)
+	cfg.VoyageAPIKey = os.Getenv("VOYAGE_API_KEY")
+	cfg.VoyageModel = getEnv("VOYAGE_MODEL", "voyage-3-lite")
+	cfg.VoyageBatchSize = getEnvInt("VOYAGE_BATCH_SIZE", 128)
+
+	// Memory Engine defaults
+	cfg.MemoryMaxRecall = getEnvInt("MEMORY_MAX_RECALL", 5)
+	cfg.MemoryMaxTokens = getEnvInt("MEMORY_MAX_TOKENS", 800)
+	cfg.MemoryShortTermDays = getEnvInt("MEMORY_SHORT_TERM_DAYS", 30)
+	cfg.MemoryConsolidationThreshold = getEnvFloat("MEMORY_CONSOLIDATION_THRESHOLD", 0.85)
+	cfg.MemoryMaxPerTenant = getEnvInt("MEMORY_MAX_PER_TENANT", 20000)
+
 	return cfg, nil
 }
 
@@ -127,4 +151,28 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return fallback
+	}
+	return f
 }
