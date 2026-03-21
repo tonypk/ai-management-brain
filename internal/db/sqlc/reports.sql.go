@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countReportsByEmployeeDate = `-- name: CountReportsByEmployeeDate :one
+SELECT count(*) FROM reports WHERE employee_id = $1 AND report_date = $2
+`
+
+type CountReportsByEmployeeDateParams struct {
+	EmployeeID pgtype.UUID `json:"employee_id"`
+	ReportDate pgtype.Date `json:"report_date"`
+}
+
+func (q *Queries) CountReportsByEmployeeDate(ctx context.Context, arg CountReportsByEmployeeDateParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countReportsByEmployeeDate, arg.EmployeeID, arg.ReportDate)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countReportsByTenantDate = `-- name: CountReportsByTenantDate :one
 SELECT COUNT(*) FROM reports WHERE tenant_id = $1 AND report_date = $2
 `
@@ -65,20 +81,73 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (Rep
 	return i, err
 }
 
-const updateReportAnalysis = `-- name: UpdateReportAnalysis :exec
-UPDATE reports SET blockers = $2, sentiment = $3
-WHERE id = $1
+const getConsecutiveMissDays = `-- name: GetConsecutiveMissDays :one
+SELECT COUNT(*) as missed_days FROM generate_series(
+    CURRENT_DATE - INTERVAL '7 days', CURRENT_DATE - INTERVAL '1 day', '1 day'
+) d(day)
+WHERE d.day::date NOT IN (
+    SELECT r.report_date FROM reports r WHERE r.employee_id = $1 AND r.report_date >= CURRENT_DATE - INTERVAL '7 days'
+)
+AND d.day::date >= (
+    COALESCE(
+        (SELECT MAX(r2.report_date) FROM reports r2 WHERE r2.employee_id = $1 AND r2.report_date >= CURRENT_DATE - INTERVAL '7 days'),
+        CURRENT_DATE - INTERVAL '7 days'
+    )
+)
 `
 
-type UpdateReportAnalysisParams struct {
-	ID        pgtype.UUID `json:"id"`
-	Blockers  pgtype.Text `json:"blockers"`
-	Sentiment pgtype.Text `json:"sentiment"`
+func (q *Queries) GetConsecutiveMissDays(ctx context.Context, employeeID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getConsecutiveMissDays, employeeID)
+	var missed_days int64
+	err := row.Scan(&missed_days)
+	return missed_days, err
 }
 
-func (q *Queries) UpdateReportAnalysis(ctx context.Context, arg UpdateReportAnalysisParams) error {
-	_, err := q.db.Exec(ctx, updateReportAnalysis, arg.ID, arg.Blockers, arg.Sentiment)
-	return err
+const getEmployeeReportStreak = `-- name: GetEmployeeReportStreak :one
+SELECT COUNT(*) as missed_days FROM generate_series(
+    CURRENT_DATE - INTERVAL '7 days', CURRENT_DATE - INTERVAL '1 day', '1 day'
+) d(day)
+WHERE NOT EXISTS (
+    SELECT 1 FROM reports WHERE employee_id = $1 AND report_date = d.day::date
+)
+`
+
+func (q *Queries) GetEmployeeReportStreak(ctx context.Context, employeeID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getEmployeeReportStreak, employeeID)
+	var missed_days int64
+	err := row.Scan(&missed_days)
+	return missed_days, err
+}
+
+const getEmployeeSubmissionHistory = `-- name: GetEmployeeSubmissionHistory :many
+SELECT report_date, sentiment FROM reports
+WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '30 days'
+ORDER BY report_date DESC
+`
+
+type GetEmployeeSubmissionHistoryRow struct {
+	ReportDate pgtype.Date `json:"report_date"`
+	Sentiment  pgtype.Text `json:"sentiment"`
+}
+
+func (q *Queries) GetEmployeeSubmissionHistory(ctx context.Context, employeeID pgtype.UUID) ([]GetEmployeeSubmissionHistoryRow, error) {
+	rows, err := q.db.Query(ctx, getEmployeeSubmissionHistory, employeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetEmployeeSubmissionHistoryRow{}
+	for rows.Next() {
+		var i GetEmployeeSubmissionHistoryRow
+		if err := rows.Scan(&i.ReportDate, &i.Sentiment); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getLatestReportByEmployee = `-- name: GetLatestReportByEmployee :one
@@ -108,59 +177,6 @@ func (q *Queries) GetLatestReportByEmployee(ctx context.Context, arg GetLatestRe
 	return i, err
 }
 
-const getEmployeeSubmissionHistory = `-- name: GetEmployeeSubmissionHistory :many
-SELECT report_date, sentiment FROM reports
-WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '30 days'
-ORDER BY report_date DESC
-`
-
-type GetEmployeeSubmissionHistoryRow struct {
-	ReportDate pgtype.Date `json:"report_date"`
-	Sentiment  pgtype.Text `json:"sentiment"`
-}
-
-func (q *Queries) GetEmployeeSubmissionHistory(ctx context.Context, employeeID pgtype.UUID) ([]GetEmployeeSubmissionHistoryRow, error) {
-	rows, err := q.db.Query(ctx, getEmployeeSubmissionHistory, employeeID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetEmployeeSubmissionHistoryRow
-	for rows.Next() {
-		var i GetEmployeeSubmissionHistoryRow
-		if err := rows.Scan(&i.ReportDate, &i.Sentiment); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getConsecutiveMissDays = `-- name: GetConsecutiveMissDays :one
-SELECT COUNT(*) as missed_days FROM generate_series(
-    CURRENT_DATE - INTERVAL '7 days', CURRENT_DATE - INTERVAL '1 day', '1 day'
-) d(day)
-WHERE d.day::date NOT IN (
-    SELECT report_date FROM reports WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '7 days'
-)
-AND d.day::date >= (
-    COALESCE(
-        (SELECT MAX(report_date) FROM reports WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '7 days'),
-        CURRENT_DATE - INTERVAL '7 days'
-    )
-)
-`
-
-func (q *Queries) GetConsecutiveMissDays(ctx context.Context, employeeID pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, getConsecutiveMissDays, employeeID)
-	var missedDays int64
-	err := row.Scan(&missedDays)
-	return missedDays, err
-}
-
 const getRecentSentiments = `-- name: GetRecentSentiments :many
 SELECT sentiment FROM reports
 WHERE employee_id = $1 AND sentiment IS NOT NULL
@@ -169,13 +185,18 @@ ORDER BY report_date DESC
 LIMIT $2
 `
 
-func (q *Queries) GetRecentSentiments(ctx context.Context, employeeID pgtype.UUID, limit int32) ([]pgtype.Text, error) {
-	rows, err := q.db.Query(ctx, getRecentSentiments, employeeID, limit)
+type GetRecentSentimentsParams struct {
+	EmployeeID pgtype.UUID `json:"employee_id"`
+	Limit      int32       `json:"limit"`
+}
+
+func (q *Queries) GetRecentSentiments(ctx context.Context, arg GetRecentSentimentsParams) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, getRecentSentiments, arg.EmployeeID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []pgtype.Text
+	items := []pgtype.Text{}
 	for rows.Next() {
 		var sentiment pgtype.Text
 		if err := rows.Scan(&sentiment); err != nil {
@@ -187,34 +208,6 @@ func (q *Queries) GetRecentSentiments(ctx context.Context, employeeID pgtype.UUI
 		return nil, err
 	}
 	return items, nil
-}
-
-const getEmployeeReportStreak = `-- name: GetEmployeeReportStreak :one
-SELECT COUNT(*) as missed_days FROM generate_series(
-    CURRENT_DATE - INTERVAL '7 days', CURRENT_DATE - INTERVAL '1 day', '1 day'
-) d(day)
-WHERE NOT EXISTS (
-    SELECT 1 FROM reports WHERE employee_id = $1 AND report_date = d.day::date
-)
-`
-
-func (q *Queries) GetEmployeeReportStreak(ctx context.Context, employeeID pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, getEmployeeReportStreak, employeeID)
-	var missed_days int64
-	err := row.Scan(&missed_days)
-	return missed_days, err
-}
-
-const getSubmittedDaysLast7 = `-- name: GetSubmittedDaysLast7 :one
-SELECT COUNT(DISTINCT report_date) FROM reports
-WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '7 days'
-`
-
-func (q *Queries) GetSubmittedDaysLast7(ctx context.Context, employeeID pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, getSubmittedDaysLast7, employeeID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
 }
 
 const getReportsByTenantDate = `-- name: GetReportsByTenantDate :many
@@ -269,4 +262,32 @@ func (q *Queries) GetReportsByTenantDate(ctx context.Context, arg GetReportsByTe
 		return nil, err
 	}
 	return items, nil
+}
+
+const getSubmittedDaysLast7 = `-- name: GetSubmittedDaysLast7 :one
+SELECT COUNT(DISTINCT report_date) FROM reports
+WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '7 days'
+`
+
+func (q *Queries) GetSubmittedDaysLast7(ctx context.Context, employeeID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getSubmittedDaysLast7, employeeID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const updateReportAnalysis = `-- name: UpdateReportAnalysis :exec
+UPDATE reports SET blockers = $2, sentiment = $3
+WHERE id = $1
+`
+
+type UpdateReportAnalysisParams struct {
+	ID        pgtype.UUID `json:"id"`
+	Blockers  pgtype.Text `json:"blockers"`
+	Sentiment pgtype.Text `json:"sentiment"`
+}
+
+func (q *Queries) UpdateReportAnalysis(ctx context.Context, arg UpdateReportAnalysisParams) error {
+	_, err := q.db.Exec(ctx, updateReportAnalysis, arg.ID, arg.Blockers, arg.Sentiment)
+	return err
 }

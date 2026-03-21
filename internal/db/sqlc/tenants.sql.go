@@ -14,7 +14,7 @@ import (
 const createTenant = `-- name: CreateTenant :one
 INSERT INTO tenants (name, timezone, anthropic_key, mentor_id, bot_token, boss_chat_id, config)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at
+RETURNING id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at, plan
 `
 
 type CreateTenantParams struct {
@@ -49,12 +49,13 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 		&i.BossChatID,
 		&i.Config,
 		&i.CreatedAt,
+		&i.Plan,
 	)
 	return i, err
 }
 
 const getTenant = `-- name: GetTenant :one
-SELECT id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at FROM tenants WHERE id = $1
+SELECT id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at, plan FROM tenants WHERE id = $1
 `
 
 func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (Tenant, error) {
@@ -71,12 +72,13 @@ func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (Tenant, error)
 		&i.BossChatID,
 		&i.Config,
 		&i.CreatedAt,
+		&i.Plan,
 	)
 	return i, err
 }
 
 const getTenantByBossChatID = `-- name: GetTenantByBossChatID :one
-SELECT id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at FROM tenants WHERE boss_chat_id = $1
+SELECT id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at, plan FROM tenants WHERE boss_chat_id = $1
 `
 
 func (q *Queries) GetTenantByBossChatID(ctx context.Context, bossChatID int64) (Tenant, error) {
@@ -93,6 +95,7 @@ func (q *Queries) GetTenantByBossChatID(ctx context.Context, bossChatID int64) (
 		&i.BossChatID,
 		&i.Config,
 		&i.CreatedAt,
+		&i.Plan,
 	)
 	return i, err
 }

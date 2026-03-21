@@ -49,6 +49,47 @@ func (q *Queries) CreateChaseLog(ctx context.Context, arg CreateChaseLogParams) 
 	return i, err
 }
 
+const getChaseLogsForDate = `-- name: GetChaseLogsForDate :many
+SELECT id, tenant_id, employee_id, report_date, step, action, message, chased_at
+FROM chase_logs
+WHERE employee_id = $1 AND report_date = $2
+ORDER BY step
+`
+
+type GetChaseLogsForDateParams struct {
+	EmployeeID pgtype.UUID `json:"employee_id"`
+	ReportDate pgtype.Date `json:"report_date"`
+}
+
+func (q *Queries) GetChaseLogsForDate(ctx context.Context, arg GetChaseLogsForDateParams) ([]ChaseLog, error) {
+	rows, err := q.db.Query(ctx, getChaseLogsForDate, arg.EmployeeID, arg.ReportDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ChaseLog{}
+	for rows.Next() {
+		var i ChaseLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EmployeeID,
+			&i.ReportDate,
+			&i.Step,
+			&i.Action,
+			&i.Message,
+			&i.ChasedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLastChaseStep = `-- name: GetLastChaseStep :one
 SELECT COALESCE(MAX(step), 0) as last_step FROM chase_logs
 WHERE employee_id = $1 AND report_date = $2

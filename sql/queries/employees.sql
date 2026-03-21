@@ -18,6 +18,9 @@ UPDATE employees SET telegram_id = $2 WHERE id = $1;
 -- name: GetEmployeeByInviteCode :one
 SELECT * FROM employees WHERE invite_code = $1 AND telegram_id IS NULL;
 
+-- name: UpdateEmployeeCulture :exec
+UPDATE employees SET culture_code = $2 WHERE id = $1;
+
 -- name: ListEmployeesWithoutReport :many
 SELECT e.* FROM employees e
 LEFT JOIN reports r ON e.id = r.employee_id AND r.report_date = $2

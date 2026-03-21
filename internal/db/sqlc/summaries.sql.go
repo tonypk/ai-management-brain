@@ -49,17 +49,12 @@ func (q *Queries) CreateSummary(ctx context.Context, arg CreateSummaryParams) (S
 	return i, err
 }
 
-const getSummary = `-- name: GetSummary :one
-SELECT id, tenant_id, summary_date, content, submission_rate, blockers_count, key_metrics, created_at FROM summaries WHERE tenant_id = $1 AND summary_date = $2
+const getLatestSummary = `-- name: GetLatestSummary :one
+SELECT id, tenant_id, summary_date, content, submission_rate, blockers_count, key_metrics, created_at FROM summaries WHERE tenant_id = $1 ORDER BY summary_date DESC LIMIT 1
 `
 
-type GetSummaryParams struct {
-	TenantID    pgtype.UUID `json:"tenant_id"`
-	SummaryDate pgtype.Date `json:"summary_date"`
-}
-
-func (q *Queries) GetSummary(ctx context.Context, arg GetSummaryParams) (Summary, error) {
-	row := q.db.QueryRow(ctx, getSummary, arg.TenantID, arg.SummaryDate)
+func (q *Queries) GetLatestSummary(ctx context.Context, tenantID pgtype.UUID) (Summary, error) {
+	row := q.db.QueryRow(ctx, getLatestSummary, tenantID)
 	var i Summary
 	err := row.Scan(
 		&i.ID,
@@ -74,12 +69,17 @@ func (q *Queries) GetSummary(ctx context.Context, arg GetSummaryParams) (Summary
 	return i, err
 }
 
-const getLatestSummary = `-- name: GetLatestSummary :one
-SELECT id, tenant_id, summary_date, content, submission_rate, blockers_count, key_metrics, created_at FROM summaries WHERE tenant_id = $1 ORDER BY summary_date DESC LIMIT 1
+const getSummary = `-- name: GetSummary :one
+SELECT id, tenant_id, summary_date, content, submission_rate, blockers_count, key_metrics, created_at FROM summaries WHERE tenant_id = $1 AND summary_date = $2
 `
 
-func (q *Queries) GetLatestSummary(ctx context.Context, tenantID pgtype.UUID) (Summary, error) {
-	row := q.db.QueryRow(ctx, getLatestSummary, tenantID)
+type GetSummaryParams struct {
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	SummaryDate pgtype.Date `json:"summary_date"`
+}
+
+func (q *Queries) GetSummary(ctx context.Context, arg GetSummaryParams) (Summary, error) {
+	row := q.db.QueryRow(ctx, getSummary, arg.TenantID, arg.SummaryDate)
 	var i Summary
 	err := row.Scan(
 		&i.ID,

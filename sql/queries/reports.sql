@@ -31,11 +31,11 @@ SELECT COUNT(*) as missed_days FROM generate_series(
     CURRENT_DATE - INTERVAL '7 days', CURRENT_DATE - INTERVAL '1 day', '1 day'
 ) d(day)
 WHERE d.day::date NOT IN (
-    SELECT report_date FROM reports WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '7 days'
+    SELECT r.report_date FROM reports r WHERE r.employee_id = $1 AND r.report_date >= CURRENT_DATE - INTERVAL '7 days'
 )
 AND d.day::date >= (
     COALESCE(
-        (SELECT MAX(report_date) FROM reports WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '7 days'),
+        (SELECT MAX(r2.report_date) FROM reports r2 WHERE r2.employee_id = $1 AND r2.report_date >= CURRENT_DATE - INTERVAL '7 days'),
         CURRENT_DATE - INTERVAL '7 days'
     )
 );
@@ -54,3 +54,10 @@ SELECT COUNT(*) as missed_days FROM generate_series(
 WHERE NOT EXISTS (
     SELECT 1 FROM reports WHERE employee_id = $1 AND report_date = d.day::date
 );
+
+-- name: GetSubmittedDaysLast7 :one
+SELECT COUNT(DISTINCT report_date) FROM reports
+WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '7 days';
+
+-- name: CountReportsByEmployeeDate :one
+SELECT count(*) FROM reports WHERE employee_id = $1 AND report_date = $2;

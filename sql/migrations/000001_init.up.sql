@@ -58,7 +58,19 @@ CREATE TABLE summaries (
     UNIQUE(tenant_id, summary_date)
 );
 
+CREATE TABLE users (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES tenants(id),
+    email         TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'boss',
+    is_active     BOOLEAN NOT NULL DEFAULT true,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Indexes
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_tenant ON users(tenant_id);
 CREATE INDEX idx_employees_tenant ON employees(tenant_id);
 CREATE INDEX idx_employees_telegram ON employees(telegram_id);
 CREATE INDEX idx_reports_tenant_date ON reports(tenant_id, report_date);

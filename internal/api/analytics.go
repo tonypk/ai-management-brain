@@ -111,7 +111,10 @@ func handleEmployeeActivity(queries *sqlc.Queries) gin.HandlerFunc {
 			missed, _ := queries.GetEmployeeReportStreak(c.Request.Context(), emp.ID)
 
 			var lastSentiment string
-			sentiments, _ := queries.GetRecentSentiments(c.Request.Context(), emp.ID, 1)
+			sentiments, _ := queries.GetRecentSentiments(c.Request.Context(), sqlc.GetRecentSentimentsParams{
+				EmployeeID: emp.ID,
+				Limit:      1,
+			})
 			if len(sentiments) > 0 && sentiments[0].Valid {
 				lastSentiment = sentiments[0].String
 			}

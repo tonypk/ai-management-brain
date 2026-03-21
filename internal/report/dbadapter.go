@@ -354,7 +354,10 @@ func (a *DBAdapter) GetRecentSentiments(ctx context.Context, employeeID string, 
 	if err != nil {
 		return nil, err
 	}
-	rows, err := a.q.GetRecentSentiments(ctx, uid, int32(days))
+	rows, err := a.q.GetRecentSentiments(ctx, sqlc.GetRecentSentimentsParams{
+		EmployeeID: uid,
+		Limit:      int32(days),
+	})
 	if err != nil {
 		return nil, err
 	}
