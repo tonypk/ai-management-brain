@@ -9,6 +9,7 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/brain"
 	"github.com/tonypk/ai-management-brain/internal/channel"
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
+	"github.com/tonypk/ai-management-brain/internal/memory"
 	"github.com/tonypk/ai-management-brain/internal/roles"
 )
 
@@ -23,6 +24,8 @@ type RouterConfig struct {
 	OrgEngine   *brain.OrgEngine // nil = org features disabled
 	RoleManager    *roles.Manager          // nil = AI roles disabled
 	SignalAdapter  *channel.SignalAdapter  // nil = Signal disabled
+	MemoryEngine   *memory.MemoryEngine   // nil = memory disabled
+	MemoryStore    *memory.MemoryStore    // nil = memory disabled
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -105,6 +108,21 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			org.GET("/suggestions", handleListSuggestions(cfg.Queries))
 			org.POST("/suggestions/:id/approve", handleApproveSuggestion(cfg.Queries))
 			org.POST("/suggestions/:id/reject", handleRejectSuggestion(cfg.Queries))
+		}
+
+		// Memory routes (optional — requires memory engine)
+		if cfg.MemoryStore != nil {
+			memories := protected.Group("/memories")
+			{
+				memories.GET("", handleListMemories(cfg.MemoryStore))
+				memories.GET("/:id", handleGetMemory(cfg.MemoryStore))
+				memories.POST("/search", handleSearchMemories(cfg.MemoryEngine))
+				memories.DELETE("/:id", RequireRole("boss"), handleDeleteMemory(cfg.MemoryStore))
+				memories.POST("/consolidate", RequireRole("boss"), handleTriggerConsolidation(cfg.MemoryEngine))
+			}
+
+			// Employee profile via memory
+			protected.GET("/employees/:id/profile", handleGetEmployeeProfile(cfg.MemoryStore))
 		}
 	}
 
