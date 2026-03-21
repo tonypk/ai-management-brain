@@ -435,6 +435,7 @@ func main() {
 	// Create chaser, summarizer, trigger checker, action executor, and analyzer
 	// Note: tgAdapter implements MessageSender via SendMessage(chatID, text)
 	chaser := report.NewChaser(reportDB, llmService, tgAdapter, engineFactory)
+	chaser.SetEventBus(eventBus)
 	summarizer := report.NewSummarizer(reportDB, llmService)
 	triggerChecker := report.NewTriggerChecker(reportDB, tgAdapter, engineFactory)
 	actionExecutor := report.NewActionExecutor(reportDB, tgAdapter, llmService, engineFactory)
