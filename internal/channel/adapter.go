@@ -12,6 +12,7 @@ const (
 	TypeTelegram Type = "telegram"
 	TypeSlack    Type = "slack"
 	TypeLark     Type = "lark"
+	TypeSignal   Type = "signal"
 )
 
 // Message represents a platform-agnostic incoming or outgoing message.

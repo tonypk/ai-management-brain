@@ -7,6 +7,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
+	"github.com/tonypk/ai-management-brain/internal/channel"
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
 	"github.com/tonypk/ai-management-brain/internal/roles"
 )
@@ -20,7 +21,8 @@ type RouterConfig struct {
 	Billing     BillingConfig    // Stripe billing config
 	OrgWizard   *brain.OrgWizard // nil = org features disabled
 	OrgEngine   *brain.OrgEngine // nil = org features disabled
-	RoleManager *roles.Manager   // nil = AI roles disabled
+	RoleManager    *roles.Manager          // nil = AI roles disabled
+	SignalAdapter  *channel.SignalAdapter  // nil = Signal disabled
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -123,6 +125,11 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	webhooks := r.Group("/webhooks")
 	{
 		webhooks.POST("/stripe", webhookVerifier.VerifyMiddleware("stripe"), billingHandler.HandleStripeWebhook)
+	}
+
+	// Signal webhook (no auth — called by signal-cli container on internal network)
+	if cfg.SignalAdapter != nil {
+		v1.POST("/signal/webhook", cfg.SignalAdapter.HandleWebhook)
 	}
 
 	return r

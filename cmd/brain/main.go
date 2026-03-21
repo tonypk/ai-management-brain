@@ -384,6 +384,17 @@ func main() {
 	}
 	slog.Info("telegram channel adapter created")
 
+	// Signal channel adapter (optional)
+	var signalAdapter *channel.SignalAdapter
+	if cfg.SignalPhone != "" {
+		signalAdapter = channel.NewSignalAdapter(channel.SignalConfig{
+			APIURL:      cfg.SignalAPIURL,
+			PhoneNumber: cfg.SignalPhone,
+			WebhookURL:  "http://brain:8080/api/v1/signal/webhook",
+		})
+		slog.Info("signal channel adapter created", "phone", cfg.SignalPhone)
+	}
+
 	// Create bot wrapper from the adapter's underlying telebot (for command registration)
 	tgBot := bot.NewBotFromTelebot(tgAdapter.Bot(), cfg.BossTelegramID, botDB)
 
@@ -693,7 +704,8 @@ func main() {
 		},
 		OrgWizard:   orgWizard,
 		OrgEngine:   orgEngine,
-		RoleManager: roleManager,
+		RoleManager:   roleManager,
+		SignalAdapter: signalAdapter,
 	})
 
 	// Health check (public, outside /api/v1)
@@ -735,6 +747,15 @@ func main() {
 		}
 	}()
 
+	// Start Signal adapter (if configured)
+	if signalAdapter != nil {
+		go func() {
+			if err := signalAdapter.Start(ctx); err != nil && err != context.Canceled {
+				slog.Error("signal adapter error", "error", err)
+			}
+		}()
+	}
+
 	// Start scheduler
 	sched.Start(ctx)
 
@@ -755,6 +776,9 @@ func main() {
 	defer shutdownCancel()
 
 	tgBot.Stop()
+	if signalAdapter != nil {
+		signalAdapter.Stop()
+	}
 	if err := sched.Stop(); err != nil {
 		slog.Error("scheduler stop error", "error", err)
 	}

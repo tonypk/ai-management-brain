@@ -30,6 +30,10 @@ type Config struct {
 	StripeWebhookSecret string
 	StripePriceIDPro    string
 	StripePriceIDEnt    string
+
+	// Signal (optional)
+	SignalPhone  string // registered phone number, e.g. "+639123456789"
+	SignalAPIURL string // signal-cli-rest-api URL, e.g. "http://signal-cli:8080"
 }
 
 func Load() (*Config, error) {
@@ -110,6 +114,10 @@ func Load() (*Config, error) {
 	cfg.StripeWebhookSecret = os.Getenv("STRIPE_WEBHOOK_SECRET")
 	cfg.StripePriceIDPro = os.Getenv("STRIPE_PRICE_ID_PRO")
 	cfg.StripePriceIDEnt = os.Getenv("STRIPE_PRICE_ID_ENT")
+
+	// Signal (optional)
+	cfg.SignalPhone = os.Getenv("SIGNAL_PHONE")
+	cfg.SignalAPIURL = getEnv("SIGNAL_API_URL", "http://signal-cli:8080")
 
 	return cfg, nil
 }
