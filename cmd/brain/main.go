@@ -23,6 +23,7 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/config"
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
 	"github.com/tonypk/ai-management-brain/internal/events"
+	"github.com/tonypk/ai-management-brain/internal/memory"
 	"github.com/tonypk/ai-management-brain/internal/report"
 	"github.com/tonypk/ai-management-brain/internal/roles"
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
@@ -401,6 +402,36 @@ func main() {
 	botDB := bot.NewDBAdapter(queries)
 	reportDB := report.NewDBAdapter(queries)
 
+	// Initialize memory engine (conditional on VOYAGE_API_KEY + ANTHROPIC_API_KEY)
+	var memEngine *memory.MemoryEngine
+	var memStore *memory.MemoryStore
+	if cfg.VoyageAPIKey != "" && cfg.AnthropicKey != "" {
+		memLLM, err := brain.NewAnthropicClient(cfg.AnthropicKey)
+		if err != nil {
+			slog.Error("failed to create memory LLM client", "error", err)
+			os.Exit(1)
+		}
+
+		embedder := memory.NewVoyageEmbedder(cfg.VoyageAPIKey, cfg.VoyageModel, cfg.VoyageBatchSize)
+		memStore = memory.NewMemoryStore(queries, pool)
+		extractor := memory.NewExtractor(memLLM, embedder)
+		retriever := memory.NewRetriever(memStore, embedder, cfg.MemoryMaxRecall, cfg.MemoryMaxTokens)
+		consolidator := memory.NewConsolidator(memStore, memLLM, embedder, cfg.MemoryConsolidationThreshold)
+		profiler := memory.NewProfileBuilder(memStore, memLLM, embedder)
+		memEngine = memory.NewMemoryEngine(memStore, embedder, retriever, extractor, consolidator, profiler)
+
+		// Inject memory engine into brain engine factory
+		engineFactory.SetMemoryEngine(memEngine)
+
+		slog.Info("memory engine enabled", "voyage_model", cfg.VoyageModel)
+	} else {
+		if cfg.VoyageAPIKey == "" {
+			slog.Info("memory engine disabled (no VOYAGE_API_KEY)")
+		} else {
+			slog.Info("memory engine disabled (no ANTHROPIC_API_KEY)")
+		}
+	}
+
 	// Create report collector with default questions (overridden per-remind)
 	defaultEngine, _ := engineFactory.ForTenant("inamori", "default")
 	collector := report.NewCollector(redisClient, defaultEngine.GetCheckinQuestions())
@@ -566,6 +597,44 @@ func main() {
 		return nil
 	})
 
+	// Subscribe to events for memory extraction
+	if memEngine != nil {
+		eventBus.Subscribe(events.ReportSubmitted, func(ctx context.Context, event events.Event) error {
+			var payload events.ReportSubmittedPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				return err
+			}
+			reportID, answersJSON, err := reportDB.GetLatestReportByEmployee(ctx, payload.EmployeeID, payload.ReportDate)
+			if err != nil {
+				slog.Warn("fetch report for memory extraction failed", "error", err)
+				return nil // non-fatal
+			}
+			return memEngine.ExtractFromReport(ctx, memory.ReportInput{
+				TenantID:   event.TenantID,
+				EmployeeID: payload.EmployeeID,
+				ReportID:   reportID,
+				Content:    answersJSON,
+			})
+		})
+
+		eventBus.Subscribe(events.ChaseCompleted, func(ctx context.Context, event events.Event) error {
+			var payload events.ChaseCompletedPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				return err
+			}
+			return memEngine.ExtractFromChase(ctx, memory.ChaseInput{
+				TenantID:   event.TenantID,
+				EmployeeID: payload.EmployeeID,
+				ChaseLogID: payload.ChaseLogID,
+				Step:       payload.Step,
+				Action:     payload.Action,
+				Message:    payload.Message,
+			})
+		})
+
+		slog.Info("memory event subscribers registered")
+	}
+
 	// Start bot polling in background
 	go tgBot.Start()
 
@@ -689,6 +758,36 @@ func main() {
 	}
 	slog.Info("proactive action jobs registered", "weekly", "Friday 18:00", "monthly", "1st 18:00")
 
+	// Memory consolidation jobs
+	if memEngine != nil {
+		if err := sched.AddJob("memory-clean", "0 2 * * *", func(ctx context.Context) error {
+			slog.Info("memory-clean job: cleaning expired memories")
+			return memEngine.RunConsolidation(ctx, memory.ConsolidationClean)
+		}); err != nil {
+			slog.Error("failed to register memory-clean job", "error", err)
+		}
+
+		if err := sched.AddJob("memory-consolidate", "0 3 * * 0", func(ctx context.Context) error {
+			slog.Info("memory-consolidate job: merging short-term memories")
+			return memEngine.RunConsolidation(ctx, memory.ConsolidationMerge)
+		}); err != nil {
+			slog.Error("failed to register memory-consolidate job", "error", err)
+		}
+
+		if err := sched.AddJob("memory-profiles", "0 4 1 * *", func(ctx context.Context) error {
+			slog.Info("memory-profiles job: rebuilding employee profiles")
+			return memEngine.RunConsolidation(ctx, memory.ConsolidationRebuild)
+		}); err != nil {
+			slog.Error("failed to register memory-profiles job", "error", err)
+		}
+
+		slog.Info("memory consolidation jobs registered",
+			"clean", "daily 02:00",
+			"consolidate", "weekly Sunday 03:00",
+			"profiles", "monthly 1st 04:00",
+		)
+	}
+
 	// Create AI Role Manager (requires LLM + scheduler)
 	var roleManager *roles.Manager
 	if cfg.AnthropicKey != "" {
@@ -736,8 +835,10 @@ func main() {
 		},
 		OrgWizard:   orgWizard,
 		OrgEngine:   orgEngine,
-		RoleManager:   roleManager,
-		SignalAdapter: signalAdapter,
+		RoleManager:    roleManager,
+		SignalAdapter:  signalAdapter,
+		MemoryEngine:  memEngine,
+		MemoryStore:   memStore,
 	})
 
 	// Health check (public, outside /api/v1)
