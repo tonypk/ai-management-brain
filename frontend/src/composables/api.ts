@@ -144,6 +144,41 @@ export async function getEmployeeActivity() {
   return request<{ data: EmployeeActivity[] }>("/analytics/activity");
 }
 
+// Organization Wizard
+export async function startWizard(mentorId: string) {
+  return request<{ data: WizardSession }>("/org/wizard/start", {
+    method: "POST",
+    body: JSON.stringify({ mentor_id: mentorId }),
+  });
+}
+
+export async function answerWizard(answer: string) {
+  return request<{ data: WizardAnswer }>("/org/wizard/answer", {
+    method: "POST",
+    body: JSON.stringify({ answer }),
+  });
+}
+
+export async function getOrgPlan() {
+  return request<{ data: OrgPlan }>("/org/plan");
+}
+
+export async function adjustOrgPlan(feedback: string) {
+  return request<{ data: { plan: ManagementPlan; plan_version: number } }>(
+    "/org/plan",
+    {
+      method: "PUT",
+      body: JSON.stringify({ feedback }),
+    },
+  );
+}
+
+export async function activateOrgPlan() {
+  return request<{ data: { status: string } }>("/org/plan/activate", {
+    method: "POST",
+  });
+}
+
 // Types
 export interface DashboardStats {
   employee_count: number;
@@ -227,4 +262,93 @@ export interface EmployeeActivity {
   missed_7d: number;
   last_sentiment: string;
   culture_code: string;
+}
+
+// Organization Wizard types
+export interface WizardSession {
+  session_id: string;
+  mentor_id: string;
+  message: string;
+  is_complete: boolean;
+}
+
+export interface WizardAnswer {
+  message: string;
+  is_complete: boolean;
+  plan?: ManagementPlan;
+  profile?: OrgProfile;
+}
+
+export interface OrgProfile {
+  industry: string;
+  size: number;
+  stage: string;
+  business_model?: string;
+  region?: string;
+  pain_points?: string[];
+}
+
+export interface OrgPlan {
+  id: string;
+  industry: string;
+  size: number;
+  stage: string;
+  mentor_id: string;
+  plan: ManagementPlan;
+  plan_version: number;
+  status: string;
+}
+
+export interface ManagementPlan {
+  management_framework: string;
+  org_design: OrgDesign;
+  culture_principles: string[];
+  policies: Record<string, any>;
+  kpi_system: KpiItem[];
+  daily_questions: Record<string, string[]>;
+  meeting_cadence: MeetingItem[];
+  alert_rules: AlertRule[];
+  reasoning: string;
+}
+
+export interface OrgDesign {
+  philosophy: string;
+  structure_type: string;
+  units: OrgUnit[];
+  support_roles?: SupportRole[];
+}
+
+export interface OrgUnit {
+  name: string;
+  leader_type: string;
+  leader_role: string;
+  size?: number;
+  kpis?: string[];
+}
+
+export interface SupportRole {
+  title: string;
+  type: string;
+  scope: string;
+}
+
+export interface KpiItem {
+  name: string;
+  target: string;
+  frequency: string;
+  owner: string;
+}
+
+export interface MeetingItem {
+  name: string;
+  frequency: string;
+  duration: string;
+  attendees: string;
+  purpose: string;
+}
+
+export interface AlertRule {
+  condition: string;
+  action: string;
+  message: string;
 }

@@ -18,6 +18,7 @@ const navItems = [
   { path: '/employees', label: 'Team', icon: '👥' },
   { path: '/reports', label: 'Reports', icon: '📝' },
   { path: '/mentor', label: 'Mentor', icon: '🧠' },
+  { path: '/organization', label: 'Organization', icon: '🏢' },
   { path: '/analytics', label: 'Analytics', icon: '📈' },
 ]
 </script>
