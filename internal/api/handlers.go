@@ -448,15 +448,20 @@ type mentorInfo struct {
 }
 
 var mentorDescriptions = map[string]mentorInfo{
-	"inamori": {ID: "inamori", Name: "Kazuo Inamori", Description: "Kyocera - Amoeba management, respect heaven and love people"},
-	"dalio":   {ID: "dalio", Name: "Ray Dalio", Description: "Bridgewater - Radical transparency, principles-driven"},
-	"grove":   {ID: "grove", Name: "Andy Grove", Description: "Intel - OKR-driven, high output management"},
-	"ren":     {ID: "ren", Name: "Ren Zhengfei", Description: "Huawei - Wolf culture, self-criticism, striver-oriented"},
-	"son":     {ID: "son", Name: "Masayoshi Son", Description: "SoftBank - 300-year vision, time machine theory"},
-	"jobs":    {ID: "jobs", Name: "Steve Jobs", Description: "Apple - Pursuit of simplicity, reality distortion field"},
-	"bezos":   {ID: "bezos", Name: "Jeff Bezos", Description: "Amazon - Day 1 mentality, customer obsession"},
-	"ma":      {ID: "ma", Name: "Jack Ma", Description: "Alibaba - Embrace change, customer first, teamwork"},
-	"musk":    {ID: "musk", Name: "Elon Musk", Description: "Tesla/SpaceX - First principles thinking, urgency, 10x moonshots"},
+	"inamori":     {ID: "inamori", Name: "Kazuo Inamori", Description: "Kyocera - Amoeba management, respect heaven and love people"},
+	"dalio":       {ID: "dalio", Name: "Ray Dalio", Description: "Bridgewater - Radical transparency, principles-driven"},
+	"grove":       {ID: "grove", Name: "Andy Grove", Description: "Intel - OKR-driven, high output management"},
+	"ren":         {ID: "ren", Name: "Ren Zhengfei", Description: "Huawei - Wolf culture, self-criticism, striver-oriented"},
+	"son":         {ID: "son", Name: "Masayoshi Son", Description: "SoftBank - 300-year vision, time machine theory"},
+	"jobs":        {ID: "jobs", Name: "Steve Jobs", Description: "Apple - Pursuit of simplicity, reality distortion field"},
+	"bezos":       {ID: "bezos", Name: "Jeff Bezos", Description: "Amazon - Day 1 mentality, customer obsession"},
+	"ma":          {ID: "ma", Name: "Jack Ma", Description: "Alibaba - Embrace change, customer first, teamwork"},
+	"musk":        {ID: "musk", Name: "Elon Musk", Description: "Tesla/SpaceX - First principles thinking, urgency, 10x moonshots"},
+	"buffett":     {ID: "buffett", Name: "Warren Buffett", Description: "Berkshire Hathaway - Long-term value, margin of safety, compounding"},
+	"zhangyiming": {ID: "zhangyiming", Name: "Zhang Yiming", Description: "ByteDance - Delayed gratification, context not control, data-driven"},
+	"leijun":      {ID: "leijun", Name: "Lei Jun", Description: "Xiaomi - Extreme value, user participation, focus and word-of-mouth"},
+	"caodewang":   {ID: "caodewang", Name: "Cho Tak Wong", Description: "Fuyao Glass - Industrial spirit, cost control, quality first"},
+	"chushijian":  {ID: "chushijian", Name: "Chu Shijian", Description: "Hongta/Chu Orange - Ultimate focus, quality obsession, resilience"},
 }
 
 // handleGetMentor returns the current mentor and available mentors list.

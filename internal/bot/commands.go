@@ -215,10 +215,20 @@ func (h *CommandHandler) HandleJoin(c BotContext) error {
 
 // mentorDescriptions provides human-readable info for each mentor.
 var mentorDescriptions = map[string]string{
-	"inamori": "稻盛和夫 (Kyocera) — 阿米巴经营，敬天爱人，利他哲学",
-	"dalio":   "Ray Dalio (Bridgewater) — 极度透明，原则驱动，数据决策",
-	"grove":   "Andy Grove (Intel) — OKR驱动，高产出管理，建设性对抗",
-	"ren":     "任正非 (华为) — 狼性文化，自我批判，以奋斗者为本",
+	"inamori":     "稻盛和夫 (Kyocera) — 阿米巴经营，敬天爱人，利他哲学",
+	"dalio":       "Ray Dalio (Bridgewater) — 极度透明，原则驱动，数据决策",
+	"grove":       "Andy Grove (Intel) — OKR驱动，高产出管理，建设性对抗",
+	"ren":         "任正非 (华为) — 狼性文化，自我批判，以奋斗者为本",
+	"son":         "孙正义 (SoftBank) — 300年愿景，时间机器理论",
+	"jobs":        "Steve Jobs (Apple) — 追求极简，现实扭曲力场",
+	"bezos":       "Jeff Bezos (Amazon) — Day 1心态，客户至上",
+	"ma":          "马云 (阿里巴巴) — 拥抱变化，客户第一，团队合作",
+	"musk":        "Elon Musk (Tesla/SpaceX) — 第一性原理，极致紧迫感，10倍思维",
+	"buffett":     "沃伦·巴菲特 (Berkshire) — 长期主义，安全边际，复利思维",
+	"zhangyiming": "张一鸣 (字节跳动) — 延迟满足，信息平权，Context not Control",
+	"leijun":      "雷军 (小米) — 极致性价比，参与感，专注口碑快",
+	"caodewang":   "曹德旺 (福耀玻璃) — 实业精神，成本控制，品质第一",
+	"chushijian":  "褚时健 (褚橙) — 极致专注，品质至上，逆境重生",
 }
 
 // HandleMentor switches the active mentor for the boss's team.

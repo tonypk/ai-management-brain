@@ -246,7 +246,7 @@ func TestEngine_GetSummaryConfig_Inamori(t *testing.T) {
 }
 
 func TestEngine_GetSummaryConfig_AllMentors(t *testing.T) {
-	mentors := []string{"inamori", "dalio", "grove", "ren", "son", "jobs", "bezos", "ma"}
+	mentors := []string{"inamori", "dalio", "grove", "ren", "son", "jobs", "bezos", "ma", "musk", "buffett", "zhangyiming", "leijun", "caodewang", "chushijian"}
 	for _, m := range mentors {
 		t.Run(m, func(t *testing.T) {
 			e, err := brain.NewEngine(m, "default")
@@ -272,7 +272,7 @@ func TestEngine_GetSummaryConfig_AllMentors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestEngine_GetTriggerRules_AllMentors(t *testing.T) {
-	mentors := []string{"inamori", "dalio", "grove", "ren", "son", "jobs", "bezos", "ma"}
+	mentors := []string{"inamori", "dalio", "grove", "ren", "son", "jobs", "bezos", "ma", "musk", "buffett", "zhangyiming", "leijun", "caodewang", "chushijian"}
 	for _, m := range mentors {
 		t.Run(m, func(t *testing.T) {
 			e, err := brain.NewEngine(m, "default")
@@ -303,7 +303,7 @@ func TestEngine_GetTriggerRules_AllMentors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestEngine_GetWeeklyActions_AllMentors(t *testing.T) {
-	mentors := []string{"inamori", "dalio", "grove", "ren", "son", "jobs", "bezos", "ma"}
+	mentors := []string{"inamori", "dalio", "grove", "ren", "son", "jobs", "bezos", "ma", "musk", "buffett", "zhangyiming", "leijun", "caodewang", "chushijian"}
 	for _, m := range mentors {
 		t.Run(m, func(t *testing.T) {
 			e, err := brain.NewEngine(m, "default")
@@ -327,7 +327,7 @@ func TestEngine_GetWeeklyActions_AllMentors(t *testing.T) {
 }
 
 func TestEngine_GetMonthlyActions_AllMentors(t *testing.T) {
-	mentors := []string{"inamori", "dalio", "grove", "ren", "son", "jobs", "bezos", "ma"}
+	mentors := []string{"inamori", "dalio", "grove", "ren", "son", "jobs", "bezos", "ma", "musk", "buffett", "zhangyiming", "leijun", "caodewang", "chushijian"}
 	for _, m := range mentors {
 		t.Run(m, func(t *testing.T) {
 			e, err := brain.NewEngine(m, "default")
@@ -387,6 +387,9 @@ func TestNewBlendedEngine_AllMentorPairs(t *testing.T) {
 		{"ren", "inamori"},
 		{"son", "jobs"},
 		{"bezos", "ma"},
+		{"musk", "buffett"},
+		{"zhangyiming", "leijun"},
+		{"caodewang", "chushijian"},
 	}
 	for _, p := range pairs {
 		name := p.primary + "+" + p.secondary

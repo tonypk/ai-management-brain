@@ -7,14 +7,20 @@ import (
 
 // ValidMentors lists all available mentor IDs.
 var ValidMentors = map[string]bool{
-	"inamori": true,
-	"dalio":   true,
-	"grove":   true,
-	"ren":     true,
-	"son":     true,
-	"jobs":    true,
-	"bezos":   true,
-	"ma":      true,
+	"inamori":     true,
+	"dalio":       true,
+	"grove":       true,
+	"ren":         true,
+	"son":         true,
+	"jobs":        true,
+	"bezos":       true,
+	"ma":          true,
+	"musk":        true,
+	"buffett":     true,
+	"zhangyiming": true,
+	"leijun":      true,
+	"caodewang":   true,
+	"chushijian":  true,
 }
 
 // ValidCultures lists all available culture codes.

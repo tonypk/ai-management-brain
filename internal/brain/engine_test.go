@@ -77,7 +77,7 @@ func TestEngineFactory_Caching(t *testing.T) {
 
 func TestEngineFactory_DifferentMentors(t *testing.T) {
 	f := brain.NewEngineFactory()
-	mentors := []string{"inamori", "dalio", "grove", "ren"}
+	mentors := []string{"inamori", "dalio", "grove", "ren", "son", "jobs", "bezos", "ma", "musk", "buffett", "zhangyiming", "leijun", "caodewang", "chushijian"}
 	for _, m := range mentors {
 		e, err := f.ForTenant(m, "default")
 		if err != nil {
