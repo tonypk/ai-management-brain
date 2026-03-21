@@ -77,6 +77,22 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		// Billing
 		protected.POST("/billing/checkout", handleBillingCheckout(cfg))
 		protected.GET("/billing/status", handleBillingStatus(cfg))
+
+		// API Key management (JWT-authenticated only)
+		protected.POST("/auth/api-keys", handleCreateAPIKey(cfg.Queries))
+		protected.GET("/auth/api-keys", handleListAPIKeys(cfg.Queries))
+		protected.DELETE("/auth/api-keys/:id", handleRevokeAPIKey(cfg.Queries))
+	}
+
+	// OpenClaw endpoints (API Key or JWT authenticated)
+	openclaw := v1.Group("/openclaw")
+	openclaw.Use(APIKeyMiddleware(cfg.Queries))
+	openclaw.Use(AuthMiddleware(cfg.JWTSecret))
+	{
+		openclaw.GET("/status", handleOpenClawStatus(cfg.Queries))
+		openclaw.POST("/command", handleOpenClawCommand(cfg.Queries))
+		openclaw.GET("/report", handleOpenClawReport(cfg.Queries))
+		openclaw.GET("/alerts", handleOpenClawAlerts(cfg.Queries))
 	}
 
 	// Webhook endpoints (signature-verified, no JWT)

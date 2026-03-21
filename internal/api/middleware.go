@@ -10,8 +10,15 @@ import (
 )
 
 // AuthMiddleware validates the Bearer token and sets user claims in the gin context.
+// If the context already has user_id set (e.g., by APIKeyMiddleware), it skips validation.
 func AuthMiddleware(secret []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip if already authenticated (e.g., by API Key middleware)
+		if _, exists := c.Get("user_id"); exists {
+			c.Next()
+			return
+		}
+
 		header := c.GetHeader("Authorization")
 		if header == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
