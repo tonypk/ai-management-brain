@@ -38,6 +38,23 @@ AI Management Brain 是一个 AI 管理操作系统。连接 Telegram/Slack/Lark
 
 **9位管理导师：** 稻盛和夫 · 达利欧 · 格鲁夫 · 任正非 · 孙正义 · 乔布斯 · 贝佐斯 · 马云 · 马斯克
 
+**6套文化包：** 菲律宾 · 新加坡 · 印尼 · 斯里兰卡 · 马来西亚 · 中国
+
+## Cultural Adaptation
+
+The system auto-adapts communication per employee's cultural background. Culture packs override mentor strategy when there's a conflict (e.g., Dalio wants public feedback but Filipino culture requires private-first).
+
+| Culture | Directness | Hierarchy | Key Rules |
+|---------|-----------|-----------|-----------|
+| Philippines | Low | High | Never name in group, warmth required, acknowledge effort |
+| Singapore | High | Medium | Direct but polite, efficiency-focused |
+| Indonesia | Low | High | Relationship-first, group harmony |
+| Sri Lanka | Low | High | Respectful tone, private feedback |
+| Malaysia | Medium | Medium | Multicultural sensitivity, balanced approach |
+| China | Medium | High | Face-saving, collective achievement |
+
+Each employee can have a different culture code. The AI combines mentor philosophy + culture rules to generate appropriate messages.
+
 ## Authentication
 
 All API calls require the header: `Authorization: Bearer <MANAGEMENT_BRAIN_API_KEY>`
