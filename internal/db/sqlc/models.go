@@ -6,6 +6,7 @@ package sqlc
 
 import (
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pgvector/pgvector-go"
 )
 
 type AiRoleInstance struct {
@@ -67,6 +68,26 @@ type Employee struct {
 	InviteCode  pgtype.Text        `json:"invite_code"`
 	IsActive    bool               `json:"is_active"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type Memory struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	MemoryType  string             `json:"memory_type"`
+	MemoryTier  string             `json:"memory_tier"`
+	EmployeeID  pgtype.UUID        `json:"employee_id"`
+	SourceType  pgtype.Text        `json:"source_type"`
+	SourceID    pgtype.UUID        `json:"source_id"`
+	Content     string             `json:"content"`
+	Summary     pgtype.Text        `json:"summary"`
+	Embedding   pgvector.Vector    `json:"embedding"`
+	Importance  pgtype.Float8      `json:"importance"`
+	AccessCount pgtype.Int4        `json:"access_count"`
+	Metadata    []byte             `json:"metadata"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	MergedInto  pgtype.UUID        `json:"merged_into"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Organization struct {
