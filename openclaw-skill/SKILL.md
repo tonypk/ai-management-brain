@@ -1,6 +1,6 @@
 ---
 name: management-brain
-description: "AI Management OS: 9 mentor philosophies, proactive employee check-ins via your Telegram/Slack/Lark, sentiment analysis, cultural adaptation, executive summaries"
+description: "AI Management OS — zero-setup via your existing Telegram/Slack/Lark bot. 9 mentor philosophies (Inamori/Musk/Jobs...), smart chase, sentiment analysis, 6 culture packs. Data to Notion/Google Sheets/Obsidian. Optional cloud dashboard."
 user-invocable: true
 ---
 
