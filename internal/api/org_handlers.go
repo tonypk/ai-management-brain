@@ -12,6 +12,7 @@ import (
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
+	"github.com/tonypk/ai-management-brain/internal/roles"
 )
 
 // --- Request types ---
@@ -341,8 +342,9 @@ func handleUpdatePlan(queries *sqlc.Queries, engine *brain.OrgEngine) gin.Handle
 	}
 }
 
-// handleActivatePlan changes the plan status from draft to active.
-func handleActivatePlan(queries *sqlc.Queries) gin.HandlerFunc {
+// handleActivatePlan changes the plan status from draft to active
+// and triggers AI role creation from the plan's support roles.
+func handleActivatePlan(queries *sqlc.Queries, roleManager *roles.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tenantID, err := parseUUID(TenantFromContext(c))
 		if err != nil {
@@ -375,9 +377,26 @@ func handleActivatePlan(queries *sqlc.Queries) gin.HandlerFunc {
 			return
 		}
 
+		// Activate AI roles from plan (non-fatal)
+		rolesActivated := 0
+		if roleManager != nil {
+			var plan brain.ManagementPlan
+			if err := json.Unmarshal(org.ManagementPlan, &plan); err != nil {
+				slog.Error("unmarshal plan for roles", "error", err)
+			} else {
+				tenantIDStr := formatUUID(org.TenantID)
+				if err := roleManager.ActivateForTenant(c.Request.Context(), tenantIDStr, &plan, org.MentorID); err != nil {
+					slog.Error("activate AI roles", "error", err)
+				} else {
+					rolesActivated = len(roleManager.ListAgents())
+				}
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"data": gin.H{
-				"status": "active",
+				"status":          "active",
+				"roles_activated": rolesActivated,
 			},
 		})
 	}

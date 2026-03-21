@@ -8,6 +8,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AiRoleInstance struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	RoleID    string             `json:"role_id"`
+	Title     string             `json:"title"`
+	MentorID  string             `json:"mentor_id"`
+	Config    []byte             `json:"config"`
+	IsActive  bool               `json:"is_active"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type AiSuggestion struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	RoleID      string             `json:"role_id"`
+	RoleTitle   string             `json:"role_title"`
+	Capability  string             `json:"capability"`
+	Title       string             `json:"title"`
+	Content     string             `json:"content"`
+	ContextData []byte             `json:"context_data"`
+	Status      string             `json:"status"`
+	ReviewedAt  pgtype.Timestamptz `json:"reviewed_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type ApiKey struct {
 	ID         pgtype.UUID        `json:"id"`
 	UserID     pgtype.UUID        `json:"user_id"`

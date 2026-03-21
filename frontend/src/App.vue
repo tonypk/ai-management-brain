@@ -19,6 +19,7 @@ const navItems = [
   { path: '/reports', label: 'Reports', icon: '📝' },
   { path: '/mentor', label: 'Mentor', icon: '🧠' },
   { path: '/organization', label: 'Organization', icon: '🏢' },
+  { path: '/ai-roles', label: 'AI Roles', icon: '🤖' },
   { path: '/analytics', label: 'Analytics', icon: '📈' },
 ]
 </script>

@@ -174,9 +174,35 @@ export async function adjustOrgPlan(feedback: string) {
 }
 
 export async function activateOrgPlan() {
-  return request<{ data: { status: string } }>("/org/plan/activate", {
-    method: "POST",
-  });
+  return request<{ data: { status: string; roles_activated: number } }>(
+    "/org/plan/activate",
+    {
+      method: "POST",
+    },
+  );
+}
+
+// AI Roles
+export async function listAIRoles() {
+  return request<{ data: AIRoleInstance[] }>("/org/roles");
+}
+
+export async function listSuggestions() {
+  return request<{ data: AISuggestion[] }>("/org/suggestions");
+}
+
+export async function approveSuggestion(id: string) {
+  return request<{ data: { status: string } }>(
+    `/org/suggestions/${id}/approve`,
+    { method: "POST" },
+  );
+}
+
+export async function rejectSuggestion(id: string) {
+  return request<{ data: { status: string } }>(
+    `/org/suggestions/${id}/reject`,
+    { method: "POST" },
+  );
 }
 
 // Types
@@ -351,4 +377,27 @@ export interface AlertRule {
   condition: string;
   action: string;
   message: string;
+}
+
+// AI Roles types
+export interface AIRoleInstance {
+  id: string;
+  role_id: string;
+  title: string;
+  mentor_id: string;
+  is_active: boolean;
+  pending_count: number;
+  created_at: string;
+}
+
+export interface AISuggestion {
+  id: string;
+  role_id: string;
+  role_title: string;
+  capability: string;
+  title: string;
+  content: string;
+  status: string;
+  created_at: string;
+  reviewed_at?: string;
 }

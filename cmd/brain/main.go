@@ -24,6 +24,7 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
 	"github.com/tonypk/ai-management-brain/internal/events"
 	"github.com/tonypk/ai-management-brain/internal/report"
+	"github.com/tonypk/ai-management-brain/internal/roles"
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
 )
 
@@ -231,7 +232,40 @@ CREATE TABLE IF NOT EXISTS wizard_sessions (
 CREATE INDEX IF NOT EXISTS idx_organizations_tenant ON organizations(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_wizard_sessions_tenant ON wizard_sessions(tenant_id);
 `
-	_, err := pool.Exec(ctx, migration003)
+	if _, err := pool.Exec(ctx, migration003); err != nil {
+		return err
+	}
+
+	// Migration 000004: AI Role Instances + Suggestions
+	migration004 := `
+CREATE TABLE IF NOT EXISTS ai_role_instances (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id),
+    role_id     TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    mentor_id   TEXT NOT NULL,
+    config      JSONB NOT NULL DEFAULT '{}',
+    is_active   BOOLEAN NOT NULL DEFAULT true,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, role_id)
+);
+CREATE TABLE IF NOT EXISTS ai_suggestions (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id    UUID NOT NULL REFERENCES tenants(id),
+    role_id      TEXT NOT NULL,
+    role_title   TEXT NOT NULL,
+    capability   TEXT NOT NULL,
+    title        TEXT NOT NULL,
+    content      TEXT NOT NULL,
+    context_data JSONB NOT NULL DEFAULT '{}',
+    status       TEXT NOT NULL DEFAULT 'pending',
+    reviewed_at  TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ai_role_instances_tenant ON ai_role_instances(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ai_suggestions_tenant_status ON ai_suggestions(tenant_id, status);
+`
+	_, err := pool.Exec(ctx, migration004)
 	return err
 }
 
@@ -357,6 +391,7 @@ func main() {
 	summarizer := report.NewSummarizer(reportDB, llmService)
 	triggerChecker := report.NewTriggerChecker(reportDB, tgAdapter, engineFactory)
 	actionExecutor := report.NewActionExecutor(reportDB, tgAdapter, llmService, engineFactory)
+	alertChecker := report.NewAlertChecker(reportDB, tgAdapter)
 	analyzer := report.NewAnalyzer(reportDB, llmService)
 
 	// Create command handler and register commands
@@ -606,12 +641,40 @@ func main() {
 	}
 	slog.Info("proactive action jobs registered", "weekly", "Friday 18:00", "monthly", "1st 18:00")
 
+	// Create AI Role Manager (requires LLM + scheduler)
+	var roleManager *roles.Manager
+	if cfg.AnthropicKey != "" {
+		llmClient, _ := brain.NewAnthropicClient(cfg.AnthropicKey)
+		bossSender := roles.NewBossSender(tgBot, cfg.BossTelegramID)
+		roleManager = roles.NewManager(roles.ManagerConfig{
+			Scheduler:     sched,
+			EventBus:      eventBus,
+			EngineFactory: engineFactory,
+			LLM:           llmClient,
+			Chaser:        chaser,
+			Summarizer:    &roles.SummarizerAdapter{S: summarizer},
+			AlertChecker:  &roles.AlertCheckerAdapter{A: alertChecker},
+			ActionExec:    actionExecutor,
+			ReportDB:      &roles.ReportDBAdapter{DB: reportDB},
+			Queries:       queries,
+			Sender:        bossSender,
+		})
+
+		// Load existing AI roles for current tenant
+		if tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID); err == nil {
+			if err := roleManager.LoadExistingForTenant(ctx, tenant.ID); err != nil {
+				slog.Error("load existing AI roles", "error", err)
+			}
+		}
+		slog.Info("AI role manager initialized")
+	}
+
 	// API router (includes REST API + health check)
 	gin.SetMode(gin.ReleaseMode)
 	router := api.NewRouter(api.RouterConfig{
-		Queries:   queries,
-		JWTSecret: cfg.JWTSecret,
-		Redis:     rdb,
+		Queries:     queries,
+		JWTSecret:   cfg.JWTSecret,
+		Redis:       rdb,
 		OAuth: api.OAuthConfig{
 			ClientID:     cfg.GoogleClientID,
 			ClientSecret: cfg.GoogleClientSecret,
@@ -623,8 +686,9 @@ func main() {
 			ProPriceID:    cfg.StripePriceIDPro,
 			EntPriceID:    cfg.StripePriceIDEnt,
 		},
-		OrgWizard: orgWizard,
-		OrgEngine: orgEngine,
+		OrgWizard:   orgWizard,
+		OrgEngine:   orgEngine,
+		RoleManager: roleManager,
 	})
 
 	// Health check (public, outside /api/v1)

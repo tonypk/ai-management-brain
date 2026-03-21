@@ -140,7 +140,7 @@ func TestHandleActivatePlan_InvalidTenant(t *testing.T) {
 		c.Set("tenant_id", "invalid-uuid")
 		c.Set("role", "boss")
 		c.Next()
-	}, handleActivatePlan(nil))
+	}, handleActivatePlan(nil, nil))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/org/plan/activate", nil)

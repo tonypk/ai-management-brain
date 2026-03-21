@@ -8,17 +8,19 @@ import (
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
+	"github.com/tonypk/ai-management-brain/internal/roles"
 )
 
 // RouterConfig holds dependencies for the API router.
 type RouterConfig struct {
-	Queries   *sqlc.Queries
-	JWTSecret []byte
-	Redis     *redis.Client // nil = no rate limiting
-	OAuth     OAuthConfig   // Google OAuth config
-	Billing   BillingConfig // Stripe billing config
-	OrgWizard *brain.OrgWizard  // nil = org features disabled
-	OrgEngine *brain.OrgEngine  // nil = org features disabled
+	Queries     *sqlc.Queries
+	JWTSecret   []byte
+	Redis       *redis.Client    // nil = no rate limiting
+	OAuth       OAuthConfig      // Google OAuth config
+	Billing     BillingConfig    // Stripe billing config
+	OrgWizard   *brain.OrgWizard // nil = org features disabled
+	OrgEngine   *brain.OrgEngine // nil = org features disabled
+	RoleManager *roles.Manager   // nil = AI roles disabled
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -94,7 +96,13 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			org.POST("/wizard/answer", handleWizardAnswer(cfg.Queries, cfg.OrgWizard))
 			org.GET("/plan", handleGetPlan(cfg.Queries))
 			org.PUT("/plan", handleUpdatePlan(cfg.Queries, cfg.OrgEngine))
-			org.POST("/plan/activate", handleActivatePlan(cfg.Queries))
+			org.POST("/plan/activate", handleActivatePlan(cfg.Queries, cfg.RoleManager))
+
+			// AI Roles
+			org.GET("/roles", handleListAIRoles(cfg.Queries))
+			org.GET("/suggestions", handleListSuggestions(cfg.Queries))
+			org.POST("/suggestions/:id/approve", handleApproveSuggestion(cfg.Queries))
+			org.POST("/suggestions/:id/reject", handleRejectSuggestion(cfg.Queries))
 		}
 	}
 
