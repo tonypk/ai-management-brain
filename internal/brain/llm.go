@@ -57,8 +57,8 @@ func NewAnthropicClient(apiKey string) (*AnthropicClient, error) {
 	}, nil
 }
 
-// Chat sends a message to Claude and returns the response.
-func (a *AnthropicClient) Chat(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+// chatWithTokens sends a message to Claude with a configurable max token limit.
+func (a *AnthropicClient) chatWithTokens(ctx context.Context, systemPrompt, userPrompt string, maxTokens int64) (string, error) {
 	start := time.Now()
 	var lastErr error
 
@@ -67,7 +67,7 @@ func (a *AnthropicClient) Chat(ctx context.Context, systemPrompt, userPrompt str
 	for attempt := 0; attempt <= 2; attempt++ {
 		resp, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
 			Model:     a.model,
-			MaxTokens: 1024,
+			MaxTokens: maxTokens,
 			System: []anthropic.TextBlockParam{
 				{Text: systemPrompt},
 			},
@@ -113,6 +113,16 @@ func (a *AnthropicClient) Chat(ctx context.Context, systemPrompt, userPrompt str
 	}
 
 	return "", fmt.Errorf("LLM API failed after 3 attempts: %w", lastErr)
+}
+
+// Chat sends a message to Claude and returns the response.
+func (a *AnthropicClient) Chat(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	return a.chatWithTokens(ctx, systemPrompt, userPrompt, 1024)
+}
+
+// ChatLong sends a message to Claude with higher token limit for complex generation.
+func (a *AnthropicClient) ChatLong(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	return a.chatWithTokens(ctx, systemPrompt, userPrompt, 4096)
 }
 
 // LLMService wraps an LLMClient with domain-specific methods.

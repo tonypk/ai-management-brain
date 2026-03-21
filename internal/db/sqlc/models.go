@@ -44,6 +44,22 @@ type Employee struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type Organization struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	Industry       string             `json:"industry"`
+	Size           int32              `json:"size"`
+	Stage          string             `json:"stage"`
+	BusinessModel  pgtype.Text        `json:"business_model"`
+	Region         pgtype.Text        `json:"region"`
+	MentorID       string             `json:"mentor_id"`
+	ManagementPlan []byte             `json:"management_plan"`
+	PlanVersion    int32              `json:"plan_version"`
+	Status         string             `json:"status"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Report struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
@@ -88,4 +104,15 @@ type User struct {
 	Role         string             `json:"role"`
 	IsActive     bool               `json:"is_active"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type WizardSession struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	MentorID       string             `json:"mentor_id"`
+	CurrentStep    string             `json:"current_step"`
+	Conversation   []byte             `json:"conversation"`
+	CompanyProfile []byte             `json:"company_profile"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }

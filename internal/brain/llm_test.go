@@ -70,3 +70,45 @@ func TestLLM_AuthError_Classification(t *testing.T) {
 		t.Error("timeout should not be auth error")
 	}
 }
+
+func TestLLM_AnalyzeReport_ValidJSON(t *testing.T) {
+	mock := &mockLLM{response: `{"blockers": "waiting on API", "sentiment": "stressed"}`}
+	svc := brain.NewLLMService(mock)
+
+	result, err := svc.AnalyzeReport(context.Background(), "I'm blocked on the API integration")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Blockers != "waiting on API" {
+		t.Errorf("expected blockers 'waiting on API', got %q", result.Blockers)
+	}
+	if result.Sentiment != "stressed" {
+		t.Errorf("expected sentiment 'stressed', got %q", result.Sentiment)
+	}
+}
+
+func TestLLM_AnalyzeReport_MarkdownWrapped(t *testing.T) {
+	mock := &mockLLM{response: "```json\n{\"blockers\": \"\", \"sentiment\": \"positive\"}\n```"}
+	svc := brain.NewLLMService(mock)
+
+	result, err := svc.AnalyzeReport(context.Background(), "All good today!")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Sentiment != "positive" {
+		t.Errorf("expected sentiment 'positive', got %q", result.Sentiment)
+	}
+}
+
+func TestLLM_AnalyzeReport_InvalidJSON_Fallback(t *testing.T) {
+	mock := &mockLLM{response: "not json at all"}
+	svc := brain.NewLLMService(mock)
+
+	result, err := svc.AnalyzeReport(context.Background(), "some report")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Sentiment != "neutral" {
+		t.Errorf("expected fallback sentiment 'neutral', got %q", result.Sentiment)
+	}
+}

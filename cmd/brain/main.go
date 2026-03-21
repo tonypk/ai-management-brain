@@ -197,7 +197,41 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id) WHERE is_active = true;
 `
-	_, err := pool.Exec(ctx, migration002)
+	if _, err := pool.Exec(ctx, migration002); err != nil {
+		return err
+	}
+
+	// Migration 000003: Organizations + Wizard Sessions
+	migration003 := `
+CREATE TABLE IF NOT EXISTS organizations (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID NOT NULL REFERENCES tenants(id) UNIQUE,
+    industry        TEXT NOT NULL,
+    size            INT NOT NULL,
+    stage           TEXT NOT NULL,
+    business_model  TEXT,
+    region          TEXT,
+    mentor_id       TEXT NOT NULL,
+    management_plan JSONB NOT NULL DEFAULT '{}',
+    plan_version    INT NOT NULL DEFAULT 1,
+    status          TEXT NOT NULL DEFAULT 'draft',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS wizard_sessions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID NOT NULL REFERENCES tenants(id),
+    mentor_id       TEXT NOT NULL,
+    current_step    TEXT NOT NULL DEFAULT 'start',
+    conversation    JSONB NOT NULL DEFAULT '[]',
+    company_profile JSONB NOT NULL DEFAULT '{}',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_organizations_tenant ON organizations(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_wizard_sessions_tenant ON wizard_sessions(tenant_id);
+`
+	_, err := pool.Exec(ctx, migration003)
 	return err
 }
 
@@ -276,6 +310,8 @@ func main() {
 
 	// Create LLM client (optional)
 	var llmService *brain.LLMService
+	var orgWizard *brain.OrgWizard
+	var orgEngine *brain.OrgEngine
 	if cfg.AnthropicKey != "" {
 		llmClient, err := brain.NewAnthropicClient(cfg.AnthropicKey)
 		if err != nil {
@@ -283,7 +319,9 @@ func main() {
 			os.Exit(1)
 		}
 		llmService = brain.NewLLMService(llmClient)
-		slog.Info("Anthropic LLM client initialized")
+		orgEngine = brain.NewOrgEngine(llmClient)
+		orgWizard = brain.NewOrgWizard(llmClient)
+		slog.Info("Anthropic LLM client initialized (org engine ready)")
 	} else {
 		slog.Warn("ANTHROPIC_API_KEY not set — AI features disabled, using template fallbacks")
 	}
@@ -585,6 +623,8 @@ func main() {
 			ProPriceID:    cfg.StripePriceIDPro,
 			EntPriceID:    cfg.StripePriceIDEnt,
 		},
+		OrgWizard: orgWizard,
+		OrgEngine: orgEngine,
 	})
 
 	// Health check (public, outside /api/v1)

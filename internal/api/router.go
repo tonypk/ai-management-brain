@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/tonypk/ai-management-brain/internal/brain"
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
 )
 
@@ -16,6 +17,8 @@ type RouterConfig struct {
 	Redis     *redis.Client // nil = no rate limiting
 	OAuth     OAuthConfig   // Google OAuth config
 	Billing   BillingConfig // Stripe billing config
+	OrgWizard *brain.OrgWizard  // nil = org features disabled
+	OrgEngine *brain.OrgEngine  // nil = org features disabled
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -82,6 +85,17 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		protected.POST("/auth/api-keys", handleCreateAPIKey(cfg.Queries))
 		protected.GET("/auth/api-keys", handleListAPIKeys(cfg.Queries))
 		protected.DELETE("/auth/api-keys/:id", handleRevokeAPIKey(cfg.Queries))
+
+		// Organization architecture (boss only)
+		org := protected.Group("/org")
+		org.Use(RequireRole("boss"))
+		{
+			org.POST("/wizard/start", handleStartWizard(cfg.Queries, cfg.OrgWizard))
+			org.POST("/wizard/answer", handleWizardAnswer(cfg.Queries, cfg.OrgWizard))
+			org.GET("/plan", handleGetPlan(cfg.Queries))
+			org.PUT("/plan", handleUpdatePlan(cfg.Queries, cfg.OrgEngine))
+			org.POST("/plan/activate", handleActivatePlan(cfg.Queries))
+		}
 	}
 
 	// OpenClaw endpoints (API Key or JWT authenticated)
