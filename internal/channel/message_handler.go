@@ -59,12 +59,8 @@ func (h *UnifiedHandler) HandleMessage(ctx context.Context, msg Message) error {
 	}
 
 	if response != "" {
-		// Send reply back via the same channel type
-		re := ToResolveEmployee(emp.TelegramID, emp.SignalPhone, emp.SlackID, emp.LarkID, emp.PreferredChannel)
-		chType, chID := ResolveChannel(re)
-		if chType != "" {
-			return h.sender.Send(ctx, chType, chID, response)
-		}
+		// Reply on the originating channel (not preferred channel)
+		return h.sender.Send(ctx, msg.ChannelType, msg.UserID, response)
 	}
 	return nil
 }

@@ -96,9 +96,23 @@ func handleUpdateChannels(queries *sqlc.Queries) gin.HandlerFunc {
 			return
 		}
 
-		// Build params with pgtype.Text wrappers
+		// Read current config to merge (avoid overwriting unset fields)
+		current, err := queries.GetTenantChannelConfig(c.Request.Context(), tenantID)
+		if err != nil {
+			slog.Error("get tenant channel config", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			return
+		}
+
+		// Start from current values, override only what's provided
 		params := sqlc.UpdateTenantChannelsParams{
-			ID: tenantID,
+			ID:                 tenantID,
+			SlackBotToken:      current.SlackBotToken,
+			SlackSigningSecret: current.SlackSigningSecret,
+			LarkAppID:          current.LarkAppID,
+			LarkAppSecret:      current.LarkAppSecret,
+			SignalPhone:        current.SignalPhone,
+			EnabledChannels:    current.EnabledChannels,
 		}
 		if req.SlackBotToken != nil {
 			params.SlackBotToken = pgtype.Text{String: *req.SlackBotToken, Valid: *req.SlackBotToken != ""}
@@ -116,11 +130,23 @@ func handleUpdateChannels(queries *sqlc.Queries) gin.HandlerFunc {
 			params.SignalPhone = pgtype.Text{String: *req.SignalPhone, Valid: *req.SignalPhone != ""}
 		}
 		if req.EnabledChannels != nil {
+			if len(req.EnabledChannels) == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "enabled_channels cannot be empty"})
+				return
+			}
+			hasTelegram := false
 			for _, ch := range req.EnabledChannels {
 				if !validPreferredChannels[ch] {
 					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid channel in enabled_channels: " + ch})
 					return
 				}
+				if ch == "telegram" {
+					hasTelegram = true
+				}
+			}
+			if !hasTelegram {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "enabled_channels must include telegram"})
+				return
 			}
 			params.EnabledChannels = req.EnabledChannels
 		}
@@ -231,11 +257,12 @@ func handleUpdateEmployeeChannels(queries *sqlc.Queries) gin.HandlerFunc {
 			return
 		}
 
-		// Verify employee belongs to tenant
-		if _, err := queries.GetEmployee(c.Request.Context(), sqlc.GetEmployeeParams{
+		// Verify employee belongs to tenant and get current values
+		emp, err := queries.GetEmployee(c.Request.Context(), sqlc.GetEmployeeParams{
 			ID:       empID,
 			TenantID: tenantID,
-		}); err != nil {
+		})
+		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "employee not found"})
 			return
 		}
@@ -246,8 +273,13 @@ func handleUpdateEmployeeChannels(queries *sqlc.Queries) gin.HandlerFunc {
 			return
 		}
 
+		// Start from current values, override only what's provided
 		params := sqlc.UpdateEmployeeChannelsParams{
-			ID: empID,
+			ID:               empID,
+			SignalPhone:      emp.SignalPhone,
+			SlackID:          emp.SlackID,
+			LarkID:           emp.LarkID,
+			PreferredChannel: emp.PreferredChannel,
 		}
 		if req.SignalPhone != nil {
 			params.SignalPhone = pgtype.Text{String: *req.SignalPhone, Valid: *req.SignalPhone != ""}
@@ -259,6 +291,10 @@ func handleUpdateEmployeeChannels(queries *sqlc.Queries) gin.HandlerFunc {
 			params.LarkID = pgtype.Text{String: *req.LarkID, Valid: *req.LarkID != ""}
 		}
 		if req.PreferredChannel != nil {
+			if !validPreferredChannels[*req.PreferredChannel] {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "preferred_channel must be telegram, signal, slack, or lark"})
+				return
+			}
 			params.PreferredChannel = *req.PreferredChannel
 		}
 

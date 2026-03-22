@@ -19,6 +19,12 @@ import (
 
 // HandleSlackEvent processes Slack Events API callbacks.
 func (s *SlackAdapter) HandleSlackEvent(c *gin.Context) {
+	// Ignore Slack retries to prevent duplicate processing
+	if c.Request.Header.Get("X-Slack-Retry-Num") != "" {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	}
+
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
