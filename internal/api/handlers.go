@@ -149,13 +149,17 @@ func handleListEmployees(queries *sqlc.Queries) gin.HandlerFunc {
 		result := make([]gin.H, 0, len(employees))
 		for _, e := range employees {
 			result = append(result, gin.H{
-				"id":           formatUUID(e.ID),
-				"name":         e.Name,
-				"culture_code": e.CultureCode,
-				"role":         e.Role,
-				"is_active":    e.IsActive,
-				"has_telegram":  e.TelegramID.Valid,
-				"invite_code":  e.InviteCode.String,
+				"id":               formatUUID(e.ID),
+				"name":             e.Name,
+				"culture_code":     e.CultureCode,
+				"role":             e.Role,
+				"is_active":        e.IsActive,
+				"has_telegram":     e.TelegramID.Valid,
+				"invite_code":      e.InviteCode.String,
+				"job_title":        e.JobTitle,
+				"responsibilities": e.Responsibilities,
+				"country":          e.Country,
+				"language":         e.Language,
 			})
 		}
 
@@ -165,8 +169,12 @@ func handleListEmployees(queries *sqlc.Queries) gin.HandlerFunc {
 
 // createEmployeeRequest holds the request body for creating an employee.
 type createEmployeeRequest struct {
-	Name        string `json:"name" binding:"required,min=1"`
-	CultureCode string `json:"culture_code"`
+	Name             string `json:"name" binding:"required,min=1"`
+	CultureCode      string `json:"culture_code"`
+	JobTitle         string `json:"job_title"`
+	Responsibilities string `json:"responsibilities"`
+	Country          string `json:"country"`
+	Language         string `json:"language"`
 }
 
 // handleCreateEmployee creates a new employee with an invite code.
@@ -198,11 +206,15 @@ func handleCreateEmployee(queries *sqlc.Queries) gin.HandlerFunc {
 		inviteCode := generateInviteCode()
 
 		emp, err := queries.CreateEmployee(c.Request.Context(), sqlc.CreateEmployeeParams{
-			TenantID:    tenantID,
-			Name:        req.Name,
-			CultureCode: cultureCode,
-			Role:        "member",
-			InviteCode:  pgtype.Text{String: inviteCode, Valid: true},
+			TenantID:         tenantID,
+			Name:             req.Name,
+			CultureCode:      cultureCode,
+			Role:             "member",
+			InviteCode:       pgtype.Text{String: inviteCode, Valid: true},
+			JobTitle:         req.JobTitle,
+			Responsibilities: req.Responsibilities,
+			Country:          req.Country,
+			Language:         req.Language,
 		})
 		if err != nil {
 			slog.Error("create employee", "error", err)
@@ -212,10 +224,14 @@ func handleCreateEmployee(queries *sqlc.Queries) gin.HandlerFunc {
 
 		c.JSON(http.StatusCreated, gin.H{
 			"data": gin.H{
-				"id":           formatUUID(emp.ID),
-				"name":         emp.Name,
-				"culture_code": emp.CultureCode,
-				"invite_code":  inviteCode,
+				"id":               formatUUID(emp.ID),
+				"name":             emp.Name,
+				"culture_code":     emp.CultureCode,
+				"invite_code":      inviteCode,
+				"job_title":        emp.JobTitle,
+				"responsibilities": emp.Responsibilities,
+				"country":          emp.Country,
+				"language":         emp.Language,
 			},
 		})
 	}
@@ -252,13 +268,17 @@ func handleGetEmployee(queries *sqlc.Queries) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, gin.H{
 			"data": gin.H{
-				"id":           formatUUID(emp.ID),
-				"name":         emp.Name,
-				"culture_code": emp.CultureCode,
-				"role":         emp.Role,
-				"is_active":    emp.IsActive,
-				"has_telegram":  emp.TelegramID.Valid,
-				"invite_code":  emp.InviteCode.String,
+				"id":               formatUUID(emp.ID),
+				"name":             emp.Name,
+				"culture_code":     emp.CultureCode,
+				"role":             emp.Role,
+				"is_active":        emp.IsActive,
+				"has_telegram":     emp.TelegramID.Valid,
+				"invite_code":      emp.InviteCode.String,
+				"job_title":        emp.JobTitle,
+				"responsibilities": emp.Responsibilities,
+				"country":          emp.Country,
+				"language":         emp.Language,
 			},
 		})
 	}
@@ -319,6 +339,91 @@ func handleUpdateEmployeeCulture(queries *sqlc.Queries) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"culture_code": req.CultureCode}})
+	}
+}
+
+// updateProfileRequest holds the request body for updating employee profile fields.
+type updateProfileRequest struct {
+	JobTitle         *string `json:"job_title"`
+	Responsibilities *string `json:"responsibilities"`
+	Country          *string `json:"country"`
+	Language         *string `json:"language"`
+}
+
+// handleUpdateProfile updates an employee's profile fields (boss only).
+func handleUpdateProfile(queries *sqlc.Queries) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req updateProfileRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+
+		empID, err := parseUUID(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid employee ID"})
+			return
+		}
+
+		tenantID, err := parseUUID(TenantFromContext(c))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
+
+		// Verify employee belongs to tenant
+		emp, err := queries.GetEmployee(c.Request.Context(), sqlc.GetEmployeeParams{
+			ID:       empID,
+			TenantID: tenantID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "employee not found"})
+				return
+			}
+			slog.Error("get employee for profile update", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			return
+		}
+
+		// Patch semantics: only update provided fields
+		jobTitle := emp.JobTitle
+		if req.JobTitle != nil {
+			jobTitle = *req.JobTitle
+		}
+		responsibilities := emp.Responsibilities
+		if req.Responsibilities != nil {
+			responsibilities = *req.Responsibilities
+		}
+		country := emp.Country
+		if req.Country != nil {
+			country = *req.Country
+		}
+		language := emp.Language
+		if req.Language != nil {
+			language = *req.Language
+		}
+
+		if err := queries.UpdateEmployeeProfile(c.Request.Context(), sqlc.UpdateEmployeeProfileParams{
+			ID:               empID,
+			JobTitle:         jobTitle,
+			Responsibilities: responsibilities,
+			Country:          country,
+			Language:         language,
+		}); err != nil {
+			slog.Error("update employee profile", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"data": gin.H{
+				"job_title":        jobTitle,
+				"responsibilities": responsibilities,
+				"country":          country,
+				"language":         language,
+			},
+		})
 	}
 }
 

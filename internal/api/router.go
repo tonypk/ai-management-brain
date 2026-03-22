@@ -72,6 +72,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		protected.POST("/employees", RequireRole("boss"), handleCreateEmployee(cfg.Queries))
 		protected.GET("/employees/:id", handleGetEmployee(cfg.Queries))
 		protected.PUT("/employees/:id/culture", RequireRole("boss"), handleUpdateEmployeeCulture(cfg.Queries))
+		protected.PUT("/employees/:id/profile", RequireRole("boss"), handleUpdateProfile(cfg.Queries))
 
 		// Reports
 		protected.GET("/reports", handleListReports(cfg.Queries))
