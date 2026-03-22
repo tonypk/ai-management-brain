@@ -770,7 +770,14 @@ func main() {
 				slog.Warn("mentor chat: get tenant", "error", err)
 				return nil
 			}
-			resp, err := chatService.HandleEmployee(ctx, empID, emp.TenantID, emp.Name, tenant.MentorID, emp.CultureCode, text)
+			resp, err := chatService.HandleEmployee(ctx, brain.EmployeeChatRequest{
+				EmployeeID:  empID,
+				TenantID:    emp.TenantID,
+				Name:        emp.Name,
+				MentorID:    tenant.MentorID,
+				CultureCode: emp.CultureCode,
+				Text:        text,
+			})
 			if err != nil {
 				slog.Error("mentor chat failed", "employee_id", empID, "error", err)
 				return nil
@@ -844,7 +851,13 @@ func main() {
 					return "", nil
 				}
 				// V1: employee name not available in OnText, pass empty string
-				resp, err := chatService.HandleEmployee(ctx, employeeID, tenantID, "", tenant.MentorID, "default", text)
+				resp, err := chatService.HandleEmployee(ctx, brain.EmployeeChatRequest{
+					EmployeeID:  employeeID,
+					TenantID:    tenantID,
+					MentorID:    tenant.MentorID,
+					CultureCode: "default",
+					Text:        text,
+				})
 				if err != nil {
 					slog.Error("unified mentor chat failed", "employee_id", employeeID, "error", err)
 					return "", nil

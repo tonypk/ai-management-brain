@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/tonypk/ai-management-brain/internal/memory"
@@ -347,14 +348,42 @@ func (e *Engine) BuildBossPrompt(ctx context.Context, tenantID string, bctx Buil
 	return prompt
 }
 
+// EmployeeContext holds employee profile data for prompt building.
+type EmployeeContext struct {
+	Name             string
+	JobTitle         string
+	Responsibilities string
+	Country          string
+	Language         string
+}
+
 // BuildEmployeeChatPrompt assembles the system prompt for employee mentor conversations.
-func (e *Engine) BuildEmployeeChatPrompt(ctx context.Context, tenantID, employeeID, employeeName, queryText string) string {
+func (e *Engine) BuildEmployeeChatPrompt(ctx context.Context, tenantID, employeeID string, profile EmployeeContext, queryText string) string {
 	prompt := e.BuildSystemPromptWithMemory(ctx, tenantID, employeeID, queryText)
+
+	// Inject employee context if any profile fields are set
+	var ctxParts []string
+	if profile.JobTitle != "" {
+		ctxParts = append(ctxParts, "Job Title: "+profile.JobTitle)
+	}
+	if profile.Responsibilities != "" {
+		ctxParts = append(ctxParts, "Responsibilities: "+profile.Responsibilities)
+	}
+	if profile.Country != "" {
+		ctxParts = append(ctxParts, "Country: "+profile.Country)
+	}
+	if len(ctxParts) > 0 {
+		prompt += "\n\n<employee_context>\n" + strings.Join(ctxParts, "\n") + "\n</employee_context>"
+	}
 
 	prompt += fmt.Sprintf("\nYou are %s, acting as CEO and management coach. "+
 		"The employee %q is asking you for guidance. "+
 		"Respond based on your management philosophy. Keep responses concise and actionable.",
-		e.MentorName(), employeeName)
+		e.MentorName(), profile.Name)
+
+	if profile.Language != "" {
+		prompt += fmt.Sprintf("\nReply in %s.", profile.Language)
+	}
 
 	return prompt
 }

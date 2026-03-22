@@ -115,7 +115,14 @@ func TestChatService_HandleEmployee_Basic(t *testing.T) {
 		BossTgID:      12345,
 	})
 
-	resp, err := svc.HandleEmployee(context.Background(), "emp-1", "tenant-1", "Alice", "inamori", "default", "How do I manage my team?")
+	resp, err := svc.HandleEmployee(context.Background(), EmployeeChatRequest{
+		EmployeeID:  "emp-1",
+		TenantID:    "tenant-1",
+		Name:        "Alice",
+		MentorID:    "inamori",
+		CultureCode: "default",
+		Text:        "How do I manage my team?",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,14 +158,28 @@ func TestChatService_HandleEmployee_RateLimit(t *testing.T) {
 
 	// Send 5 messages (should all succeed)
 	for i := 0; i < 5; i++ {
-		_, err := svc.HandleEmployee(context.Background(), "emp-rate", "tenant-1", "Test", "inamori", "default", "msg")
+		_, err := svc.HandleEmployee(context.Background(), EmployeeChatRequest{
+			EmployeeID:  "emp-rate",
+			TenantID:    "tenant-1",
+			Name:        "Test",
+			MentorID:    "inamori",
+			CultureCode: "default",
+			Text:        "msg",
+		})
 		if err != nil {
 			t.Fatalf("message %d should succeed: %v", i, err)
 		}
 	}
 
 	// 6th message should be rate-limited
-	resp, err := svc.HandleEmployee(context.Background(), "emp-rate", "tenant-1", "Test", "inamori", "default", "msg")
+	resp, err := svc.HandleEmployee(context.Background(), EmployeeChatRequest{
+		EmployeeID:  "emp-rate",
+		TenantID:    "tenant-1",
+		Name:        "Test",
+		MentorID:    "inamori",
+		CultureCode: "default",
+		Text:        "msg",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +197,14 @@ func TestChatService_HandleEmployee_AIDisabled(t *testing.T) {
 		EngineFactory: factory,
 	})
 
-	resp, err := svc.HandleEmployee(context.Background(), "emp-1", "tenant-1", "Alice", "inamori", "default", "hello")
+	resp, err := svc.HandleEmployee(context.Background(), EmployeeChatRequest{
+		EmployeeID:  "emp-1",
+		TenantID:    "tenant-1",
+		Name:        "Alice",
+		MentorID:    "inamori",
+		CultureCode: "default",
+		Text:        "hello",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +223,14 @@ func TestChatService_HandleEmployee_LLMError(t *testing.T) {
 		EngineFactory: factory,
 	})
 
-	resp, err := svc.HandleEmployee(context.Background(), "emp-1", "tenant-1", "Alice", "inamori", "default", "hello")
+	resp, err := svc.HandleEmployee(context.Background(), EmployeeChatRequest{
+		EmployeeID:  "emp-1",
+		TenantID:    "tenant-1",
+		Name:        "Alice",
+		MentorID:    "inamori",
+		CultureCode: "default",
+		Text:        "hello",
+	})
 	if err != nil {
 		t.Fatal(err) // HandleEmployee should not return error to caller
 	}
@@ -214,7 +249,14 @@ func TestChatService_HandleEmployee_AuthError(t *testing.T) {
 		EngineFactory: factory,
 	})
 
-	resp, err := svc.HandleEmployee(context.Background(), "emp-1", "tenant-1", "Alice", "inamori", "default", "hello")
+	resp, err := svc.HandleEmployee(context.Background(), EmployeeChatRequest{
+		EmployeeID:  "emp-1",
+		TenantID:    "tenant-1",
+		Name:        "Alice",
+		MentorID:    "inamori",
+		CultureCode: "default",
+		Text:        "hello",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +365,14 @@ func TestChatService_HistoryTrimming(t *testing.T) {
 
 	// Send 6 messages (each creates 2 entries: user + assistant = 12, trimmed to 10)
 	for i := 0; i < 6; i++ {
-		_, _ = svc.HandleEmployee(context.Background(), "emp-trim", "tenant-1", "Test", "inamori", "default", fmt.Sprintf("msg %d", i))
+		_, _ = svc.HandleEmployee(context.Background(), EmployeeChatRequest{
+			EmployeeID:  "emp-trim",
+			TenantID:    "tenant-1",
+			Name:        "Test",
+			MentorID:    "inamori",
+			CultureCode: "default",
+			Text:        fmt.Sprintf("msg %d", i),
+		})
 	}
 
 	history, _ := svc.loadHistory(context.Background(), "chat:emp-trim")

@@ -39,6 +39,7 @@ type chatHistoryMessage struct {
 // RosterEntry holds basic employee info for boss context.
 type RosterEntry struct {
 	Name     string
+	JobTitle string
 	Role     string
 	IsActive bool
 }
@@ -49,6 +50,20 @@ type BossContext struct {
 	SubmittedCount int
 	TotalEmployees int
 	EmployeeRoster []RosterEntry
+}
+
+// EmployeeChatRequest holds all data needed for an employee chat message.
+type EmployeeChatRequest struct {
+	EmployeeID       string
+	TenantID         string
+	Name             string
+	JobTitle         string
+	Responsibilities string
+	Country          string
+	Language         string
+	MentorID         string
+	CultureCode      string
+	Text             string
 }
 
 // ChatServiceConfig holds dependencies for creating a ChatService.
@@ -84,41 +99,47 @@ func AIDisabledMessage() string { return aiDisabledMessage }
 func AIErrorMessage() string { return aiErrorMessage }
 
 // HandleEmployee processes a chat message from an employee.
-func (s *ChatService) HandleEmployee(ctx context.Context, employeeID, tenantID, employeeName, mentorID, cultureCode, text string) (string, error) {
+func (s *ChatService) HandleEmployee(ctx context.Context, req EmployeeChatRequest) (string, error) {
 	if s.llm == nil {
 		return aiDisabledMessage, nil
 	}
 
 	// Rate limiting
-	if limited, err := s.checkRateLimit(ctx, employeeID); err != nil {
-		slog.Error("rate limit check failed", "employee_id", employeeID, "error", err)
+	if limited, err := s.checkRateLimit(ctx, req.EmployeeID); err != nil {
+		slog.Error("rate limit check failed", "employee_id", req.EmployeeID, "error", err)
 	} else if limited {
 		return rateLimitMessage, nil
 	}
 
 	// Load engine for this tenant's mentor+culture
-	engine, err := s.engineFactory.ForTenant(mentorID, cultureCode)
+	engine, err := s.engineFactory.ForTenant(req.MentorID, req.CultureCode)
 	if err != nil {
 		engine, _ = s.engineFactory.ForTenant("inamori", "default")
 	}
 
 	// Load history and check for gap-based extraction
-	history, err := s.loadHistory(ctx, chatKey(employeeID))
+	history, err := s.loadHistory(ctx, chatKey(req.EmployeeID))
 	if err != nil {
-		slog.Warn("load chat history failed", "employee_id", employeeID, "error", err)
+		slog.Warn("load chat history failed", "employee_id", req.EmployeeID, "error", err)
 	}
-	history = s.checkGapAndTrim(ctx, chatKey(employeeID), history, employeeID, tenantID)
+	history = s.checkGapAndTrim(ctx, chatKey(req.EmployeeID), history, req.EmployeeID, req.TenantID)
 
 	// Build system prompt with memory recall
-	systemPrompt := engine.BuildEmployeeChatPrompt(ctx, tenantID, employeeID, employeeName, text)
+	systemPrompt := engine.BuildEmployeeChatPrompt(ctx, req.TenantID, req.EmployeeID, EmployeeContext{
+		Name:             req.Name,
+		JobTitle:         req.JobTitle,
+		Responsibilities: req.Responsibilities,
+		Country:          req.Country,
+		Language:         req.Language,
+	}, req.Text)
 
 	// Convert history to ChatMessage format
 	chatHistory := historyToChatMessages(history)
 
 	// Call LLM
-	response, err := s.llm.ChatWithHistory(ctx, systemPrompt, chatHistory, text)
+	response, err := s.llm.ChatWithHistory(ctx, systemPrompt, chatHistory, req.Text)
 	if err != nil {
-		slog.Error("chat LLM call failed", "employee_id", employeeID, "error", err)
+		slog.Error("chat LLM call failed", "employee_id", req.EmployeeID, "error", err)
 		if IsAuthError(err) {
 			return aiDisabledMessage, nil
 		}
@@ -128,7 +149,7 @@ func (s *ChatService) HandleEmployee(ctx context.Context, employeeID, tenantID, 
 	// Append user message and assistant response to history
 	now := time.Now()
 	history = append(history,
-		chatHistoryMessage{Role: "user", Content: text, TS: now},
+		chatHistoryMessage{Role: "user", Content: req.Text, TS: now},
 		chatHistoryMessage{Role: "assistant", Content: response, TS: now},
 	)
 
@@ -136,8 +157,8 @@ func (s *ChatService) HandleEmployee(ctx context.Context, employeeID, tenantID, 
 	if len(history) > maxHistoryMessages {
 		history = history[len(history)-maxHistoryMessages:]
 	}
-	if err := s.saveHistory(ctx, chatKey(employeeID), history); err != nil {
-		slog.Error("save chat history failed", "employee_id", employeeID, "error", err)
+	if err := s.saveHistory(ctx, chatKey(req.EmployeeID), history); err != nil {
+		slog.Error("save chat history failed", "employee_id", req.EmployeeID, "error", err)
 	}
 
 	return response, nil
@@ -170,7 +191,11 @@ func (s *ChatService) HandleBoss(ctx context.Context, tenantID, mentorID, cultur
 		if !emp.IsActive {
 			status = "inactive"
 		}
-		fmt.Fprintf(&rosterSB, "%d. %s (%s, %s)\n", i+1, emp.Name, emp.Role, status)
+		if emp.JobTitle != "" {
+			fmt.Fprintf(&rosterSB, "%d. %s - %s (%s, %s)\n", i+1, emp.Name, emp.JobTitle, emp.Role, status)
+		} else {
+			fmt.Fprintf(&rosterSB, "%d. %s (%s, %s)\n", i+1, emp.Name, emp.Role, status)
+		}
 	}
 
 	// Check if boss mentions an employee by name

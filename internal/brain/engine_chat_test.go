@@ -59,11 +59,50 @@ func TestEngine_BuildEmployeeChatPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prompt := e.BuildEmployeeChatPrompt(context.Background(), "tenant-1", "emp-1", "Alice", "I have a problem")
+	prompt := e.BuildEmployeeChatPrompt(context.Background(), "tenant-1", "emp-1", EmployeeContext{Name: "Alice"}, "I have a problem")
 	if !strings.Contains(prompt, "Alice") {
 		t.Fatal("employee chat prompt should contain employee name")
 	}
 	if !strings.Contains(prompt, "coach") {
 		t.Fatal("employee chat prompt should reference coaching role")
+	}
+}
+
+func TestEngine_BuildEmployeeChatPrompt_WithProfile(t *testing.T) {
+	e, err := NewEngine("inamori", "default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt := e.BuildEmployeeChatPrompt(context.Background(), "tenant-1", "emp-1", EmployeeContext{
+		Name:             "Alice",
+		JobTitle:         "Frontend Developer",
+		Responsibilities: "Handles UI/UX",
+		Country:          "Philippines",
+		Language:         "Chinese",
+	}, "I have a problem")
+	if !strings.Contains(prompt, "<employee_context>") {
+		t.Fatal("prompt should contain employee_context block")
+	}
+	if !strings.Contains(prompt, "Frontend Developer") {
+		t.Fatal("prompt should contain job title")
+	}
+	if !strings.Contains(prompt, "Reply in Chinese") {
+		t.Fatal("prompt should contain language instruction")
+	}
+}
+
+func TestEngine_BuildEmployeeChatPrompt_EmptyProfile(t *testing.T) {
+	e, err := NewEngine("inamori", "default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt := e.BuildEmployeeChatPrompt(context.Background(), "tenant-1", "emp-1", EmployeeContext{
+		Name: "Alice",
+	}, "I have a problem")
+	if strings.Contains(prompt, "<employee_context>") {
+		t.Fatal("prompt should NOT contain employee_context block when all fields empty")
+	}
+	if strings.Contains(prompt, "Reply in") {
+		t.Fatal("prompt should NOT contain language instruction when language empty")
 	}
 }
