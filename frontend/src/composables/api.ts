@@ -92,11 +92,28 @@ export async function listEmployees() {
   return request<{ data: Employee[] }>("/employees");
 }
 
-export async function createEmployee(name: string, cultureCode: string) {
+export async function createEmployee(data: {
+  name: string;
+  culture_code: string;
+  job_title?: string;
+  responsibilities?: string;
+  country?: string;
+  language?: string;
+}) {
   return request<{ data: Employee }>("/employees", {
     method: "POST",
-    body: JSON.stringify({ name, culture_code: cultureCode }),
+    body: JSON.stringify(data),
   });
+}
+
+export async function updateEmployeeProfile(
+  id: string,
+  data: { job_title?: string; responsibilities?: string; country?: string; language?: string },
+) {
+  return request<{ data: { job_title: string; responsibilities: string; country: string; language: string } }>(
+    `/employees/${id}/profile`,
+    { method: "PUT", body: JSON.stringify(data) },
+  );
 }
 
 // Reports
@@ -362,6 +379,10 @@ export interface Employee {
   is_active: boolean;
   has_telegram: boolean;
   invite_code: string;
+  job_title: string;
+  responsibilities: string;
+  country: string;
+  language: string;
 }
 
 export interface Report {
