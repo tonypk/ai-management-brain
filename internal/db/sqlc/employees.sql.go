@@ -12,18 +12,22 @@ import (
 )
 
 const createEmployee = `-- name: CreateEmployee :one
-INSERT INTO employees (tenant_id, name, telegram_id, culture_code, role, invite_code)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel
+INSERT INTO employees (tenant_id, name, telegram_id, culture_code, role, invite_code, job_title, responsibilities, country, language)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language
 `
 
 type CreateEmployeeParams struct {
-	TenantID    pgtype.UUID `json:"tenant_id"`
-	Name        string      `json:"name"`
-	TelegramID  pgtype.Int8 `json:"telegram_id"`
-	CultureCode string      `json:"culture_code"`
-	Role        string      `json:"role"`
-	InviteCode  pgtype.Text `json:"invite_code"`
+	TenantID         pgtype.UUID `json:"tenant_id"`
+	Name             string      `json:"name"`
+	TelegramID       pgtype.Int8 `json:"telegram_id"`
+	CultureCode      string      `json:"culture_code"`
+	Role             string      `json:"role"`
+	InviteCode       pgtype.Text `json:"invite_code"`
+	JobTitle         string      `json:"job_title"`
+	Responsibilities string      `json:"responsibilities"`
+	Country          string      `json:"country"`
+	Language         string      `json:"language"`
 }
 
 func (q *Queries) CreateEmployee(ctx context.Context, arg CreateEmployeeParams) (Employee, error) {
@@ -34,6 +38,10 @@ func (q *Queries) CreateEmployee(ctx context.Context, arg CreateEmployeeParams) 
 		arg.CultureCode,
 		arg.Role,
 		arg.InviteCode,
+		arg.JobTitle,
+		arg.Responsibilities,
+		arg.Country,
+		arg.Language,
 	)
 	var i Employee
 	err := row.Scan(
@@ -50,12 +58,16 @@ func (q *Queries) CreateEmployee(ctx context.Context, arg CreateEmployeeParams) 
 		&i.SlackID,
 		&i.LarkID,
 		&i.PreferredChannel,
+		&i.JobTitle,
+		&i.Responsibilities,
+		&i.Country,
+		&i.Language,
 	)
 	return i, err
 }
 
 const getEmployee = `-- name: GetEmployee :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel FROM employees WHERE id = $1 AND tenant_id = $2
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language FROM employees WHERE id = $1 AND tenant_id = $2
 `
 
 type GetEmployeeParams struct {
@@ -80,12 +92,16 @@ func (q *Queries) GetEmployee(ctx context.Context, arg GetEmployeeParams) (Emplo
 		&i.SlackID,
 		&i.LarkID,
 		&i.PreferredChannel,
+		&i.JobTitle,
+		&i.Responsibilities,
+		&i.Country,
+		&i.Language,
 	)
 	return i, err
 }
 
 const getEmployeeByInviteCode = `-- name: GetEmployeeByInviteCode :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel FROM employees WHERE invite_code = $1 AND telegram_id IS NULL
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language FROM employees WHERE invite_code = $1 AND telegram_id IS NULL
 `
 
 func (q *Queries) GetEmployeeByInviteCode(ctx context.Context, inviteCode pgtype.Text) (Employee, error) {
@@ -105,12 +121,16 @@ func (q *Queries) GetEmployeeByInviteCode(ctx context.Context, inviteCode pgtype
 		&i.SlackID,
 		&i.LarkID,
 		&i.PreferredChannel,
+		&i.JobTitle,
+		&i.Responsibilities,
+		&i.Country,
+		&i.Language,
 	)
 	return i, err
 }
 
 const getEmployeeByLarkID = `-- name: GetEmployeeByLarkID :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel FROM employees WHERE lark_id = $1 AND is_active = true
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language FROM employees WHERE lark_id = $1 AND is_active = true
 `
 
 func (q *Queries) GetEmployeeByLarkID(ctx context.Context, larkID pgtype.Text) (Employee, error) {
@@ -130,12 +150,16 @@ func (q *Queries) GetEmployeeByLarkID(ctx context.Context, larkID pgtype.Text) (
 		&i.SlackID,
 		&i.LarkID,
 		&i.PreferredChannel,
+		&i.JobTitle,
+		&i.Responsibilities,
+		&i.Country,
+		&i.Language,
 	)
 	return i, err
 }
 
 const getEmployeeBySignalPhone = `-- name: GetEmployeeBySignalPhone :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel FROM employees WHERE signal_phone = $1 AND is_active = true
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language FROM employees WHERE signal_phone = $1 AND is_active = true
 `
 
 func (q *Queries) GetEmployeeBySignalPhone(ctx context.Context, signalPhone pgtype.Text) (Employee, error) {
@@ -155,12 +179,16 @@ func (q *Queries) GetEmployeeBySignalPhone(ctx context.Context, signalPhone pgty
 		&i.SlackID,
 		&i.LarkID,
 		&i.PreferredChannel,
+		&i.JobTitle,
+		&i.Responsibilities,
+		&i.Country,
+		&i.Language,
 	)
 	return i, err
 }
 
 const getEmployeeBySlackID = `-- name: GetEmployeeBySlackID :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel FROM employees WHERE slack_id = $1 AND is_active = true
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language FROM employees WHERE slack_id = $1 AND is_active = true
 `
 
 func (q *Queries) GetEmployeeBySlackID(ctx context.Context, slackID pgtype.Text) (Employee, error) {
@@ -180,12 +208,16 @@ func (q *Queries) GetEmployeeBySlackID(ctx context.Context, slackID pgtype.Text)
 		&i.SlackID,
 		&i.LarkID,
 		&i.PreferredChannel,
+		&i.JobTitle,
+		&i.Responsibilities,
+		&i.Country,
+		&i.Language,
 	)
 	return i, err
 }
 
 const getEmployeeByTelegramID = `-- name: GetEmployeeByTelegramID :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel FROM employees WHERE telegram_id = $1
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language FROM employees WHERE telegram_id = $1
 `
 
 func (q *Queries) GetEmployeeByTelegramID(ctx context.Context, telegramID pgtype.Int8) (Employee, error) {
@@ -205,12 +237,16 @@ func (q *Queries) GetEmployeeByTelegramID(ctx context.Context, telegramID pgtype
 		&i.SlackID,
 		&i.LarkID,
 		&i.PreferredChannel,
+		&i.JobTitle,
+		&i.Responsibilities,
+		&i.Country,
+		&i.Language,
 	)
 	return i, err
 }
 
 const listActiveEmployees = `-- name: ListActiveEmployees :many
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel FROM employees WHERE tenant_id = $1 AND is_active = true ORDER BY name
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language FROM employees WHERE tenant_id = $1 AND is_active = true ORDER BY name
 `
 
 func (q *Queries) ListActiveEmployees(ctx context.Context, tenantID pgtype.UUID) ([]Employee, error) {
@@ -236,6 +272,10 @@ func (q *Queries) ListActiveEmployees(ctx context.Context, tenantID pgtype.UUID)
 			&i.SlackID,
 			&i.LarkID,
 			&i.PreferredChannel,
+			&i.JobTitle,
+			&i.Responsibilities,
+			&i.Country,
+			&i.Language,
 		); err != nil {
 			return nil, err
 		}
@@ -248,7 +288,7 @@ func (q *Queries) ListActiveEmployees(ctx context.Context, tenantID pgtype.UUID)
 }
 
 const listEmployeesWithChannels = `-- name: ListEmployeesWithChannels :many
-SELECT id, tenant_id, name, telegram_id, signal_phone, slack_id, lark_id, preferred_channel, culture_code, role, is_active
+SELECT id, tenant_id, name, telegram_id, signal_phone, slack_id, lark_id, preferred_channel, culture_code, role, is_active, job_title, responsibilities, country, language
 FROM employees
 WHERE tenant_id = $1 AND is_active = true
 ORDER BY name
@@ -266,6 +306,10 @@ type ListEmployeesWithChannelsRow struct {
 	CultureCode      string      `json:"culture_code"`
 	Role             string      `json:"role"`
 	IsActive         bool        `json:"is_active"`
+	JobTitle         string      `json:"job_title"`
+	Responsibilities string      `json:"responsibilities"`
+	Country          string      `json:"country"`
+	Language         string      `json:"language"`
 }
 
 func (q *Queries) ListEmployeesWithChannels(ctx context.Context, tenantID pgtype.UUID) ([]ListEmployeesWithChannelsRow, error) {
@@ -289,6 +333,10 @@ func (q *Queries) ListEmployeesWithChannels(ctx context.Context, tenantID pgtype
 			&i.CultureCode,
 			&i.Role,
 			&i.IsActive,
+			&i.JobTitle,
+			&i.Responsibilities,
+			&i.Country,
+			&i.Language,
 		); err != nil {
 			return nil, err
 		}
@@ -301,7 +349,7 @@ func (q *Queries) ListEmployeesWithChannels(ctx context.Context, tenantID pgtype
 }
 
 const listEmployeesWithoutReport = `-- name: ListEmployeesWithoutReport :many
-SELECT e.id, e.tenant_id, e.name, e.telegram_id, e.culture_code, e.role, e.invite_code, e.is_active, e.created_at, e.signal_phone, e.slack_id, e.lark_id, e.preferred_channel FROM employees e
+SELECT e.id, e.tenant_id, e.name, e.telegram_id, e.culture_code, e.role, e.invite_code, e.is_active, e.created_at, e.signal_phone, e.slack_id, e.lark_id, e.preferred_channel, e.job_title, e.responsibilities, e.country, e.language FROM employees e
 LEFT JOIN reports r ON e.id = r.employee_id AND r.report_date = $2
 WHERE e.tenant_id = $1 AND e.is_active = true AND e.role = 'member' AND r.id IS NULL
 `
@@ -334,6 +382,10 @@ func (q *Queries) ListEmployeesWithoutReport(ctx context.Context, arg ListEmploy
 			&i.SlackID,
 			&i.LarkID,
 			&i.PreferredChannel,
+			&i.JobTitle,
+			&i.Responsibilities,
+			&i.Country,
+			&i.Language,
 		); err != nil {
 			return nil, err
 		}
@@ -395,6 +447,31 @@ type UpdateEmployeePreferredChannelParams struct {
 
 func (q *Queries) UpdateEmployeePreferredChannel(ctx context.Context, arg UpdateEmployeePreferredChannelParams) error {
 	_, err := q.db.Exec(ctx, updateEmployeePreferredChannel, arg.ID, arg.PreferredChannel)
+	return err
+}
+
+const updateEmployeeProfile = `-- name: UpdateEmployeeProfile :exec
+UPDATE employees
+SET job_title = $2, responsibilities = $3, country = $4, language = $5
+WHERE id = $1
+`
+
+type UpdateEmployeeProfileParams struct {
+	ID               pgtype.UUID `json:"id"`
+	JobTitle         string      `json:"job_title"`
+	Responsibilities string      `json:"responsibilities"`
+	Country          string      `json:"country"`
+	Language         string      `json:"language"`
+}
+
+func (q *Queries) UpdateEmployeeProfile(ctx context.Context, arg UpdateEmployeeProfileParams) error {
+	_, err := q.db.Exec(ctx, updateEmployeeProfile,
+		arg.ID,
+		arg.JobTitle,
+		arg.Responsibilities,
+		arg.Country,
+		arg.Language,
+	)
 	return err
 }
 

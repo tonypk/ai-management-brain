@@ -73,6 +73,10 @@ type Employee struct {
 	SlackID          pgtype.Text        `json:"slack_id"`
 	LarkID           pgtype.Text        `json:"lark_id"`
 	PreferredChannel string             `json:"preferred_channel"`
+	JobTitle         string             `json:"job_title"`
+	Responsibilities string             `json:"responsibilities"`
+	Country          string             `json:"country"`
+	Language         string             `json:"language"`
 }
 
 type Memory struct {

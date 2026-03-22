@@ -382,7 +382,18 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS enabled_channels TEXT[] NOT NULL DE
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS channel VARCHAR(20) NOT NULL DEFAULT 'telegram';
 ALTER TABLE chase_logs ADD COLUMN IF NOT EXISTS channel VARCHAR(20) NOT NULL DEFAULT 'telegram';
 `
-	_, err := pool.Exec(ctx, migration007)
+	if _, err := pool.Exec(ctx, migration007); err != nil {
+		return err
+	}
+
+	const migration008 = `
+-- 000008: employee profile fields
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS job_title       TEXT NOT NULL DEFAULT '';
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS responsibilities TEXT NOT NULL DEFAULT '';
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS country         TEXT NOT NULL DEFAULT '';
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS language        TEXT NOT NULL DEFAULT '';
+`
+	_, err := pool.Exec(ctx, migration008)
 	return err
 }
 

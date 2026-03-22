@@ -8,8 +8,8 @@ SELECT * FROM employees WHERE telegram_id = $1;
 SELECT * FROM employees WHERE tenant_id = $1 AND is_active = true ORDER BY name;
 
 -- name: CreateEmployee :one
-INSERT INTO employees (tenant_id, name, telegram_id, culture_code, role, invite_code)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO employees (tenant_id, name, telegram_id, culture_code, role, invite_code, job_title, responsibilities, country, language)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateEmployeeTelegramID :exec
@@ -43,8 +43,13 @@ WHERE id = $1;
 -- name: UpdateEmployeePreferredChannel :exec
 UPDATE employees SET preferred_channel = $2 WHERE id = $1;
 
+-- name: UpdateEmployeeProfile :exec
+UPDATE employees
+SET job_title = $2, responsibilities = $3, country = $4, language = $5
+WHERE id = $1;
+
 -- name: ListEmployeesWithChannels :many
-SELECT id, tenant_id, name, telegram_id, signal_phone, slack_id, lark_id, preferred_channel, culture_code, role, is_active
+SELECT id, tenant_id, name, telegram_id, signal_phone, slack_id, lark_id, preferred_channel, culture_code, role, is_active, job_title, responsibilities, country, language
 FROM employees
 WHERE tenant_id = $1 AND is_active = true
 ORDER BY name;
