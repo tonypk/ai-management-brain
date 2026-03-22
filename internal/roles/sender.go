@@ -19,6 +19,6 @@ func NewBossSender(sender channel.Sender, bossChannelType channel.Type, bossChan
 }
 
 // SendToBoss sends a text message to the boss.
-func (s *BossSender) SendToBoss(text string) error {
-	return s.sender.Send(context.Background(), s.bossChannelType, s.bossChannelID, text)
+func (s *BossSender) SendToBoss(ctx context.Context, text string) error {
+	return s.sender.Send(ctx, s.bossChannelType, s.bossChannelID, text)
 }

@@ -2,6 +2,8 @@ package roles
 
 import (
 	"context"
+	"log/slog"
+	"strconv"
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
 	"github.com/tonypk/ai-management-brain/internal/channel"
@@ -82,11 +84,9 @@ func toBossEmployeeInfo(channelType string, channelID string) report.EmployeeInf
 
 	switch channel.Type(channelType) {
 	case channel.TypeTelegram:
-		var chatID int64
-		for _, c := range channelID {
-			if c >= '0' && c <= '9' {
-				chatID = chatID*10 + int64(c-'0')
-			}
+		chatID, err := strconv.ParseInt(channelID, 10, 64)
+		if err != nil {
+			slog.Warn("invalid telegram chat ID", "channelID", channelID, "error", err)
 		}
 		info.TelegramID = chatID
 	case channel.TypeSignal:

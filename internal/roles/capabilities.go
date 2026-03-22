@@ -32,7 +32,7 @@ func executeDailySummary(ctx context.Context, agent *RoleAgent, deps *AgentDeps)
 	msg := agent.Brand(fmt.Sprintf("Daily Status (%s)\nSubmission rate: %.0f%%\n\n%s",
 		today, result.SubmissionRate*100, commentary))
 
-	return deps.Sender.SendToBoss(msg)
+	return deps.Sender.SendToBoss(ctx, msg)
 }
 
 // executeChaseMissing runs the chaser and sends a branded summary.
@@ -44,7 +44,7 @@ func executeChaseMissing(ctx context.Context, agent *RoleAgent, deps *AgentDeps)
 	}
 
 	msg := agent.Brand(fmt.Sprintf("Chase report complete for %s. Non-submitters have been reminded.", today))
-	return deps.Sender.SendToBoss(msg)
+	return deps.Sender.SendToBoss(ctx, msg)
 }
 
 // executeWeeklySummary generates a weekly operations insight.
@@ -57,7 +57,7 @@ func executeWeeklySummary(ctx context.Context, agent *RoleAgent, deps *AgentDeps
 		"Generate a brief weekly operations summary highlighting team health, process improvements needed, and key metrics trends.")
 
 	msg := agent.Brand(fmt.Sprintf("Weekly Operations Review\n\n%s", commentary))
-	return deps.Sender.SendToBoss(msg)
+	return deps.Sender.SendToBoss(ctx, msg)
 }
 
 // executeCheckAlerts handles alert checking by creating suggestions for critical issues.
@@ -119,7 +119,7 @@ func executeSendBrandedMsg(ctx context.Context, agent *RoleAgent, deps *AgentDep
 		fmt.Sprintf("You are the %s. Provide a brief status update relevant to your scope: %s", agent.Title, agent.config.Scope))
 
 	msg := agent.Brand(commentary)
-	return deps.Sender.SendToBoss(msg)
+	return deps.Sender.SendToBoss(ctx, msg)
 }
 
 // generateCommentary uses LLM to generate role-specific commentary, with fallback.

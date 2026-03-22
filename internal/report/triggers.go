@@ -51,6 +51,12 @@ func (t *TriggerChecker) CheckAll(ctx context.Context, tenantID, mentorID string
 		return nil, nil
 	}
 
+	// Resolve boss channel once for all trigger actions
+	bossChType, bossChID := resolveEmployeeChannel(bossInfo)
+	if bossChType == "" {
+		return nil, fmt.Errorf("boss has no channel configured")
+	}
+
 	employees, err := t.db.ListActiveEmployees(ctx, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("list employees: %w", err)
@@ -78,7 +84,7 @@ func (t *TriggerChecker) CheckAll(ctx context.Context, tenantID, mentorID string
 				Message:      msg,
 			}
 
-			if err := t.executeAction(ctx, trigger.Action, msg, emp, bossInfo); err != nil {
+			if err := t.executeAction(ctx, trigger.Action, msg, emp, bossChType, bossChID); err != nil {
 				slog.Error("trigger action", "employee", emp.Name, "action", trigger.Action, "error", err)
 			} else {
 				slog.Info("trigger fired", "employee", emp.Name, "event", trigger.Event, "action", trigger.Action)
@@ -121,15 +127,12 @@ func (t *TriggerChecker) eventMatches(ctx context.Context, emp EmployeeInfo, eve
 }
 
 // executeAction performs the triggered action.
-func (t *TriggerChecker) executeAction(ctx context.Context, action, msg string, emp EmployeeInfo, bossInfo EmployeeInfo) error {
+// bossChType/bossChID are pre-resolved boss channel coordinates.
+func (t *TriggerChecker) executeAction(ctx context.Context, action, msg string, emp EmployeeInfo, bossChType channel.Type, bossChID string) error {
 	switch action {
 	case "manager_notify", "manager_private_chat", "suggest_one_on_one", "performance_warning":
 		// Notify the boss
-		chType, chID := resolveEmployeeChannel(bossInfo)
-		if chType == "" {
-			return fmt.Errorf("boss has no channel configured")
-		}
-		return t.sender.Send(ctx, chType, chID, fmt.Sprintf("⚠️ Trigger Alert\n\n%s", msg))
+		return t.sender.Send(ctx, bossChType, bossChID, fmt.Sprintf("⚠️ Trigger Alert\n\n%s", msg))
 
 	case "private_checkin", "private_message":
 		// Send to the employee directly
@@ -141,19 +144,11 @@ func (t *TriggerChecker) executeAction(ctx context.Context, action, msg string, 
 
 	case "public_recognition":
 		// Notify the boss about the recognition (they can share)
-		chType, chID := resolveEmployeeChannel(bossInfo)
-		if chType == "" {
-			return fmt.Errorf("boss has no channel configured")
-		}
-		return t.sender.Send(ctx, chType, chID, fmt.Sprintf("🌟 Recognition\n\n%s", msg))
+		return t.sender.Send(ctx, bossChType, bossChID, fmt.Sprintf("🌟 Recognition\n\n%s", msg))
 
 	case "create_principle":
 		// Notify boss to create a principle
-		chType, chID := resolveEmployeeChannel(bossInfo)
-		if chType == "" {
-			return fmt.Errorf("boss has no channel configured")
-		}
-		return t.sender.Send(ctx, chType, chID, fmt.Sprintf("📋 Principle Suggestion\n\n%s", msg))
+		return t.sender.Send(ctx, bossChType, bossChID, fmt.Sprintf("📋 Principle Suggestion\n\n%s", msg))
 
 	default:
 		slog.Debug("unknown trigger action", "action", action)

@@ -172,7 +172,7 @@ func TestBossSender_SendToBoss(t *testing.T) {
 	}}
 
 	bs := NewBossSender(sender, channel.TypeTelegram, "12345")
-	err := bs.SendToBoss("test message")
+	err := bs.SendToBoss(context.Background(), "test message")
 	if err != nil {
 		t.Fatalf("SendToBoss: %v", err)
 	}
