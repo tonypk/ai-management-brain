@@ -90,12 +90,14 @@ func (s *ChatService) HandleEmployee(ctx context.Context, req EmployeeChatReques
 
 All callers (Telegram handler, UnifiedHandler OnText) are updated to pass the struct.
 
+For the Telegram handler in `main.go`, the `bot.Employee` struct (from middleware) already has all fields. For the unified handler `OnText`, the callback currently only receives `employeeID` and `tenantID` — it must fetch the employee record from DB to populate profile fields. Change the `OnText` signature to also pass the employee name and profile fields (from the `resolveEmployee` lookup that already happens in `message_handler.go`).
+
 `BuildEmployeeChatPrompt` signature also changes to accept the new fields:
 
 ```go
-func (e *Engine) BuildEmployeeChatPrompt(ctx context.Context, tenantID, employeeID string, profile EmployeeProfile, queryText string) string
+func (e *Engine) BuildEmployeeChatPrompt(ctx context.Context, tenantID, employeeID string, profile EmployeeContext, queryText string) string
 
-type EmployeeProfile struct {
+type EmployeeContext struct {
     Name             string
     JobTitle         string
     Responsibilities string
@@ -116,8 +118,9 @@ Pipe-separated fields: `name | job_title | responsibilities | country | language
 
 - Only `name` is required
 - Remaining fields are optional (left empty if not provided)
-- `culture_code` moves to a separate `/culture` command (already exists)
+- `culture_code` defaults to `"default"` when creating via bot; use `/culture` command to change it
 - Backward compatible: `/addemployee Alice` still works (all profile fields default to empty)
+- `/help` and `/start` command text updated to show new format
 
 Response:
 ```
@@ -196,6 +199,8 @@ Updates the 4 profile fields:
 
 All fields optional — only provided fields are updated (patch semantics).
 
+The handler must verify the employee belongs to the authenticated tenant before calling `UpdateEmployeeContext`, matching the existing pattern in `handleUpdateEmployeeCulture`.
+
 ## Frontend Changes
 
 ### EmployeesView.vue — Add Employee Form
@@ -209,6 +214,10 @@ Add 4 input fields to the create form:
 ### EmployeesView.vue — Table
 
 Add `Job Title` column to the employees table (between Name and Culture).
+
+### EmployeesView.vue — Edit Profile
+
+Add an edit button per employee row that opens a modal with the 4 profile fields. On save, calls `PUT /api/v1/employees/:id/profile`.
 
 ### Employee TypeScript Interface
 
@@ -228,6 +237,8 @@ export interface Employee {
 }
 ```
 
+Add `updateEmployeeContext(id: string, data: Partial<Pick<Employee, 'job_title' | 'responsibilities' | 'country' | 'language'>>)` function to `api.ts`.
+
 ## sqlc Changes
 
 ### New Query: CreateEmployee (updated)
@@ -239,10 +250,10 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 ```
 
-### New Query: UpdateEmployeeProfile
+### New Query: UpdateEmployeeContext
 
 ```sql
--- name: UpdateEmployeeProfile :exec
+-- name: UpdateEmployeeContext :exec
 UPDATE employees
 SET job_title = $2, responsibilities = $3, country = $4, language = $5
 WHERE id = $1;
@@ -252,24 +263,29 @@ WHERE id = $1;
 
 `ListActiveEmployees`, `GetEmployee`, `GetEmployeeByTelegramID` etc. all automatically pick up the new columns since they use `SELECT *` or return the full `Employee` struct. The sqlc models.go `Employee` struct gains 4 new fields after regeneration.
 
+**Note:** `ListEmployeesWithChannels` uses an explicit column list and returns a separate `ListEmployeesWithChannelsRow` struct. Add the 4 new columns to this query's SELECT list so the admin view can display them.
+
 ## Files Changed
 
 ### New Files
 - None
 
 ### Modified Files
-- `cmd/brain/main.go` — Add migration 000008
-- `sql/queries/employees.sql` — Update CreateEmployee, add UpdateEmployeeProfile
+- `cmd/brain/main.go` — Add migration 000008, update Telegram handler + unified handler OnText + fetchBossContext + RosterEntry
+- `sql/queries/employees.sql` — Update CreateEmployee, add UpdateEmployeeContext, update ListEmployeesWithChannels
 - `internal/db/sqlc/` — Regenerated (models.go, employees.sql.go)
-- `internal/bot/commands.go` — Update `/addemployee` parser, update `/profile` display
-- `internal/bot/adapter.go` — Add new fields to bot.Employee, CreateEmployeeParams
+- `internal/bot/commands.go` — Update `/addemployee` parser, update `/profile` display, update `/help` and `/start` text
+- `internal/bot/adapter.go` — Add new fields to bot.Employee, CreateEmployeeParams, sqlcEmployeeToBot
 - `internal/bot/middleware.go` — Add new fields to bot.Employee struct
-- `internal/brain/engine.go` — Update BuildEmployeeChatPrompt with EmployeeProfile
-- `internal/brain/chat.go` — Change HandleEmployee to EmployeeChatRequest struct, update HandleBoss roster
-- `internal/api/handlers.go` — Update create/list/get employee handlers, add updateProfile
+- `internal/brain/engine.go` — Update BuildEmployeeChatPrompt with EmployeeContext
+- `internal/brain/chat.go` — Change HandleEmployee to EmployeeChatRequest struct, add JobTitle to RosterEntry, update HandleBoss roster
+- `internal/brain/chat_test.go` — Update tests for EmployeeChatRequest struct
+- `internal/brain/engine_chat_test.go` — Update tests for EmployeeContext
+- `internal/api/handlers.go` — Update create/list/get employee handlers, add handleUpdateProfile (with tenant verification)
 - `internal/api/router.go` — Add PUT /employees/:id/profile route
-- `frontend/src/composables/api.ts` — Update Employee interface
-- `frontend/src/views/EmployeesView.vue` — Add form fields, table column
+- `internal/api/message_handler.go` — Pass employee profile fields to OnText callback
+- `frontend/src/composables/api.ts` — Update Employee interface, add updateEmployeeContext function
+- `frontend/src/views/EmployeesView.vue` — Add form fields, table column, edit profile modal
 
 ### Unchanged
 - Report collection flow
