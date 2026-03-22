@@ -14,14 +14,16 @@ import (
 
 // LarkConfig holds configuration for the Lark adapter.
 type LarkConfig struct {
-	AppID     string // Lark app ID
-	AppSecret string // Lark app secret
+	AppID             string // Lark app ID
+	AppSecret         string // Lark app secret
+	VerificationToken string // optional, from Lark developer console
 }
 
 // LarkAdapter implements Channel for Lark (Feishu) using the Open API.
 type LarkAdapter struct {
-	appID     string
-	appSecret string
+	appID             string
+	appSecret         string
+	verificationToken string
 
 	mu          sync.RWMutex
 	accessToken string
@@ -30,6 +32,7 @@ type LarkAdapter struct {
 	httpClient *http.Client
 	stopCh     chan struct{}
 	baseURL    string
+	msgHandler func(ctx context.Context, msg Message) error
 }
 
 const (
@@ -45,11 +48,12 @@ func NewLarkAdapter(cfg LarkConfig) (*LarkAdapter, error) {
 		return nil, fmt.Errorf("lark app ID and secret are required")
 	}
 	return &LarkAdapter{
-		appID:      cfg.AppID,
-		appSecret:  cfg.AppSecret,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
-		stopCh:     make(chan struct{}),
-		baseURL:    larkBaseURL,
+		appID:             cfg.AppID,
+		appSecret:         cfg.AppSecret,
+		verificationToken: cfg.VerificationToken,
+		httpClient:        &http.Client{Timeout: 10 * time.Second},
+		stopCh:            make(chan struct{}),
+		baseURL:           larkBaseURL,
 	}, nil
 }
 
@@ -59,11 +63,12 @@ func NewLarkAdapterWithBaseURL(cfg LarkConfig, baseURL string) (*LarkAdapter, er
 		return nil, fmt.Errorf("lark app ID and secret are required")
 	}
 	return &LarkAdapter{
-		appID:      cfg.AppID,
-		appSecret:  cfg.AppSecret,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
-		stopCh:     make(chan struct{}),
-		baseURL:    baseURL,
+		appID:             cfg.AppID,
+		appSecret:         cfg.AppSecret,
+		verificationToken: cfg.VerificationToken,
+		httpClient:        &http.Client{Timeout: 10 * time.Second},
+		stopCh:            make(chan struct{}),
+		baseURL:           baseURL,
 	}, nil
 }
 

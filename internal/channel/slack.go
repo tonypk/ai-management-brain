@@ -21,12 +21,14 @@ type SlackConfig struct {
 
 // SlackAdapter implements Channel for Slack using the Web API.
 type SlackAdapter struct {
-	token      string
-	appToken   string
-	webhookURL string
-	httpClient *http.Client
-	stopCh     chan struct{}
-	baseURL    string
+	token         string
+	appToken      string
+	webhookURL    string
+	signingSecret string
+	httpClient    *http.Client
+	stopCh        chan struct{}
+	baseURL       string
+	msgHandler    func(ctx context.Context, msg Message) error
 }
 
 // NewSlackAdapter creates a new Slack channel adapter.
@@ -35,12 +37,13 @@ func NewSlackAdapter(cfg SlackConfig) (*SlackAdapter, error) {
 		return nil, fmt.Errorf("slack bot token is required")
 	}
 	return &SlackAdapter{
-		token:      cfg.BotToken,
-		appToken:   cfg.AppToken,
-		webhookURL: cfg.WebhookURL,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
-		stopCh:     make(chan struct{}),
-		baseURL:    "https://slack.com/api",
+		token:         cfg.BotToken,
+		appToken:      cfg.AppToken,
+		webhookURL:    cfg.WebhookURL,
+		signingSecret: cfg.SigningSecret,
+		httpClient:    &http.Client{Timeout: 10 * time.Second},
+		stopCh:        make(chan struct{}),
+		baseURL:       "https://slack.com/api",
 	}, nil
 }
 
@@ -50,12 +53,13 @@ func NewSlackAdapterWithHTTPClient(cfg SlackConfig, baseURL string) (*SlackAdapt
 		return nil, fmt.Errorf("slack bot token is required")
 	}
 	return &SlackAdapter{
-		token:      cfg.BotToken,
-		appToken:   cfg.AppToken,
-		webhookURL: cfg.WebhookURL,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
-		stopCh:     make(chan struct{}),
-		baseURL:    baseURL,
+		token:         cfg.BotToken,
+		appToken:      cfg.AppToken,
+		webhookURL:    cfg.WebhookURL,
+		signingSecret: cfg.SigningSecret,
+		httpClient:    &http.Client{Timeout: 10 * time.Second},
+		stopCh:        make(chan struct{}),
+		baseURL:       baseURL,
 	}, nil
 }
 

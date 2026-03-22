@@ -192,5 +192,15 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		v1.POST("/signal/webhook", cfg.SignalAdapter.HandleWebhook)
 	}
 
+	// Slack webhook (Events API — signature-verified by handler)
+	if cfg.SlackAdapter != nil {
+		v1.POST("/slack/events", cfg.SlackAdapter.HandleSlackEvent)
+	}
+
+	// Lark webhook (Event Subscription — token-verified by handler)
+	if cfg.LarkAdapter != nil {
+		v1.POST("/lark/events", cfg.LarkAdapter.HandleLarkEvent)
+	}
+
 	return r
 }

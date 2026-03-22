@@ -462,11 +462,47 @@ func main() {
 	// Create bot wrapper from the adapter's underlying telebot (for command registration)
 	tgBot := bot.NewBotFromTelebot(tgAdapter.Bot(), cfg.BossTelegramID, botDB)
 
+	// Slack channel adapter (optional)
+	var slackAdapter *channel.SlackAdapter
+	if cfg.SlackBotToken != "" {
+		var slackErr error
+		slackAdapter, slackErr = channel.NewSlackAdapter(channel.SlackConfig{
+			BotToken:      cfg.SlackBotToken,
+			SigningSecret: cfg.SlackSigningSecret,
+		})
+		if slackErr != nil {
+			slog.Error("failed to create slack adapter", "error", slackErr)
+		} else {
+			slog.Info("slack channel adapter created")
+		}
+	}
+
+	// Lark channel adapter (optional)
+	var larkAdapter *channel.LarkAdapter
+	if cfg.LarkAppID != "" && cfg.LarkAppSecret != "" {
+		var larkErr error
+		larkAdapter, larkErr = channel.NewLarkAdapter(channel.LarkConfig{
+			AppID:     cfg.LarkAppID,
+			AppSecret: cfg.LarkAppSecret,
+		})
+		if larkErr != nil {
+			slog.Error("failed to create lark adapter", "error", larkErr)
+		} else {
+			slog.Info("lark channel adapter created")
+		}
+	}
+
 	// Create channel router and register adapters
 	channelRouter := channel.NewRouter()
 	channelRouter.Register(tgAdapter)
 	if signalAdapter != nil {
 		channelRouter.Register(signalAdapter)
+	}
+	if slackAdapter != nil {
+		channelRouter.Register(slackAdapter)
+	}
+	if larkAdapter != nil {
+		channelRouter.Register(larkAdapter)
 	}
 	channelSender := channel.NewRouterSender(channelRouter)
 
@@ -607,6 +643,69 @@ func main() {
 
 		return nil
 	})
+
+	// Create unified message handler for non-Telegram channels (Slack, Lark)
+	unifiedHandler := channel.NewUnifiedHandler(channel.UnifiedHandlerConfig{
+		Queries: queries,
+		Sender:  channelSender,
+		OnText: func(ctx context.Context, employeeID, tenantID, text, channelType string) (string, error) {
+			state := collector.GetState(ctx, employeeID)
+			lower := strings.ToLower(strings.TrimSpace(text))
+
+			switch state {
+			case report.StateConfirming:
+				if lower == "confirm" {
+					answers := collector.GetAnswers(ctx, employeeID)
+					cState, msg, err := collector.Confirm(ctx, employeeID)
+					if err != nil {
+						return "Error confirming report. Please try again.", nil
+					}
+					if cState == report.StateComplete && answers != nil {
+						today := time.Now().In(loc).Format("2006-01-02")
+						if err := reportDB.CreateReport(ctx, tenantID, employeeID, today, answers); err != nil {
+							return "Report confirmed but failed to save.", nil
+						}
+						_ = eventBus.PublishPayload(ctx, events.ReportSubmitted, tenantID, events.ReportSubmittedPayload{
+							EmployeeID:   employeeID,
+							EmployeeName: "",
+							ReportDate:   today,
+							Channel:      channelType,
+						})
+						go func() {
+							if err := analyzer.Analyze(context.Background(), employeeID, today); err != nil {
+								slog.Error("report analysis failed", "employee_id", employeeID, "error", err)
+							}
+						}()
+					}
+					return msg, nil
+				}
+				if lower == "edit" {
+					_, firstQ, err := collector.Start(ctx, employeeID)
+					if err != nil {
+						return "Error restarting. Please try again.", nil
+					}
+					return "Let's start over.\n\n" + firstQ, nil
+				}
+				return "Please reply 'confirm' to submit or 'edit' to start over.", nil
+
+			case report.StateCollecting:
+				_, nextMsg, err := collector.HandleAnswer(ctx, employeeID, text)
+				if err != nil {
+					return "Error processing your answer. Please try again.", nil
+				}
+				return nextMsg, nil
+			}
+			return "", nil
+		},
+	})
+
+	// Wire unified handler to Slack and Lark adapters
+	if slackAdapter != nil {
+		slackAdapter.SetMessageHandler(unifiedHandler.HandleMessage)
+	}
+	if larkAdapter != nil {
+		larkAdapter.SetMessageHandler(unifiedHandler.HandleMessage)
+	}
 
 	// Subscribe to events for memory extraction
 	if memEngine != nil {
@@ -862,6 +961,10 @@ func main() {
 		SignalAdapter:  signalAdapter,
 		MemoryEngine:  memEngine,
 		MemoryStore:   memStore,
+		ChannelRouter: channelRouter,
+		SlackAdapter:  slackAdapter,
+		LarkAdapter:   larkAdapter,
+		Scheduler:     sched,
 	})
 
 	// Health check (public, outside /api/v1)
@@ -934,6 +1037,12 @@ func main() {
 	tgBot.Stop()
 	if signalAdapter != nil {
 		signalAdapter.Stop()
+	}
+	if slackAdapter != nil {
+		slackAdapter.Stop()
+	}
+	if larkAdapter != nil {
+		larkAdapter.Stop()
 	}
 	if err := sched.Stop(); err != nil {
 		slog.Error("scheduler stop error", "error", err)
