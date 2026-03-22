@@ -7,11 +7,12 @@ import (
 	"strings"
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
+	"github.com/tonypk/ai-management-brain/internal/channel"
 )
 
 // TriggerDB defines the database operations needed by the trigger checker.
 type TriggerDB interface {
-	ListActiveEmployeesWithTelegram(ctx context.Context, tenantID string) ([]EmployeeInfo, error)
+	ListActiveEmployees(ctx context.Context, tenantID string) ([]EmployeeInfo, error)
 	GetMissedDaysLast7(ctx context.Context, employeeID string) (int, error)
 	GetSubmittedDaysLast7(ctx context.Context, employeeID string) (int, error)
 }
@@ -28,18 +29,18 @@ type TriggerResult struct {
 // TriggerChecker detects events and executes trigger rules from mentor config.
 type TriggerChecker struct {
 	db      TriggerDB
-	sender  MessageSender
+	sender  channel.Sender
 	factory *brain.EngineFactory
 }
 
 // NewTriggerChecker creates a new trigger checker.
-func NewTriggerChecker(db TriggerDB, sender MessageSender, factory *brain.EngineFactory) *TriggerChecker {
+func NewTriggerChecker(db TriggerDB, sender channel.Sender, factory *brain.EngineFactory) *TriggerChecker {
 	return &TriggerChecker{db: db, sender: sender, factory: factory}
 }
 
 // CheckAll runs all trigger rules for the tenant's employees.
 // Returns the list of triggered actions for logging.
-func (t *TriggerChecker) CheckAll(ctx context.Context, tenantID, mentorID string, bossChatID int64) ([]TriggerResult, error) {
+func (t *TriggerChecker) CheckAll(ctx context.Context, tenantID, mentorID string, bossInfo EmployeeInfo) ([]TriggerResult, error) {
 	engine, err := t.factory.ForTenant(mentorID, "default")
 	if err != nil {
 		return nil, fmt.Errorf("load engine for triggers: %w", err)
@@ -50,7 +51,7 @@ func (t *TriggerChecker) CheckAll(ctx context.Context, tenantID, mentorID string
 		return nil, nil
 	}
 
-	employees, err := t.db.ListActiveEmployeesWithTelegram(ctx, tenantID)
+	employees, err := t.db.ListActiveEmployees(ctx, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("list employees: %w", err)
 	}
@@ -77,7 +78,7 @@ func (t *TriggerChecker) CheckAll(ctx context.Context, tenantID, mentorID string
 				Message:      msg,
 			}
 
-			if err := t.executeAction(ctx, trigger.Action, msg, emp, bossChatID); err != nil {
+			if err := t.executeAction(ctx, trigger.Action, msg, emp, bossInfo); err != nil {
 				slog.Error("trigger action", "employee", emp.Name, "action", trigger.Action, "error", err)
 			} else {
 				slog.Info("trigger fired", "employee", emp.Name, "event", trigger.Event, "action", trigger.Action)
@@ -110,7 +111,7 @@ func (t *TriggerChecker) eventMatches(ctx context.Context, emp EmployeeInfo, eve
 		return submitted >= 6, nil
 
 	case "sentiment_drop", "blocker_unresolved", "repeat_mistake":
-		// These require AI analysis — not yet implemented
+		// These require AI analysis -- not yet implemented
 		return false, nil
 
 	default:
@@ -120,23 +121,39 @@ func (t *TriggerChecker) eventMatches(ctx context.Context, emp EmployeeInfo, eve
 }
 
 // executeAction performs the triggered action.
-func (t *TriggerChecker) executeAction(_ context.Context, action, msg string, emp EmployeeInfo, bossChatID int64) error {
+func (t *TriggerChecker) executeAction(ctx context.Context, action, msg string, emp EmployeeInfo, bossInfo EmployeeInfo) error {
 	switch action {
 	case "manager_notify", "manager_private_chat", "suggest_one_on_one", "performance_warning":
 		// Notify the boss
-		return t.sender.SendMessage(bossChatID, fmt.Sprintf("⚠️ Trigger Alert\n\n%s", msg))
+		chType, chID := resolveEmployeeChannel(bossInfo)
+		if chType == "" {
+			return fmt.Errorf("boss has no channel configured")
+		}
+		return t.sender.Send(ctx, chType, chID, fmt.Sprintf("⚠️ Trigger Alert\n\n%s", msg))
 
 	case "private_checkin", "private_message":
 		// Send to the employee directly
-		return t.sender.SendMessage(emp.TelegramID, msg)
+		chType, chID := resolveEmployeeChannel(emp)
+		if chType == "" {
+			return fmt.Errorf("employee %s has no channel", emp.Name)
+		}
+		return t.sender.Send(ctx, chType, chID, msg)
 
 	case "public_recognition":
 		// Notify the boss about the recognition (they can share)
-		return t.sender.SendMessage(bossChatID, fmt.Sprintf("🌟 Recognition\n\n%s", msg))
+		chType, chID := resolveEmployeeChannel(bossInfo)
+		if chType == "" {
+			return fmt.Errorf("boss has no channel configured")
+		}
+		return t.sender.Send(ctx, chType, chID, fmt.Sprintf("🌟 Recognition\n\n%s", msg))
 
 	case "create_principle":
 		// Notify boss to create a principle
-		return t.sender.SendMessage(bossChatID, fmt.Sprintf("📋 Principle Suggestion\n\n%s", msg))
+		chType, chID := resolveEmployeeChannel(bossInfo)
+		if chType == "" {
+			return fmt.Errorf("boss has no channel configured")
+		}
+		return t.sender.Send(ctx, chType, chID, fmt.Sprintf("📋 Principle Suggestion\n\n%s", msg))
 
 	default:
 		slog.Debug("unknown trigger action", "action", action)

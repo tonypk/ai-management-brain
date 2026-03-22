@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
+	"github.com/tonypk/ai-management-brain/internal/channel"
 )
 
 func testCOOConfig() *DynamicRoleConfig {
@@ -160,31 +161,36 @@ func TestAvailableActions(t *testing.T) {
 }
 
 func TestBossSender_SendToBoss(t *testing.T) {
-	var sentTo int64
+	var sentChType channel.Type
+	var sentUserID string
 	var sentText string
-	sender := &mockSender{fn: func(chatID int64, text string) error {
-		sentTo = chatID
+	sender := &mockChannelSender{fn: func(ctx context.Context, channelType channel.Type, userID string, text string) error {
+		sentChType = channelType
+		sentUserID = userID
 		sentText = text
 		return nil
 	}}
 
-	bs := NewBossSender(sender, 12345)
+	bs := NewBossSender(sender, channel.TypeTelegram, "12345")
 	err := bs.SendToBoss("test message")
 	if err != nil {
 		t.Fatalf("SendToBoss: %v", err)
 	}
-	if sentTo != 12345 {
-		t.Errorf("sent to %d, want 12345", sentTo)
+	if sentChType != channel.TypeTelegram {
+		t.Errorf("sent to channel %q, want telegram", sentChType)
+	}
+	if sentUserID != "12345" {
+		t.Errorf("sent to user %q, want 12345", sentUserID)
 	}
 	if sentText != "test message" {
 		t.Errorf("sent text %q, want 'test message'", sentText)
 	}
 }
 
-type mockSender struct {
-	fn func(chatID int64, text string) error
+type mockChannelSender struct {
+	fn func(ctx context.Context, channelType channel.Type, userID string, text string) error
 }
 
-func (m *mockSender) SendMessage(chatID int64, text string) error {
-	return m.fn(chatID, text)
+func (m *mockChannelSender) Send(ctx context.Context, channelType channel.Type, userID string, text string) error {
+	return m.fn(ctx, channelType, userID, text)
 }

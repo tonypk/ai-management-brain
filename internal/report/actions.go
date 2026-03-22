@@ -7,29 +7,30 @@ import (
 	"strings"
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
+	"github.com/tonypk/ai-management-brain/internal/channel"
 )
 
 // ActionDB defines DB operations for proactive actions.
 type ActionDB interface {
-	ListActiveEmployeesWithTelegram(ctx context.Context, tenantID string) ([]EmployeeInfo, error)
+	ListActiveEmployees(ctx context.Context, tenantID string) ([]EmployeeInfo, error)
 	GetSubmittedDaysLast7(ctx context.Context, employeeID string) (int, error)
 }
 
 // ActionExecutor runs proactive actions from mentor config.
 type ActionExecutor struct {
 	db      ActionDB
-	sender  MessageSender
+	sender  channel.Sender
 	llm     *brain.LLMService
 	factory *brain.EngineFactory
 }
 
 // NewActionExecutor creates a new action executor.
-func NewActionExecutor(db ActionDB, sender MessageSender, llm *brain.LLMService, factory *brain.EngineFactory) *ActionExecutor {
+func NewActionExecutor(db ActionDB, sender channel.Sender, llm *brain.LLMService, factory *brain.EngineFactory) *ActionExecutor {
 	return &ActionExecutor{db: db, sender: sender, llm: llm, factory: factory}
 }
 
 // RunWeekly executes weekly proactive actions for the tenant.
-func (a *ActionExecutor) RunWeekly(ctx context.Context, tenantID, mentorID string, bossChatID int64) error {
+func (a *ActionExecutor) RunWeekly(ctx context.Context, tenantID, mentorID string, bossInfo EmployeeInfo) error {
 	engine, err := a.factory.ForTenant(mentorID, "default")
 	if err != nil {
 		return fmt.Errorf("load engine: %w", err)
@@ -40,9 +41,15 @@ func (a *ActionExecutor) RunWeekly(ctx context.Context, tenantID, mentorID strin
 		return nil
 	}
 
-	employees, err := a.db.ListActiveEmployeesWithTelegram(ctx, tenantID)
+	employees, err := a.db.ListActiveEmployees(ctx, tenantID)
 	if err != nil {
 		return fmt.Errorf("list employees: %w", err)
+	}
+
+	// Resolve boss channel once for all action messages
+	bossChType, bossChID := resolveEmployeeChannel(bossInfo)
+	if bossChType == "" {
+		return fmt.Errorf("boss has no channel configured")
 	}
 
 	for _, action := range actions {
@@ -55,7 +62,7 @@ func (a *ActionExecutor) RunWeekly(ctx context.Context, tenantID, mentorID strin
 			continue
 		}
 
-		if err := a.sender.SendMessage(bossChatID, msg); err != nil {
+		if err := a.sender.Send(ctx, bossChType, bossChID, msg); err != nil {
 			slog.Error("send weekly action", "type", action.Type, "error", err)
 		} else {
 			slog.Info("weekly action sent", "type", action.Type)
@@ -66,7 +73,7 @@ func (a *ActionExecutor) RunWeekly(ctx context.Context, tenantID, mentorID strin
 }
 
 // RunMonthly executes monthly proactive actions for the tenant.
-func (a *ActionExecutor) RunMonthly(ctx context.Context, tenantID, mentorID string, bossChatID int64) error {
+func (a *ActionExecutor) RunMonthly(ctx context.Context, tenantID, mentorID string, bossInfo EmployeeInfo) error {
 	engine, err := a.factory.ForTenant(mentorID, "default")
 	if err != nil {
 		return fmt.Errorf("load engine: %w", err)
@@ -77,9 +84,15 @@ func (a *ActionExecutor) RunMonthly(ctx context.Context, tenantID, mentorID stri
 		return nil
 	}
 
+	// Resolve boss channel once for all action messages
+	bossChType, bossChID := resolveEmployeeChannel(bossInfo)
+	if bossChType == "" {
+		return fmt.Errorf("boss has no channel configured")
+	}
+
 	for _, action := range actions {
 		msg := fmt.Sprintf("📊 Monthly Action: %s\n\n%s", action.Type, action.Desc)
-		if err := a.sender.SendMessage(bossChatID, msg); err != nil {
+		if err := a.sender.Send(ctx, bossChType, bossChID, msg); err != nil {
 			slog.Error("send monthly action", "type", action.Type, "error", err)
 		}
 	}

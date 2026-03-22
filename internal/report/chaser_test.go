@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
+	"github.com/tonypk/ai-management-brain/internal/channel"
 	"github.com/tonypk/ai-management-brain/internal/report"
 )
 
@@ -41,25 +42,26 @@ func (m *mockChaserDB) CreateChaseLog(ctx context.Context, entry report.ChaseLog
 	return nil
 }
 
-// mockSender implements the MessageSender interface
+// mockSender implements the channel.Sender interface
 type mockSender struct {
 	sentMessages []sentMessage
 }
 
 type sentMessage struct {
-	ChatID  int64
-	Message string
+	ChannelType channel.Type
+	UserID      string
+	Message     string
 }
 
-func (m *mockSender) SendMessage(chatID int64, text string) error {
-	m.sentMessages = append(m.sentMessages, sentMessage{chatID, text})
+func (m *mockSender) Send(ctx context.Context, channelType channel.Type, userID string, text string) error {
+	m.sentMessages = append(m.sentMessages, sentMessage{channelType, userID, text})
 	return nil
 }
 
 func TestChaser_ChasesEmployeesWithoutReport(t *testing.T) {
 	db := &mockChaserDB{
 		employeesWithoutReport: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111, CultureCode: "philippines"},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "philippines"},
 		},
 		lastChaseStep: 0,
 	}
@@ -83,7 +85,7 @@ func TestChaser_ChasesEmployeesWithoutReport(t *testing.T) {
 func TestChaser_SkipsTodayWhenMaxSteps(t *testing.T) {
 	db := &mockChaserDB{
 		employeesWithoutReport: []report.EmployeeInfo{
-			{ID: "e1", Name: "Bob", TelegramID: 222, CultureCode: "singapore"},
+			{ID: "e1", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram", CultureCode: "singapore"},
 		},
 		lastChaseStep: 99,
 	}
@@ -102,7 +104,7 @@ func TestChaser_SkipsTodayWhenMaxSteps(t *testing.T) {
 func TestChaser_CultureOverrideApplied(t *testing.T) {
 	db := &mockChaserDB{
 		employeesWithoutReport: []report.EmployeeInfo{
-			{ID: "e1", Name: "Carlos", TelegramID: 333, CultureCode: "philippines"},
+			{ID: "e1", Name: "Carlos", TelegramID: 333, PreferredChannel: "telegram", CultureCode: "philippines"},
 		},
 		lastChaseStep: 0,
 	}
@@ -124,7 +126,7 @@ func TestChaser_CultureOverrideApplied(t *testing.T) {
 func TestChaser_LLMFallback(t *testing.T) {
 	db := &mockChaserDB{
 		employeesWithoutReport: []report.EmployeeInfo{
-			{ID: "e1", Name: "Dan", TelegramID: 444, CultureCode: "default"},
+			{ID: "e1", Name: "Dan", TelegramID: 444, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		lastChaseStep: 0,
 	}
@@ -143,9 +145,9 @@ func TestChaser_LLMFallback(t *testing.T) {
 func TestChaser_PerEmployeeCulture(t *testing.T) {
 	db := &mockChaserDB{
 		employeesWithoutReport: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111, CultureCode: "philippines"},
-			{ID: "e2", Name: "Budi", TelegramID: 222, CultureCode: "indonesia"},
-			{ID: "e3", Name: "Kumar", TelegramID: 333, CultureCode: "srilanka"},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "philippines"},
+			{ID: "e2", Name: "Budi", TelegramID: 222, PreferredChannel: "telegram", CultureCode: "indonesia"},
+			{ID: "e3", Name: "Kumar", TelegramID: 333, PreferredChannel: "telegram", CultureCode: "srilanka"},
 		},
 		lastChaseStep: 0,
 	}
@@ -191,14 +193,14 @@ func TestChaser_NoEmployeesWithoutReport(t *testing.T) {
 func TestChaser_NilLLM_UsesFallback(t *testing.T) {
 	db := &mockChaserDB{
 		employeesWithoutReport: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		lastChaseStep: 0,
 	}
 	sender := &mockSender{}
 	factory := brain.NewEngineFactory()
 
-	// nil LLM → should use fallback message
+	// nil LLM -> should use fallback message
 	chaser := report.NewChaser(db, nil, sender, factory)
 	err := chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20", "inamori")
 	if err != nil {
@@ -217,7 +219,7 @@ func TestChaser_NilLLM_UsesFallback(t *testing.T) {
 func TestChaser_ChaseLogContainsCorrectFields(t *testing.T) {
 	db := &mockChaserDB{
 		employeesWithoutReport: []report.EmployeeInfo{
-			{ID: "e1", Name: "Bob", TelegramID: 222, CultureCode: "default"},
+			{ID: "e1", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		lastChaseStep: 1, // step 1 already done
 	}
@@ -243,5 +245,28 @@ func TestChaser_ChaseLogContainsCorrectFields(t *testing.T) {
 	}
 	if log.Step != 2 {
 		t.Errorf("log.Step = %d, want 2", log.Step)
+	}
+}
+
+func TestChaser_SkipsEmployeeWithNoChannel(t *testing.T) {
+	db := &mockChaserDB{
+		employeesWithoutReport: []report.EmployeeInfo{
+			{ID: "e1", Name: "NoChannel", CultureCode: "default"},
+			{ID: "e2", Name: "HasChannel", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
+		},
+		lastChaseStep: 0,
+	}
+	llm := &mockLLM{response: "reminder"}
+	sender := &mockSender{}
+	factory := brain.NewEngineFactory()
+
+	chaser := report.NewChaser(db, brain.NewLLMService(llm), sender, factory)
+	err := chaser.ChaseAll(context.Background(), "tenant-1", "2026-03-20", "inamori")
+	if err != nil {
+		t.Fatalf("chase: %v", err)
+	}
+	// Only HasChannel should get a message
+	if len(sender.sentMessages) != 1 {
+		t.Errorf("expected 1 message (skip no-channel employee), got %d", len(sender.sentMessages))
 	}
 }

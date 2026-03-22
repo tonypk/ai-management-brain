@@ -52,7 +52,7 @@ type SummaryResult struct {
 
 // AlertCheckerIface abstracts the report.AlertChecker.
 type AlertCheckerIface interface {
-	CheckAll(ctx context.Context, tenantID string, bossChatID int64) ([]AlertResult, error)
+	CheckAll(ctx context.Context, tenantID string, bossChannelType string, bossChannelID string) ([]AlertResult, error)
 }
 
 // AlertResult mirrors report.Alert to avoid import cycle.
@@ -66,7 +66,7 @@ type AlertResult struct {
 
 // ActionExecIface abstracts the report.ActionExecutor.
 type ActionExecIface interface {
-	RunWeekly(ctx context.Context, tenantID, mentorID string, bossChatID int64) error
+	RunWeekly(ctx context.Context, tenantID, mentorID string, bossChannelType string, bossChannelID string) error
 }
 
 // ReportDBIface defines database queries used by capabilities.

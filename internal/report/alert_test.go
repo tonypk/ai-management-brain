@@ -10,14 +10,14 @@ import (
 
 // mockAlertDB implements report.AlertDB for testing.
 type mockAlertDB struct {
-	employees       []report.EmployeeInfo
-	missedDays      map[string]int
-	sentiments      map[string][]string
-	missedDaysErr   error
-	sentimentsErr   error
+	employees     []report.EmployeeInfo
+	missedDays    map[string]int
+	sentiments    map[string][]string
+	missedDaysErr error
+	sentimentsErr error
 }
 
-func (m *mockAlertDB) ListActiveEmployeesWithTelegram(ctx context.Context, tenantID string) ([]report.EmployeeInfo, error) {
+func (m *mockAlertDB) ListActiveEmployees(ctx context.Context, tenantID string) ([]report.EmployeeInfo, error) {
 	return m.employees, nil
 }
 
@@ -35,28 +35,18 @@ func (m *mockAlertDB) GetRecentSentiments(ctx context.Context, employeeID string
 	return m.sentiments[employeeID], nil
 }
 
-// mockAlertSender implements report.AlertSender for testing.
-type mockAlertSender struct {
-	messages []sentMessage
-}
-
-func (m *mockAlertSender) SendMessage(chatID int64, text string) error {
-	m.messages = append(m.messages, sentMessage{chatID, text})
-	return nil
-}
-
 func TestAlertChecker_ConsecutiveMiss_Warning(t *testing.T) {
 	db := &mockAlertDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram"},
 		},
 		missedDays: map[string]int{"e1": 3},
 		sentiments: map[string][]string{"e1": {"positive", "positive"}},
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll: %v", err)
 	}
@@ -69,23 +59,23 @@ func TestAlertChecker_ConsecutiveMiss_Warning(t *testing.T) {
 	if alerts[0].Severity != "warning" {
 		t.Errorf("severity = %q, want warning", alerts[0].Severity)
 	}
-	if len(sender.messages) != 1 {
-		t.Errorf("expected 1 message sent to boss, got %d", len(sender.messages))
+	if len(sender.sentMessages) != 1 {
+		t.Errorf("expected 1 message sent to boss, got %d", len(sender.sentMessages))
 	}
 }
 
 func TestAlertChecker_ConsecutiveMiss_Critical(t *testing.T) {
 	db := &mockAlertDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Bob", TelegramID: 222},
+			{ID: "e1", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram"},
 		},
 		missedDays: map[string]int{"e1": 5},
 		sentiments: map[string][]string{"e1": {}},
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll: %v", err)
 	}
@@ -100,15 +90,15 @@ func TestAlertChecker_ConsecutiveMiss_Critical(t *testing.T) {
 func TestAlertChecker_SentimentDrop(t *testing.T) {
 	db := &mockAlertDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Carol", TelegramID: 333},
+			{ID: "e1", Name: "Carol", TelegramID: 333, PreferredChannel: "telegram"},
 		},
 		missedDays: map[string]int{"e1": 0},
 		sentiments: map[string][]string{"e1": {"negative", "negative", "negative", "positive"}},
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll: %v", err)
 	}
@@ -123,32 +113,32 @@ func TestAlertChecker_SentimentDrop(t *testing.T) {
 func TestAlertChecker_NoAlerts_HealthyEmployee(t *testing.T) {
 	db := &mockAlertDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Dan", TelegramID: 444},
+			{ID: "e1", Name: "Dan", TelegramID: 444, PreferredChannel: "telegram"},
 		},
 		missedDays: map[string]int{"e1": 1},
 		sentiments: map[string][]string{"e1": {"positive", "neutral", "positive"}},
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll: %v", err)
 	}
 	if len(alerts) != 0 {
 		t.Errorf("expected 0 alerts for healthy employee, got %d", len(alerts))
 	}
-	if len(sender.messages) != 0 {
-		t.Errorf("expected no messages sent, got %d", len(sender.messages))
+	if len(sender.sentMessages) != 0 {
+		t.Errorf("expected no messages sent, got %d", len(sender.sentMessages))
 	}
 }
 
 func TestAlertChecker_MultipleEmployees_MultipleAlerts(t *testing.T) {
 	db := &mockAlertDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111},
-			{ID: "e2", Name: "Bob", TelegramID: 222},
-			{ID: "e3", Name: "Carol", TelegramID: 333},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram"},
+			{ID: "e2", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram"},
+			{ID: "e3", Name: "Carol", TelegramID: 333, PreferredChannel: "telegram"},
 		},
 		missedDays: map[string]int{"e1": 4, "e2": 0, "e3": 6},
 		sentiments: map[string][]string{
@@ -157,10 +147,10 @@ func TestAlertChecker_MultipleEmployees_MultipleAlerts(t *testing.T) {
 			"e3": {},
 		},
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll: %v", err)
 	}
@@ -170,23 +160,23 @@ func TestAlertChecker_MultipleEmployees_MultipleAlerts(t *testing.T) {
 	if len(alerts) != 3 {
 		t.Fatalf("expected 3 alerts, got %d", len(alerts))
 	}
-	if len(sender.messages) != 1 {
-		t.Errorf("expected 1 aggregated message to boss, got %d", len(sender.messages))
+	if len(sender.sentMessages) != 1 {
+		t.Errorf("expected 1 aggregated message to boss, got %d", len(sender.sentMessages))
 	}
 }
 
 func TestHasSentimentDrop_InsufficientData(t *testing.T) {
 	db := &mockAlertDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Eve", TelegramID: 555},
+			{ID: "e1", Name: "Eve", TelegramID: 555, PreferredChannel: "telegram"},
 		},
 		missedDays: map[string]int{"e1": 0},
 		sentiments: map[string][]string{"e1": {"negative", "negative"}}, // only 2, need 3+
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll: %v", err)
 	}
@@ -199,33 +189,33 @@ func TestAlertChecker_NoEmployees(t *testing.T) {
 	db := &mockAlertDB{
 		employees: nil,
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll: %v", err)
 	}
 	if len(alerts) != 0 {
 		t.Errorf("expected 0 alerts with no employees, got %d", len(alerts))
 	}
-	if len(sender.messages) != 0 {
-		t.Errorf("expected 0 messages, got %d", len(sender.messages))
+	if len(sender.sentMessages) != 0 {
+		t.Errorf("expected 0 messages, got %d", len(sender.sentMessages))
 	}
 }
 
 func TestAlertChecker_BothAlerts_SameEmployee(t *testing.T) {
 	db := &mockAlertDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Frank", TelegramID: 666},
+			{ID: "e1", Name: "Frank", TelegramID: 666, PreferredChannel: "telegram"},
 		},
-		missedDays: map[string]int{"e1": 5},                                                      // critical miss
-		sentiments: map[string][]string{"e1": {"negative", "negative", "negative", "positive"}},   // sentiment drop
+		missedDays: map[string]int{"e1": 5},                                                    // critical miss
+		sentiments: map[string][]string{"e1": {"negative", "negative", "negative", "positive"}}, // sentiment drop
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll: %v", err)
 	}
@@ -246,15 +236,15 @@ func TestAlertChecker_BothAlerts_SameEmployee(t *testing.T) {
 func TestAlertChecker_SentimentDrop_NonConsecutive(t *testing.T) {
 	db := &mockAlertDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Grace", TelegramID: 777},
+			{ID: "e1", Name: "Grace", TelegramID: 777, PreferredChannel: "telegram"},
 		},
 		missedDays: map[string]int{"e1": 0},
 		sentiments: map[string][]string{"e1": {"negative", "negative", "positive", "negative", "negative"}},
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll: %v", err)
 	}
@@ -267,15 +257,15 @@ func TestAlertChecker_SentimentDrop_NonConsecutive(t *testing.T) {
 func TestAlertChecker_ExactThreshold_3Miss(t *testing.T) {
 	db := &mockAlertDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Harry", TelegramID: 888},
+			{ID: "e1", Name: "Harry", TelegramID: 888, PreferredChannel: "telegram"},
 		},
 		missedDays: map[string]int{"e1": 3},
 		sentiments: map[string][]string{"e1": {}},
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll: %v", err)
 	}
@@ -290,15 +280,15 @@ func TestAlertChecker_ExactThreshold_3Miss(t *testing.T) {
 func TestAlertChecker_BelowThreshold_2Miss(t *testing.T) {
 	db := &mockAlertDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Ivy", TelegramID: 999},
+			{ID: "e1", Name: "Ivy", TelegramID: 999, PreferredChannel: "telegram"},
 		},
 		missedDays: map[string]int{"e1": 2},
 		sentiments: map[string][]string{"e1": {}},
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll: %v", err)
 	}
@@ -310,16 +300,16 @@ func TestAlertChecker_BelowThreshold_2Miss(t *testing.T) {
 func TestAlertChecker_DBError_Graceful(t *testing.T) {
 	db := &mockAlertDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Jack", TelegramID: 100},
+			{ID: "e1", Name: "Jack", TelegramID: 100, PreferredChannel: "telegram"},
 		},
 		missedDaysErr: errors.New("db error"),
 		sentimentsErr: errors.New("db error"),
 	}
-	sender := &mockAlertSender{}
+	sender := &mockSender{}
 	checker := report.NewAlertChecker(db, sender)
 
 	// Should not return error, just skip the employee
-	alerts, err := checker.CheckAll(context.Background(), "t1", 999)
+	alerts, err := checker.CheckAll(context.Background(), "t1", bossInfo())
 	if err != nil {
 		t.Fatalf("CheckAll should not return error for per-employee DB failures: %v", err)
 	}

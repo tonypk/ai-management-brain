@@ -462,17 +462,25 @@ func main() {
 	// Create bot wrapper from the adapter's underlying telebot (for command registration)
 	tgBot := bot.NewBotFromTelebot(tgAdapter.Bot(), cfg.BossTelegramID, botDB)
 
+	// Create channel router and register adapters
+	channelRouter := channel.NewRouter()
+	channelRouter.Register(tgAdapter)
+	if signalAdapter != nil {
+		channelRouter.Register(signalAdapter)
+	}
+	channelSender := channel.NewRouterSender(channelRouter)
+
 	// Create event bus
 	eventBus := events.NewBus(rdb)
 
 	// Create chaser, summarizer, trigger checker, action executor, and analyzer
-	// Note: tgAdapter implements MessageSender via SendMessage(chatID, text)
-	chaser := report.NewChaser(reportDB, llmService, tgAdapter, engineFactory)
+	// All use channel.Sender for channel-agnostic messaging
+	chaser := report.NewChaser(reportDB, llmService, channelSender, engineFactory)
 	chaser.SetEventBus(eventBus)
 	summarizer := report.NewSummarizer(reportDB, llmService)
-	triggerChecker := report.NewTriggerChecker(reportDB, tgAdapter, engineFactory)
-	actionExecutor := report.NewActionExecutor(reportDB, tgAdapter, llmService, engineFactory)
-	alertChecker := report.NewAlertChecker(reportDB, tgAdapter)
+	triggerChecker := report.NewTriggerChecker(reportDB, channelSender, engineFactory)
+	actionExecutor := report.NewActionExecutor(reportDB, channelSender, llmService, engineFactory)
+	alertChecker := report.NewAlertChecker(reportDB, channelSender)
 	analyzer := report.NewAnalyzer(reportDB, llmService)
 
 	// Create command handler and register commands
@@ -663,7 +671,7 @@ func main() {
 			}
 			questions := engine.GetCheckinQuestions()
 
-			emps, err := reportDB.ListActiveEmployeesWithTelegram(ctx, tenant.ID)
+			emps, err := reportDB.ListActiveEmployees(ctx, tenant.ID)
 			if err != nil {
 				return fmt.Errorf("list employees: %w", err)
 			}
@@ -716,7 +724,12 @@ func main() {
 			slog.Info("summary job: completed", "submission_rate", result.SubmissionRate, "mentor", tenant.MentorID)
 
 			// Run trigger rules after summary
-			triggerResults, err := triggerChecker.CheckAll(ctx, tenant.ID, tenant.MentorID, cfg.BossTelegramID)
+			bossEmp := report.EmployeeInfo{
+				ID: "boss", Name: "Boss",
+				TelegramID:       cfg.BossTelegramID,
+				PreferredChannel: "telegram",
+			}
+			triggerResults, err := triggerChecker.CheckAll(ctx, tenant.ID, tenant.MentorID, bossEmp)
 			if err != nil {
 				slog.Error("trigger check failed", "error", err)
 			} else if len(triggerResults) > 0 {
@@ -734,6 +747,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Boss employee info for proactive actions (channel-agnostic)
+	bossEmployeeInfo := report.EmployeeInfo{
+		ID: "boss", Name: "Boss",
+		TelegramID:       cfg.BossTelegramID,
+		PreferredChannel: "telegram",
+	}
+
 	// Register proactive action jobs
 	if err := sched.AddJob("weekly_actions", "0 18 * * 5", func(ctx context.Context) error {
 		slog.Info("weekly actions job: running proactive actions")
@@ -741,7 +761,7 @@ func main() {
 		if err != nil {
 			return fmt.Errorf("get tenant: %w", err)
 		}
-		return actionExecutor.RunWeekly(ctx, tenant.ID, tenant.MentorID, cfg.BossTelegramID)
+		return actionExecutor.RunWeekly(ctx, tenant.ID, tenant.MentorID, bossEmployeeInfo)
 	}); err != nil {
 		slog.Error("failed to register weekly actions job", "error", err)
 		os.Exit(1)
@@ -753,7 +773,7 @@ func main() {
 		if err != nil {
 			return fmt.Errorf("get tenant: %w", err)
 		}
-		return actionExecutor.RunMonthly(ctx, tenant.ID, tenant.MentorID, cfg.BossTelegramID)
+		return actionExecutor.RunMonthly(ctx, tenant.ID, tenant.MentorID, bossEmployeeInfo)
 	}); err != nil {
 		slog.Error("failed to register monthly actions job", "error", err)
 		os.Exit(1)
@@ -794,7 +814,7 @@ func main() {
 	var roleManager *roles.Manager
 	if cfg.AnthropicKey != "" {
 		llmClient, _ := brain.NewAnthropicClient(cfg.AnthropicKey)
-		bossSender := roles.NewBossSender(tgBot, cfg.BossTelegramID)
+		bossSender := roles.NewBossSender(channelSender, channel.TypeTelegram, fmt.Sprintf("%d", cfg.BossTelegramID))
 		roleManager = roles.NewManager(roles.ManagerConfig{
 			Scheduler:     sched,
 			EventBus:      eventBus,
@@ -803,7 +823,7 @@ func main() {
 			Chaser:        chaser,
 			Summarizer:    &roles.SummarizerAdapter{S: summarizer},
 			AlertChecker:  &roles.AlertCheckerAdapter{A: alertChecker},
-			ActionExec:    actionExecutor,
+			ActionExec:    &roles.ActionExecAdapter{A: actionExecutor},
 			ReportDB:      &roles.ReportDBAdapter{DB: reportDB},
 			Queries:       queries,
 			Sender:        bossSender,

@@ -49,7 +49,7 @@ func executeChaseMissing(ctx context.Context, agent *RoleAgent, deps *AgentDeps)
 
 // executeWeeklySummary generates a weekly operations insight.
 func executeWeeklySummary(ctx context.Context, agent *RoleAgent, deps *AgentDeps) error {
-	if err := deps.ActionExec.RunWeekly(ctx, agent.TenantID, agent.MentorID, deps.Sender.bossChatID); err != nil {
+	if err := deps.ActionExec.RunWeekly(ctx, agent.TenantID, agent.MentorID, string(deps.Sender.bossChannelType), deps.Sender.bossChannelID); err != nil {
 		return fmt.Errorf("run weekly: %w", err)
 	}
 
@@ -62,7 +62,7 @@ func executeWeeklySummary(ctx context.Context, agent *RoleAgent, deps *AgentDeps
 
 // executeCheckAlerts handles alert checking by creating suggestions for critical issues.
 func executeCheckAlerts(ctx context.Context, agent *RoleAgent, deps *AgentDeps) error {
-	alerts, err := deps.AlertChecker.CheckAll(ctx, agent.TenantID, deps.Sender.bossChatID)
+	alerts, err := deps.AlertChecker.CheckAll(ctx, agent.TenantID, string(deps.Sender.bossChannelType), deps.Sender.bossChannelID)
 	if err != nil {
 		return fmt.Errorf("check alerts: %w", err)
 	}

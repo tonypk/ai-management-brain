@@ -15,7 +15,7 @@ type mockActionDB struct {
 	submittedDays map[string]int
 }
 
-func (m *mockActionDB) ListActiveEmployeesWithTelegram(_ context.Context, _ string) ([]report.EmployeeInfo, error) {
+func (m *mockActionDB) ListActiveEmployees(_ context.Context, _ string) ([]report.EmployeeInfo, error) {
 	return m.employees, nil
 }
 
@@ -35,8 +35,8 @@ func newActionExecutor(db *mockActionDB, sender *mockSender) *report.ActionExecu
 func TestRunWeekly_Inamori_SendsMessages(t *testing.T) {
 	db := &mockActionDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111},
-			{ID: "e2", Name: "Bob", TelegramID: 222},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram"},
+			{ID: "e2", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram"},
 		},
 		submittedDays: map[string]int{
 			"e1": 5,
@@ -46,7 +46,7 @@ func TestRunWeekly_Inamori_SendsMessages(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -60,8 +60,8 @@ func TestRunWeekly_Inamori_SendsMessages(t *testing.T) {
 	}
 
 	for _, m := range sender.sentMessages {
-		if m.ChatID != 999 {
-			t.Errorf("expected chatID 999, got %d", m.ChatID)
+		if m.UserID != "999" {
+			t.Errorf("expected userID 999, got %s", m.UserID)
 		}
 	}
 }
@@ -76,7 +76,7 @@ func TestRunWeekly_NoEmployees_SkipsRecognition(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestRunWeekly_UnknownMentor_ReturnsError(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "nonexistent_mentor", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "nonexistent_mentor", bossInfo())
 	if err == nil {
 		t.Fatal("expected error for unknown mentor, got nil")
 	}
@@ -114,7 +114,7 @@ func TestRunMonthly_Inamori_SendsMessages(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunMonthly(context.Background(), "tenant-1", "inamori", 888)
+	err := exec.RunMonthly(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("RunMonthly: %v", err)
 	}
@@ -123,8 +123,8 @@ func TestRunMonthly_Inamori_SendsMessages(t *testing.T) {
 		t.Fatalf("expected 1 monthly message, got %d", len(sender.sentMessages))
 	}
 	msg := sender.sentMessages[0]
-	if msg.ChatID != 888 {
-		t.Errorf("expected chatID 888, got %d", msg.ChatID)
+	if msg.UserID != "999" {
+		t.Errorf("expected userID 999, got %s", msg.UserID)
 	}
 	if !strings.Contains(msg.Message, "Monthly Action") {
 		t.Errorf("expected 'Monthly Action' in message, got: %s", msg.Message)
@@ -138,7 +138,7 @@ func TestRunMonthly_UnknownMentor_ReturnsError(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunMonthly(context.Background(), "tenant-1", "no_such_mentor", 888)
+	err := exec.RunMonthly(context.Background(), "tenant-1", "no_such_mentor", bossInfo())
 	if err == nil {
 		t.Fatal("expected error for unknown mentor, got nil")
 	}
@@ -152,9 +152,9 @@ func TestRunMonthly_UnknownMentor_ReturnsError(t *testing.T) {
 func TestRunWeekly_Recognition_ShowsTopContributor(t *testing.T) {
 	db := &mockActionDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111},
-			{ID: "e2", Name: "Bob", TelegramID: 222},
-			{ID: "e3", Name: "Charlie", TelegramID: 333},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram"},
+			{ID: "e2", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram"},
+			{ID: "e3", Name: "Charlie", TelegramID: 333, PreferredChannel: "telegram"},
 		},
 		submittedDays: map[string]int{
 			"e1": 3,
@@ -165,7 +165,7 @@ func TestRunWeekly_Recognition_ShowsTopContributor(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -193,9 +193,9 @@ func TestRunWeekly_Recognition_ShowsTopContributor(t *testing.T) {
 func TestRunWeekly_Ranking_ShowsAllEmployeesSorted(t *testing.T) {
 	db := &mockActionDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111},
-			{ID: "e2", Name: "Bob", TelegramID: 222},
-			{ID: "e3", Name: "Charlie", TelegramID: 333},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram"},
+			{ID: "e2", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram"},
+			{ID: "e3", Name: "Charlie", TelegramID: 333, PreferredChannel: "telegram"},
 		},
 		submittedDays: map[string]int{
 			"e1": 3,
@@ -206,7 +206,7 @@ func TestRunWeekly_Ranking_ShowsAllEmployeesSorted(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "ren", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "ren", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -245,9 +245,9 @@ func TestRunWeekly_Ranking_ShowsAllEmployeesSorted(t *testing.T) {
 func TestRunWeekly_OneOnOne_FlagsLowSubmitters(t *testing.T) {
 	db := &mockActionDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111},
-			{ID: "e2", Name: "Bob", TelegramID: 222},
-			{ID: "e3", Name: "Charlie", TelegramID: 333},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram"},
+			{ID: "e2", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram"},
+			{ID: "e3", Name: "Charlie", TelegramID: 333, PreferredChannel: "telegram"},
 		},
 		submittedDays: map[string]int{
 			"e1": 6,
@@ -258,7 +258,7 @@ func TestRunWeekly_OneOnOne_FlagsLowSubmitters(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "grove", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "grove", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -289,8 +289,8 @@ func TestRunWeekly_OneOnOne_FlagsLowSubmitters(t *testing.T) {
 func TestRunWeekly_OneOnOne_AllPerformingWell(t *testing.T) {
 	db := &mockActionDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111},
-			{ID: "e2", Name: "Bob", TelegramID: 222},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram"},
+			{ID: "e2", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram"},
 		},
 		submittedDays: map[string]int{
 			"e1": 5,
@@ -300,7 +300,7 @@ func TestRunWeekly_OneOnOne_AllPerformingWell(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "grove", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "grove", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestRunWeekly_Recognition_NoEmployees_Skipped(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -350,8 +350,8 @@ func TestRunWeekly_Recognition_NoEmployees_Skipped(t *testing.T) {
 func TestRunWeekly_Recognition_AllZeroSubmissions_Skipped(t *testing.T) {
 	db := &mockActionDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111},
-			{ID: "e2", Name: "Bob", TelegramID: 222},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram"},
+			{ID: "e2", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram"},
 		},
 		submittedDays: map[string]int{
 			"e1": 0,
@@ -361,7 +361,7 @@ func TestRunWeekly_Recognition_AllZeroSubmissions_Skipped(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -378,14 +378,14 @@ func TestRunWeekly_Recognition_AllZeroSubmissions_Skipped(t *testing.T) {
 func TestRunWeekly_Recognition_SingleEmployee(t *testing.T) {
 	db := &mockActionDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Solo", TelegramID: 111},
+			{ID: "e1", Name: "Solo", TelegramID: 111, PreferredChannel: "telegram"},
 		},
 		submittedDays: map[string]int{"e1": 4},
 	}
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -411,10 +411,10 @@ func TestRunWeekly_Recognition_SingleEmployee(t *testing.T) {
 func TestRunWeekly_Ranking_MedalsAssigned(t *testing.T) {
 	db := &mockActionDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Gold", TelegramID: 111},
-			{ID: "e2", Name: "Silver", TelegramID: 222},
-			{ID: "e3", Name: "Bronze", TelegramID: 333},
-			{ID: "e4", Name: "Fourth", TelegramID: 444},
+			{ID: "e1", Name: "Gold", TelegramID: 111, PreferredChannel: "telegram"},
+			{ID: "e2", Name: "Silver", TelegramID: 222, PreferredChannel: "telegram"},
+			{ID: "e3", Name: "Bronze", TelegramID: 333, PreferredChannel: "telegram"},
+			{ID: "e4", Name: "Fourth", TelegramID: 444, PreferredChannel: "telegram"},
 		},
 		submittedDays: map[string]int{
 			"e1": 7,
@@ -426,7 +426,7 @@ func TestRunWeekly_Ranking_MedalsAssigned(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "ren", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "ren", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -471,14 +471,14 @@ func TestRunWeekly_Ranking_MedalsAssigned(t *testing.T) {
 func TestRunWeekly_SelfCriticism_GenericMessage(t *testing.T) {
 	db := &mockActionDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram"},
 		},
 		submittedDays: map[string]int{"e1": 5},
 	}
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "ren", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "ren", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -501,14 +501,14 @@ func TestRunWeekly_SelfCriticism_GenericMessage(t *testing.T) {
 func TestRunWeekly_OKRReview_GenericMessage(t *testing.T) {
 	db := &mockActionDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram"},
 		},
 		submittedDays: map[string]int{"e1": 5},
 	}
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "grove", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "grove", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}
@@ -533,7 +533,7 @@ func TestRunMonthly_MessageContainsActionType(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunMonthly(context.Background(), "tenant-1", "grove", 777)
+	err := exec.RunMonthly(context.Background(), "tenant-1", "grove", bossInfo())
 	if err != nil {
 		t.Fatalf("RunMonthly: %v", err)
 	}
@@ -542,8 +542,8 @@ func TestRunMonthly_MessageContainsActionType(t *testing.T) {
 		t.Fatalf("expected 1 monthly message, got %d", len(sender.sentMessages))
 	}
 	msg := sender.sentMessages[0]
-	if msg.ChatID != 777 {
-		t.Errorf("expected chatID 777, got %d", msg.ChatID)
+	if msg.UserID != "999" {
+		t.Errorf("expected userID 999, got %s", msg.UserID)
 	}
 	if !strings.Contains(msg.Message, "report") {
 		t.Errorf("expected 'report' type in message, got: %s", msg.Message)
@@ -553,8 +553,8 @@ func TestRunMonthly_MessageContainsActionType(t *testing.T) {
 func TestRunWeekly_OneOnOne_BoundaryThreeDays(t *testing.T) {
 	db := &mockActionDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "OnBoundary", TelegramID: 111},
-			{ID: "e2", Name: "JustAbove", TelegramID: 222},
+			{ID: "e1", Name: "OnBoundary", TelegramID: 111, PreferredChannel: "telegram"},
+			{ID: "e2", Name: "JustAbove", TelegramID: 222, PreferredChannel: "telegram"},
 		},
 		submittedDays: map[string]int{
 			"e1": 3,
@@ -564,7 +564,7 @@ func TestRunWeekly_OneOnOne_BoundaryThreeDays(t *testing.T) {
 	sender := &mockSender{}
 	exec := newActionExecutor(db, sender)
 
-	err := exec.RunWeekly(context.Background(), "tenant-1", "grove", 999)
+	err := exec.RunWeekly(context.Background(), "tenant-1", "grove", bossInfo())
 	if err != nil {
 		t.Fatalf("RunWeekly: %v", err)
 	}

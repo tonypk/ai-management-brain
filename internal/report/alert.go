@@ -5,18 +5,15 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/tonypk/ai-management-brain/internal/channel"
 )
 
 // AlertDB defines the database queries needed by the alert agent.
 type AlertDB interface {
-	ListActiveEmployeesWithTelegram(ctx context.Context, tenantID string) ([]EmployeeInfo, error)
+	ListActiveEmployees(ctx context.Context, tenantID string) ([]EmployeeInfo, error)
 	GetConsecutiveMissDays(ctx context.Context, employeeID string) (int, error)
 	GetRecentSentiments(ctx context.Context, employeeID string, days int) ([]string, error)
-}
-
-// AlertSender sends alert messages to the boss.
-type AlertSender interface {
-	SendMessage(chatID int64, text string) error
 }
 
 // Alert represents a detected anomaly.
@@ -31,17 +28,17 @@ type Alert struct {
 // AlertChecker detects employee anomalies and alerts the boss.
 type AlertChecker struct {
 	db     AlertDB
-	sender AlertSender
+	sender channel.Sender
 }
 
 // NewAlertChecker creates a new alert checker.
-func NewAlertChecker(db AlertDB, sender AlertSender) *AlertChecker {
+func NewAlertChecker(db AlertDB, sender channel.Sender) *AlertChecker {
 	return &AlertChecker{db: db, sender: sender}
 }
 
 // CheckAll scans all employees for anomalies and returns triggered alerts.
-func (a *AlertChecker) CheckAll(ctx context.Context, tenantID string, bossChatID int64) ([]Alert, error) {
-	employees, err := a.db.ListActiveEmployeesWithTelegram(ctx, tenantID)
+func (a *AlertChecker) CheckAll(ctx context.Context, tenantID string, bossInfo EmployeeInfo) ([]Alert, error) {
+	employees, err := a.db.ListActiveEmployees(ctx, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("list employees: %w", err)
 	}
@@ -54,9 +51,14 @@ func (a *AlertChecker) CheckAll(ctx context.Context, tenantID string, bossChatID
 
 	// Send alerts to boss
 	if len(alerts) > 0 {
-		msg := formatAlerts(alerts)
-		if err := a.sender.SendMessage(bossChatID, msg); err != nil {
-			slog.Error("send alerts to boss", "error", err)
+		chType, chID := resolveEmployeeChannel(bossInfo)
+		if chType == "" {
+			slog.Error("boss has no channel configured, cannot send alerts")
+		} else {
+			msg := formatAlerts(alerts)
+			if err := a.sender.Send(ctx, chType, chID, msg); err != nil {
+				slog.Error("send alerts to boss", "error", err)
+			}
 		}
 	}
 

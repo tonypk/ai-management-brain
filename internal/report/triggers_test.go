@@ -14,12 +14,12 @@ type mockTriggerDB struct {
 	employees     []report.EmployeeInfo
 	missedDays    map[string]int // employeeID -> missed days
 	submittedDays map[string]int // employeeID -> submitted days
-	listErr       error          // error from ListActiveEmployeesWithTelegram
+	listErr       error          // error from ListActiveEmployees
 	missedDaysErr map[string]error
 	submittedErr  map[string]error
 }
 
-func (m *mockTriggerDB) ListActiveEmployeesWithTelegram(_ context.Context, _ string) ([]report.EmployeeInfo, error) {
+func (m *mockTriggerDB) ListActiveEmployees(_ context.Context, _ string) ([]report.EmployeeInfo, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
@@ -44,11 +44,21 @@ func (m *mockTriggerDB) GetSubmittedDaysLast7(_ context.Context, empID string) (
 	return m.submittedDays[empID], nil
 }
 
+// bossInfo creates a default boss EmployeeInfo for tests (backward compat with old bossChatID=999)
+func bossInfo() report.EmployeeInfo {
+	return report.EmployeeInfo{
+		ID:               "boss",
+		Name:             "Boss",
+		TelegramID:       999,
+		PreferredChannel: "telegram",
+	}
+}
+
 func TestTrigger_ConsecutiveMiss3Days(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111, CultureCode: "default"},
-			{ID: "e2", Name: "Bob", TelegramID: 222, CultureCode: "default"},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
+			{ID: "e2", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 4, "e2": 1},
 		submittedDays: map[string]int{"e1": 3, "e2": 6},
@@ -57,7 +67,7 @@ func TestTrigger_ConsecutiveMiss3Days(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -86,7 +96,7 @@ func TestTrigger_ConsecutiveMiss3Days(t *testing.T) {
 func TestTrigger_ExceptionalPerformance(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Star", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "Star", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 0},
 		submittedDays: map[string]int{"e1": 7},
@@ -95,7 +105,7 @@ func TestTrigger_ExceptionalPerformance(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -114,7 +124,7 @@ func TestTrigger_ExceptionalPerformance(t *testing.T) {
 func TestTrigger_NoTriggersWhenAllGood(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Normal", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "Normal", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 1},
 		submittedDays: map[string]int{"e1": 4},
@@ -123,7 +133,7 @@ func TestTrigger_NoTriggersWhenAllGood(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -138,7 +148,7 @@ func TestTrigger_NoTriggersWhenAllGood(t *testing.T) {
 func TestTrigger_SentimentDropEvent_ReturnsFalse(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 0},
 		submittedDays: map[string]int{"e1": 5},
@@ -147,7 +157,7 @@ func TestTrigger_SentimentDropEvent_ReturnsFalse(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -162,7 +172,7 @@ func TestTrigger_SentimentDropEvent_ReturnsFalse(t *testing.T) {
 func TestTrigger_BlockerUnresolved_ReturnsFalse(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Charlie", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "Charlie", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 5},
 		submittedDays: map[string]int{"e1": 2},
@@ -171,7 +181,7 @@ func TestTrigger_BlockerUnresolved_ReturnsFalse(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "grove", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "grove", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -186,7 +196,7 @@ func TestTrigger_BlockerUnresolved_ReturnsFalse(t *testing.T) {
 func TestTrigger_OutputDecline_UsesConsecutiveMissLogic(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 3},
 		submittedDays: map[string]int{"e1": 4},
@@ -195,7 +205,7 @@ func TestTrigger_OutputDecline_UsesConsecutiveMissLogic(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "grove", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "grove", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -217,7 +227,7 @@ func TestTrigger_OutputDecline_UsesConsecutiveMissLogic(t *testing.T) {
 func TestTrigger_ConsecutiveLowOutput_UsesConsecutiveMissLogic(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "SlowWorker", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "SlowWorker", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 5},
 		submittedDays: map[string]int{"e1": 2},
@@ -226,7 +236,7 @@ func TestTrigger_ConsecutiveLowOutput_UsesConsecutiveMissLogic(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -248,7 +258,7 @@ func TestTrigger_ConsecutiveLowOutput_UsesConsecutiveMissLogic(t *testing.T) {
 func TestTrigger_ExceptionalPerformance_ExactBoundary(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "HighPerf", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "HighPerf", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 1},
 		submittedDays: map[string]int{"e1": 6},
@@ -257,7 +267,7 @@ func TestTrigger_ExceptionalPerformance_ExactBoundary(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -276,7 +286,7 @@ func TestTrigger_ExceptionalPerformance_ExactBoundary(t *testing.T) {
 func TestTrigger_ExceptionalPerformance_BelowThreshold(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "AlmostStar", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "AlmostStar", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 2},
 		submittedDays: map[string]int{"e1": 5},
@@ -285,7 +295,7 @@ func TestTrigger_ExceptionalPerformance_BelowThreshold(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -300,7 +310,7 @@ func TestTrigger_ExceptionalPerformance_BelowThreshold(t *testing.T) {
 func TestTrigger_ConsecutiveMiss_ExactBoundary(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Boundary", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "Boundary", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 3},
 		submittedDays: map[string]int{"e1": 4},
@@ -309,7 +319,7 @@ func TestTrigger_ConsecutiveMiss_ExactBoundary(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -328,7 +338,7 @@ func TestTrigger_ConsecutiveMiss_ExactBoundary(t *testing.T) {
 func TestTrigger_ConsecutiveMiss_BelowBoundary(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "AlmostMiss", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "AlmostMiss", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 2},
 		submittedDays: map[string]int{"e1": 5},
@@ -337,7 +347,7 @@ func TestTrigger_ConsecutiveMiss_BelowBoundary(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -352,7 +362,7 @@ func TestTrigger_ConsecutiveMiss_BelowBoundary(t *testing.T) {
 func TestTrigger_NameTemplateReplacement(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "TemplateTest", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "TemplateTest", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 5},
 		submittedDays: map[string]int{"e1": 2},
@@ -361,7 +371,7 @@ func TestTrigger_NameTemplateReplacement(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -383,7 +393,7 @@ func TestTrigger_NameTemplateReplacement(t *testing.T) {
 func TestTrigger_PublicRecognitionAction(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "StarPerformer", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "StarPerformer", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 0},
 		submittedDays: map[string]int{"e1": 7},
@@ -392,7 +402,7 @@ func TestTrigger_PublicRecognitionAction(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -409,7 +419,7 @@ func TestTrigger_PublicRecognitionAction(t *testing.T) {
 
 	recognitionSent := false
 	for _, msg := range sender.sentMessages {
-		if msg.ChatID == 999 && strings.Contains(msg.Message, "Recognition") {
+		if msg.UserID == "999" && strings.Contains(msg.Message, "Recognition") {
 			recognitionSent = true
 		}
 	}
@@ -421,7 +431,7 @@ func TestTrigger_PublicRecognitionAction(t *testing.T) {
 func TestTrigger_PrivateCheckinAction(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "NeedsHelp", TelegramID: 555, CultureCode: "default"},
+			{ID: "e1", Name: "NeedsHelp", TelegramID: 555, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 5},
 		submittedDays: map[string]int{"e1": 2},
@@ -430,7 +440,7 @@ func TestTrigger_PrivateCheckinAction(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "ma", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "ma", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -447,7 +457,7 @@ func TestTrigger_PrivateCheckinAction(t *testing.T) {
 
 	sentToEmployee := false
 	for _, msg := range sender.sentMessages {
-		if msg.ChatID == 555 {
+		if msg.UserID == "555" {
 			sentToEmployee = true
 		}
 	}
@@ -459,7 +469,7 @@ func TestTrigger_PrivateCheckinAction(t *testing.T) {
 func TestTrigger_SuggestOneOnOneAction(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Declining", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "Declining", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 4},
 		submittedDays: map[string]int{"e1": 3},
@@ -468,7 +478,7 @@ func TestTrigger_SuggestOneOnOneAction(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "grove", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "grove", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -485,7 +495,7 @@ func TestTrigger_SuggestOneOnOneAction(t *testing.T) {
 
 	bossMsgSent := false
 	for _, msg := range sender.sentMessages {
-		if msg.ChatID == 999 && strings.Contains(msg.Message, "Trigger Alert") {
+		if msg.UserID == "999" && strings.Contains(msg.Message, "Trigger Alert") {
 			bossMsgSent = true
 		}
 	}
@@ -497,7 +507,7 @@ func TestTrigger_SuggestOneOnOneAction(t *testing.T) {
 func TestTrigger_PerformanceWarningAction(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "LowOutput", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "LowOutput", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 4},
 		submittedDays: map[string]int{"e1": 3},
@@ -506,7 +516,7 @@ func TestTrigger_PerformanceWarningAction(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -523,7 +533,7 @@ func TestTrigger_PerformanceWarningAction(t *testing.T) {
 
 	bossMsgSent := false
 	for _, msg := range sender.sentMessages {
-		if msg.ChatID == 999 {
+		if msg.UserID == "999" {
 			bossMsgSent = true
 		}
 	}
@@ -540,7 +550,7 @@ func TestTrigger_CheckAll_InvalidMentor(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	_, err := checker.CheckAll(context.Background(), "tenant-1", "nonexistent_mentor_xyz", 999)
+	_, err := checker.CheckAll(context.Background(), "tenant-1", "nonexistent_mentor_xyz", bossInfo())
 	if err == nil {
 		t.Error("expected error for invalid mentor ID")
 	}
@@ -554,7 +564,7 @@ func TestTrigger_CheckAll_DBErrorOnListEmployees(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	_, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", 999)
+	_, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err == nil {
 		t.Error("expected error when DB fails to list employees")
 	}
@@ -566,7 +576,7 @@ func TestTrigger_CheckAll_DBErrorOnListEmployees(t *testing.T) {
 func TestTrigger_CheckAll_DBErrorOnEventCheck(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "ErrorEmp", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "ErrorEmp", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays: map[string]int{},
 		missedDaysErr: map[string]error{
@@ -578,7 +588,7 @@ func TestTrigger_CheckAll_DBErrorOnEventCheck(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("should not return top-level error for per-employee DB failure: %v", err)
 	}
@@ -600,7 +610,7 @@ func TestTrigger_CheckAll_NoEmployees(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -616,7 +626,7 @@ func TestTrigger_CheckAll_NoEmployees(t *testing.T) {
 func TestTrigger_MultipleTriggersPerEmployee(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "MultiTrigger", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "MultiTrigger", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 5},
 		submittedDays: map[string]int{"e1": 2},
@@ -625,7 +635,7 @@ func TestTrigger_MultipleTriggersPerEmployee(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -651,8 +661,8 @@ func TestTrigger_MultipleTriggersPerEmployee(t *testing.T) {
 func TestTrigger_MultipleEmployees_MultipleResults(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111, CultureCode: "default"},
-			{ID: "e2", Name: "Bob", TelegramID: 222, CultureCode: "default"},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
+			{ID: "e2", Name: "Bob", TelegramID: 222, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 4, "e2": 5},
 		submittedDays: map[string]int{"e1": 3, "e2": 2},
@@ -661,7 +671,7 @@ func TestTrigger_MultipleEmployees_MultipleResults(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -688,7 +698,7 @@ func TestTrigger_MultipleEmployees_MultipleResults(t *testing.T) {
 func TestTrigger_SubmittedDaysError_SkipsTrigger(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "ErrorStar", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "ErrorStar", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 0},
 		submittedDays: map[string]int{},
@@ -700,7 +710,7 @@ func TestTrigger_SubmittedDaysError_SkipsTrigger(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "ren", bossInfo())
 	if err != nil {
 		t.Fatalf("should not return top-level error: %v", err)
 	}
@@ -715,7 +725,7 @@ func TestTrigger_SubmittedDaysError_SkipsTrigger(t *testing.T) {
 func TestTrigger_TriggerResult_Fields(t *testing.T) {
 	db := &mockTriggerDB{
 		employees: []report.EmployeeInfo{
-			{ID: "e1", Name: "Alice", TelegramID: 111, CultureCode: "default"},
+			{ID: "e1", Name: "Alice", TelegramID: 111, PreferredChannel: "telegram", CultureCode: "default"},
 		},
 		missedDays:    map[string]int{"e1": 4},
 		submittedDays: map[string]int{"e1": 3},
@@ -724,7 +734,7 @@ func TestTrigger_TriggerResult_Fields(t *testing.T) {
 	factory := brain.NewEngineFactory()
 
 	checker := report.NewTriggerChecker(db, sender, factory)
-	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", 999)
+	results, err := checker.CheckAll(context.Background(), "tenant-1", "inamori", bossInfo())
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}

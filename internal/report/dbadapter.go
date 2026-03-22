@@ -43,14 +43,19 @@ func (a *DBAdapter) ListEmployeesWithoutReport(ctx context.Context, tenantID, da
 	}
 	result := make([]EmployeeInfo, 0, len(emps))
 	for _, e := range emps {
-		if !e.TelegramID.Valid {
+		// Skip employees that have NO channel configured at all
+		if !e.TelegramID.Valid && !e.SignalPhone.Valid && !e.SlackID.Valid && !e.LarkID.Valid {
 			continue
 		}
 		result = append(result, EmployeeInfo{
-			ID:          rFormatUUID(e.ID),
-			Name:        e.Name,
-			TelegramID:  e.TelegramID.Int64,
-			CultureCode: e.CultureCode,
+			ID:               rFormatUUID(e.ID),
+			Name:             e.Name,
+			TelegramID:       e.TelegramID.Int64,
+			SignalPhone:      e.SignalPhone.String,
+			SlackID:          e.SlackID.String,
+			LarkID:           e.LarkID.String,
+			PreferredChannel: e.PreferredChannel,
+			CultureCode:      e.CultureCode,
 		})
 	}
 	return result, nil
@@ -202,10 +207,10 @@ func (a *DBAdapter) CreateReport(ctx context.Context, tenantID, employeeID, date
 	return err
 }
 
-// --- Employee queries (used by remind job) ---
+// --- Employee queries (used by remind job, triggers, actions, alerts) ---
 
-// ListActiveEmployeesWithTelegram returns active employees who have Telegram linked.
-func (a *DBAdapter) ListActiveEmployeesWithTelegram(ctx context.Context, tenantID string) ([]EmployeeInfo, error) {
+// ListActiveEmployees returns active employees who have at least one channel configured.
+func (a *DBAdapter) ListActiveEmployees(ctx context.Context, tenantID string) ([]EmployeeInfo, error) {
 	uid, err := rParseUUID(tenantID)
 	if err != nil {
 		return nil, err
@@ -216,14 +221,20 @@ func (a *DBAdapter) ListActiveEmployeesWithTelegram(ctx context.Context, tenantI
 	}
 	var result []EmployeeInfo
 	for _, e := range emps {
-		if e.TelegramID.Valid {
-			result = append(result, EmployeeInfo{
-				ID:          rFormatUUID(e.ID),
-				Name:        e.Name,
-				TelegramID:  e.TelegramID.Int64,
-				CultureCode: e.CultureCode,
-			})
+		// Skip employees with no channel configured
+		if !e.TelegramID.Valid && !e.SignalPhone.Valid && !e.SlackID.Valid && !e.LarkID.Valid {
+			continue
 		}
+		result = append(result, EmployeeInfo{
+			ID:               rFormatUUID(e.ID),
+			Name:             e.Name,
+			TelegramID:       e.TelegramID.Int64,
+			SignalPhone:      e.SignalPhone.String,
+			SlackID:          e.SlackID.String,
+			LarkID:           e.LarkID.String,
+			PreferredChannel: e.PreferredChannel,
+			CultureCode:      e.CultureCode,
+		})
 	}
 	return result, nil
 }
