@@ -14,7 +14,7 @@ import (
 const createTenant = `-- name: CreateTenant :one
 INSERT INTO tenants (name, timezone, anthropic_key, mentor_id, bot_token, boss_chat_id, config)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at, plan
+RETURNING id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at, plan, slack_bot_token, slack_signing_secret, lark_app_id, lark_app_secret, signal_phone, enabled_channels
 `
 
 type CreateTenantParams struct {
@@ -50,12 +50,18 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 		&i.Config,
 		&i.CreatedAt,
 		&i.Plan,
+		&i.SlackBotToken,
+		&i.SlackSigningSecret,
+		&i.LarkAppID,
+		&i.LarkAppSecret,
+		&i.SignalPhone,
+		&i.EnabledChannels,
 	)
 	return i, err
 }
 
 const getTenant = `-- name: GetTenant :one
-SELECT id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at, plan FROM tenants WHERE id = $1
+SELECT id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at, plan, slack_bot_token, slack_signing_secret, lark_app_id, lark_app_secret, signal_phone, enabled_channels FROM tenants WHERE id = $1
 `
 
 func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (Tenant, error) {
@@ -73,12 +79,18 @@ func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (Tenant, error)
 		&i.Config,
 		&i.CreatedAt,
 		&i.Plan,
+		&i.SlackBotToken,
+		&i.SlackSigningSecret,
+		&i.LarkAppID,
+		&i.LarkAppSecret,
+		&i.SignalPhone,
+		&i.EnabledChannels,
 	)
 	return i, err
 }
 
 const getTenantByBossChatID = `-- name: GetTenantByBossChatID :one
-SELECT id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at, plan FROM tenants WHERE boss_chat_id = $1
+SELECT id, name, timezone, anthropic_key, mentor_id, mentor_blend, bot_token, boss_chat_id, config, created_at, plan, slack_bot_token, slack_signing_secret, lark_app_id, lark_app_secret, signal_phone, enabled_channels FROM tenants WHERE boss_chat_id = $1
 `
 
 func (q *Queries) GetTenantByBossChatID(ctx context.Context, bossChatID int64) (Tenant, error) {
@@ -96,8 +108,75 @@ func (q *Queries) GetTenantByBossChatID(ctx context.Context, bossChatID int64) (
 		&i.Config,
 		&i.CreatedAt,
 		&i.Plan,
+		&i.SlackBotToken,
+		&i.SlackSigningSecret,
+		&i.LarkAppID,
+		&i.LarkAppSecret,
+		&i.SignalPhone,
+		&i.EnabledChannels,
 	)
 	return i, err
+}
+
+const getTenantChannelConfig = `-- name: GetTenantChannelConfig :one
+SELECT id, slack_bot_token, slack_signing_secret, lark_app_id, lark_app_secret, signal_phone, enabled_channels
+FROM tenants WHERE id = $1
+`
+
+type GetTenantChannelConfigRow struct {
+	ID                 pgtype.UUID `json:"id"`
+	SlackBotToken      pgtype.Text `json:"slack_bot_token"`
+	SlackSigningSecret pgtype.Text `json:"slack_signing_secret"`
+	LarkAppID          pgtype.Text `json:"lark_app_id"`
+	LarkAppSecret      pgtype.Text `json:"lark_app_secret"`
+	SignalPhone        pgtype.Text `json:"signal_phone"`
+	EnabledChannels    []string    `json:"enabled_channels"`
+}
+
+func (q *Queries) GetTenantChannelConfig(ctx context.Context, id pgtype.UUID) (GetTenantChannelConfigRow, error) {
+	row := q.db.QueryRow(ctx, getTenantChannelConfig, id)
+	var i GetTenantChannelConfigRow
+	err := row.Scan(
+		&i.ID,
+		&i.SlackBotToken,
+		&i.SlackSigningSecret,
+		&i.LarkAppID,
+		&i.LarkAppSecret,
+		&i.SignalPhone,
+		&i.EnabledChannels,
+	)
+	return i, err
+}
+
+const updateTenantChannels = `-- name: UpdateTenantChannels :exec
+UPDATE tenants
+SET slack_bot_token = $2, slack_signing_secret = $3,
+    lark_app_id = $4, lark_app_secret = $5,
+    signal_phone = $6, enabled_channels = $7
+WHERE id = $1
+`
+
+type UpdateTenantChannelsParams struct {
+	ID                 pgtype.UUID `json:"id"`
+	SlackBotToken      pgtype.Text `json:"slack_bot_token"`
+	SlackSigningSecret pgtype.Text `json:"slack_signing_secret"`
+	LarkAppID          pgtype.Text `json:"lark_app_id"`
+	LarkAppSecret      pgtype.Text `json:"lark_app_secret"`
+	SignalPhone        pgtype.Text `json:"signal_phone"`
+	EnabledChannels    []string    `json:"enabled_channels"`
+}
+
+func (q *Queries) UpdateTenantChannels(ctx context.Context, arg UpdateTenantChannelsParams) error {
+	_, err := q.db.Exec(ctx, updateTenantChannels,
+		arg.ID,
+		arg.SlackBotToken,
+		arg.SlackSigningSecret,
+		arg.LarkAppID,
+		arg.LarkAppSecret,
+		arg.SignalPhone,
+		arg.EnabledChannels,
+	)
+	return err
 }
 
 const updateTenantConfig = `-- name: UpdateTenantConfig :exec

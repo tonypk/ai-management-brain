@@ -14,7 +14,7 @@ import (
 const createChaseLog = `-- name: CreateChaseLog :one
 INSERT INTO chase_logs (tenant_id, employee_id, report_date, step, action, message)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, tenant_id, employee_id, report_date, step, action, message, chased_at
+RETURNING id, tenant_id, employee_id, report_date, step, action, message, chased_at, channel
 `
 
 type CreateChaseLogParams struct {
@@ -45,6 +45,7 @@ func (q *Queries) CreateChaseLog(ctx context.Context, arg CreateChaseLogParams) 
 		&i.Action,
 		&i.Message,
 		&i.ChasedAt,
+		&i.Channel,
 	)
 	return i, err
 }
@@ -61,15 +62,26 @@ type GetChaseLogsForDateParams struct {
 	ReportDate pgtype.Date `json:"report_date"`
 }
 
-func (q *Queries) GetChaseLogsForDate(ctx context.Context, arg GetChaseLogsForDateParams) ([]ChaseLog, error) {
+type GetChaseLogsForDateRow struct {
+	ID         pgtype.UUID        `json:"id"`
+	TenantID   pgtype.UUID        `json:"tenant_id"`
+	EmployeeID pgtype.UUID        `json:"employee_id"`
+	ReportDate pgtype.Date        `json:"report_date"`
+	Step       int32              `json:"step"`
+	Action     string             `json:"action"`
+	Message    string             `json:"message"`
+	ChasedAt   pgtype.Timestamptz `json:"chased_at"`
+}
+
+func (q *Queries) GetChaseLogsForDate(ctx context.Context, arg GetChaseLogsForDateParams) ([]GetChaseLogsForDateRow, error) {
 	rows, err := q.db.Query(ctx, getChaseLogsForDate, arg.EmployeeID, arg.ReportDate)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ChaseLog{}
+	items := []GetChaseLogsForDateRow{}
 	for rows.Next() {
-		var i ChaseLog
+		var i GetChaseLogsForDateRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,

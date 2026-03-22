@@ -61,3 +61,30 @@ WHERE employee_id = $1 AND report_date >= CURRENT_DATE - INTERVAL '7 days';
 
 -- name: CountReportsByEmployeeDate :one
 SELECT count(*) FROM reports WHERE employee_id = $1 AND report_date = $2;
+
+-- name: ListReportsFiltered :many
+SELECT r.*, e.name as employee_name
+FROM reports r
+JOIN employees e ON r.employee_id = e.id
+WHERE r.tenant_id = $1
+  AND ($2::date IS NULL OR r.report_date >= $2)
+  AND ($3::date IS NULL OR r.report_date <= $3)
+  AND ($4::uuid IS NULL OR r.employee_id = $4)
+  AND ($5::text = '' OR r.channel = $5)
+ORDER BY r.submitted_at DESC
+LIMIT $6 OFFSET $7;
+
+-- name: CountReportsFiltered :one
+SELECT COUNT(*) FROM reports
+WHERE tenant_id = $1
+  AND ($2::date IS NULL OR report_date >= $2)
+  AND ($3::date IS NULL OR report_date <= $3)
+  AND ($4::uuid IS NULL OR employee_id = $4)
+  AND ($5::text = '' OR channel = $5);
+
+-- name: GetReportStatsByChannel :many
+SELECT channel, COUNT(*) as count
+FROM reports WHERE tenant_id = $1
+  AND ($2::date IS NULL OR report_date >= $2)
+  AND ($3::date IS NULL OR report_date <= $3)
+GROUP BY channel;

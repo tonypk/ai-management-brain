@@ -43,10 +43,40 @@ func (q *Queries) CountReportsByTenantDate(ctx context.Context, arg CountReports
 	return count, err
 }
 
+const countReportsFiltered = `-- name: CountReportsFiltered :one
+SELECT COUNT(*) FROM reports
+WHERE tenant_id = $1
+  AND ($2::date IS NULL OR report_date >= $2)
+  AND ($3::date IS NULL OR report_date <= $3)
+  AND ($4::uuid IS NULL OR employee_id = $4)
+  AND ($5::text = '' OR channel = $5)
+`
+
+type CountReportsFilteredParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	Column2  pgtype.Date `json:"column_2"`
+	Column3  pgtype.Date `json:"column_3"`
+	Column4  pgtype.UUID `json:"column_4"`
+	Column5  string      `json:"column_5"`
+}
+
+func (q *Queries) CountReportsFiltered(ctx context.Context, arg CountReportsFilteredParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countReportsFiltered,
+		arg.TenantID,
+		arg.Column2,
+		arg.Column3,
+		arg.Column4,
+		arg.Column5,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createReport = `-- name: CreateReport :one
 INSERT INTO reports (tenant_id, employee_id, report_date, answers, blockers, sentiment)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, tenant_id, employee_id, report_date, answers, blockers, sentiment, submitted_at
+RETURNING id, tenant_id, employee_id, report_date, answers, blockers, sentiment, submitted_at, channel
 `
 
 type CreateReportParams struct {
@@ -77,6 +107,7 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (Rep
 		&i.Blockers,
 		&i.Sentiment,
 		&i.SubmittedAt,
+		&i.Channel,
 	)
 	return i, err
 }
@@ -151,7 +182,7 @@ func (q *Queries) GetEmployeeSubmissionHistory(ctx context.Context, employeeID p
 }
 
 const getLatestReportByEmployee = `-- name: GetLatestReportByEmployee :one
-SELECT id, tenant_id, employee_id, report_date, answers, blockers, sentiment, submitted_at FROM reports
+SELECT id, tenant_id, employee_id, report_date, answers, blockers, sentiment, submitted_at, channel FROM reports
 WHERE employee_id = $1 AND report_date = $2
 ORDER BY submitted_at DESC LIMIT 1
 `
@@ -173,6 +204,7 @@ func (q *Queries) GetLatestReportByEmployee(ctx context.Context, arg GetLatestRe
 		&i.Blockers,
 		&i.Sentiment,
 		&i.SubmittedAt,
+		&i.Channel,
 	)
 	return i, err
 }
@@ -210,8 +242,47 @@ func (q *Queries) GetRecentSentiments(ctx context.Context, arg GetRecentSentimen
 	return items, nil
 }
 
+const getReportStatsByChannel = `-- name: GetReportStatsByChannel :many
+SELECT channel, COUNT(*) as count
+FROM reports WHERE tenant_id = $1
+  AND ($2::date IS NULL OR report_date >= $2)
+  AND ($3::date IS NULL OR report_date <= $3)
+GROUP BY channel
+`
+
+type GetReportStatsByChannelParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	Column2  pgtype.Date `json:"column_2"`
+	Column3  pgtype.Date `json:"column_3"`
+}
+
+type GetReportStatsByChannelRow struct {
+	Channel string `json:"channel"`
+	Count   int64  `json:"count"`
+}
+
+func (q *Queries) GetReportStatsByChannel(ctx context.Context, arg GetReportStatsByChannelParams) ([]GetReportStatsByChannelRow, error) {
+	rows, err := q.db.Query(ctx, getReportStatsByChannel, arg.TenantID, arg.Column2, arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetReportStatsByChannelRow{}
+	for rows.Next() {
+		var i GetReportStatsByChannelRow
+		if err := rows.Scan(&i.Channel, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getReportsByTenantDate = `-- name: GetReportsByTenantDate :many
-SELECT r.id, r.tenant_id, r.employee_id, r.report_date, r.answers, r.blockers, r.sentiment, r.submitted_at, e.name as employee_name FROM reports r
+SELECT r.id, r.tenant_id, r.employee_id, r.report_date, r.answers, r.blockers, r.sentiment, r.submitted_at, r.channel, e.name as employee_name FROM reports r
 JOIN employees e ON r.employee_id = e.id
 WHERE r.tenant_id = $1 AND r.report_date = $2
 ORDER BY r.submitted_at
@@ -231,6 +302,7 @@ type GetReportsByTenantDateRow struct {
 	Blockers     pgtype.Text        `json:"blockers"`
 	Sentiment    pgtype.Text        `json:"sentiment"`
 	SubmittedAt  pgtype.Timestamptz `json:"submitted_at"`
+	Channel      string             `json:"channel"`
 	EmployeeName string             `json:"employee_name"`
 }
 
@@ -252,6 +324,7 @@ func (q *Queries) GetReportsByTenantDate(ctx context.Context, arg GetReportsByTe
 			&i.Blockers,
 			&i.Sentiment,
 			&i.SubmittedAt,
+			&i.Channel,
 			&i.EmployeeName,
 		); err != nil {
 			return nil, err
@@ -274,6 +347,81 @@ func (q *Queries) GetSubmittedDaysLast7(ctx context.Context, employeeID pgtype.U
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const listReportsFiltered = `-- name: ListReportsFiltered :many
+SELECT r.id, r.tenant_id, r.employee_id, r.report_date, r.answers, r.blockers, r.sentiment, r.submitted_at, r.channel, e.name as employee_name
+FROM reports r
+JOIN employees e ON r.employee_id = e.id
+WHERE r.tenant_id = $1
+  AND ($2::date IS NULL OR r.report_date >= $2)
+  AND ($3::date IS NULL OR r.report_date <= $3)
+  AND ($4::uuid IS NULL OR r.employee_id = $4)
+  AND ($5::text = '' OR r.channel = $5)
+ORDER BY r.submitted_at DESC
+LIMIT $6 OFFSET $7
+`
+
+type ListReportsFilteredParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	Column2  pgtype.Date `json:"column_2"`
+	Column3  pgtype.Date `json:"column_3"`
+	Column4  pgtype.UUID `json:"column_4"`
+	Column5  string      `json:"column_5"`
+	Limit    int32       `json:"limit"`
+	Offset   int32       `json:"offset"`
+}
+
+type ListReportsFilteredRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	EmployeeID   pgtype.UUID        `json:"employee_id"`
+	ReportDate   pgtype.Date        `json:"report_date"`
+	Answers      []byte             `json:"answers"`
+	Blockers     pgtype.Text        `json:"blockers"`
+	Sentiment    pgtype.Text        `json:"sentiment"`
+	SubmittedAt  pgtype.Timestamptz `json:"submitted_at"`
+	Channel      string             `json:"channel"`
+	EmployeeName string             `json:"employee_name"`
+}
+
+func (q *Queries) ListReportsFiltered(ctx context.Context, arg ListReportsFilteredParams) ([]ListReportsFilteredRow, error) {
+	rows, err := q.db.Query(ctx, listReportsFiltered,
+		arg.TenantID,
+		arg.Column2,
+		arg.Column3,
+		arg.Column4,
+		arg.Column5,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReportsFilteredRow{}
+	for rows.Next() {
+		var i ListReportsFilteredRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EmployeeID,
+			&i.ReportDate,
+			&i.Answers,
+			&i.Blockers,
+			&i.Sentiment,
+			&i.SubmittedAt,
+			&i.Channel,
+			&i.EmployeeName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateReportAnalysis = `-- name: UpdateReportAnalysis :exec

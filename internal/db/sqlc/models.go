@@ -56,18 +56,23 @@ type ChaseLog struct {
 	Action     string             `json:"action"`
 	Message    string             `json:"message"`
 	ChasedAt   pgtype.Timestamptz `json:"chased_at"`
+	Channel    string             `json:"channel"`
 }
 
 type Employee struct {
-	ID          pgtype.UUID        `json:"id"`
-	TenantID    pgtype.UUID        `json:"tenant_id"`
-	Name        string             `json:"name"`
-	TelegramID  pgtype.Int8        `json:"telegram_id"`
-	CultureCode string             `json:"culture_code"`
-	Role        string             `json:"role"`
-	InviteCode  pgtype.Text        `json:"invite_code"`
-	IsActive    bool               `json:"is_active"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID               pgtype.UUID        `json:"id"`
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	Name             string             `json:"name"`
+	TelegramID       pgtype.Int8        `json:"telegram_id"`
+	CultureCode      string             `json:"culture_code"`
+	Role             string             `json:"role"`
+	InviteCode       pgtype.Text        `json:"invite_code"`
+	IsActive         bool               `json:"is_active"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	SignalPhone      pgtype.Text        `json:"signal_phone"`
+	SlackID          pgtype.Text        `json:"slack_id"`
+	LarkID           pgtype.Text        `json:"lark_id"`
+	PreferredChannel string             `json:"preferred_channel"`
 }
 
 type Memory struct {
@@ -115,6 +120,7 @@ type Report struct {
 	Blockers    pgtype.Text        `json:"blockers"`
 	Sentiment   pgtype.Text        `json:"sentiment"`
 	SubmittedAt pgtype.Timestamptz `json:"submitted_at"`
+	Channel     string             `json:"channel"`
 }
 
 type Summary struct {
@@ -129,17 +135,23 @@ type Summary struct {
 }
 
 type Tenant struct {
-	ID           pgtype.UUID        `json:"id"`
-	Name         string             `json:"name"`
-	Timezone     string             `json:"timezone"`
-	AnthropicKey pgtype.Text        `json:"anthropic_key"`
-	MentorID     string             `json:"mentor_id"`
-	MentorBlend  []byte             `json:"mentor_blend"`
-	BotToken     pgtype.Text        `json:"bot_token"`
-	BossChatID   int64              `json:"boss_chat_id"`
-	Config       []byte             `json:"config"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	Plan         string             `json:"plan"`
+	ID                 pgtype.UUID        `json:"id"`
+	Name               string             `json:"name"`
+	Timezone           string             `json:"timezone"`
+	AnthropicKey       pgtype.Text        `json:"anthropic_key"`
+	MentorID           string             `json:"mentor_id"`
+	MentorBlend        []byte             `json:"mentor_blend"`
+	BotToken           pgtype.Text        `json:"bot_token"`
+	BossChatID         int64              `json:"boss_chat_id"`
+	Config             []byte             `json:"config"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Plan               string             `json:"plan"`
+	SlackBotToken      pgtype.Text        `json:"slack_bot_token"`
+	SlackSigningSecret pgtype.Text        `json:"slack_signing_secret"`
+	LarkAppID          pgtype.Text        `json:"lark_app_id"`
+	LarkAppSecret      pgtype.Text        `json:"lark_app_secret"`
+	SignalPhone        pgtype.Text        `json:"signal_phone"`
+	EnabledChannels    []string           `json:"enabled_channels"`
 }
 
 type User struct {

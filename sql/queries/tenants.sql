@@ -17,3 +17,14 @@ UPDATE tenants SET config = $2 WHERE id = $1;
 
 -- name: UpdateTenantNameTimezone :exec
 UPDATE tenants SET name = $2, timezone = $3 WHERE id = $1;
+
+-- name: UpdateTenantChannels :exec
+UPDATE tenants
+SET slack_bot_token = $2, slack_signing_secret = $3,
+    lark_app_id = $4, lark_app_secret = $5,
+    signal_phone = $6, enabled_channels = $7
+WHERE id = $1;
+
+-- name: GetTenantChannelConfig :one
+SELECT id, slack_bot_token, slack_signing_secret, lark_app_id, lark_app_secret, signal_phone, enabled_channels
+FROM tenants WHERE id = $1;
