@@ -882,3 +882,27 @@ func TestBus_PublishPayload_VerifyEventStructure(t *testing.T) {
 
 	cancel()
 }
+
+func TestChatCompletedPayload_Marshal(t *testing.T) {
+	p := events.ChatCompletedPayload{
+		EmployeeID: "emp-123",
+		Messages:   `[{"role":"user","content":"hi"}]`,
+	}
+	data, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded events.ChatCompletedPayload
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.EmployeeID != "emp-123" {
+		t.Fatalf("unexpected: %+v", decoded)
+	}
+}
+
+func TestChatCompletedEventType(t *testing.T) {
+	if events.ChatCompleted != "chat.completed" {
+		t.Fatalf("unexpected event type: %s", events.ChatCompleted)
+	}
+}

@@ -23,6 +23,7 @@ const (
 	AlertFired       EventType = "alert.fired"
 	MentorChanged    EventType = "mentor.changed"
 	EmployeeJoined   EventType = "employee.joined"
+	ChatCompleted    EventType = "chat.completed"
 )
 
 // Event is the envelope for all events.
@@ -67,6 +68,12 @@ type ChaseCompletedPayload struct {
 	Action       string `json:"action"`
 	Message      string `json:"message"`
 	Channel      string `json:"channel"`
+}
+
+// ChatCompletedPayload is sent when a chat conversation is closed for memory extraction.
+type ChatCompletedPayload struct {
+	EmployeeID string `json:"employee_id"`
+	Messages   string `json:"messages"` // JSON array of ChatMessage
 }
 
 // Handler processes events.
