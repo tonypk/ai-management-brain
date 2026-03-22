@@ -11,6 +11,7 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
 	"github.com/tonypk/ai-management-brain/internal/memory"
 	"github.com/tonypk/ai-management-brain/internal/roles"
+	"github.com/tonypk/ai-management-brain/internal/scheduler"
 )
 
 // RouterConfig holds dependencies for the API router.
@@ -26,6 +27,10 @@ type RouterConfig struct {
 	SignalAdapter  *channel.SignalAdapter  // nil = Signal disabled
 	MemoryEngine   *memory.MemoryEngine   // nil = memory disabled
 	MemoryStore    *memory.MemoryStore    // nil = memory disabled
+	ChannelRouter  *channel.Router         // nil = multi-channel disabled
+	SlackAdapter   *channel.SlackAdapter   // nil = Slack disabled
+	LarkAdapter    *channel.LarkAdapter    // nil = Lark disabled
+	Scheduler      *scheduler.Scheduler    // nil = scheduler disabled
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -123,6 +128,43 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 			// Employee profile via memory
 			protected.GET("/employees/:id/profile", handleGetEmployeeProfile(cfg.MemoryStore))
+		}
+
+		// Admin routes (boss only)
+		admin := protected.Group("/admin")
+		admin.Use(RequireRole("boss"))
+		{
+			// Channels
+			admin.GET("/channels", handleGetChannels(cfg.Queries, cfg.ChannelRouter))
+			admin.PUT("/channels", handleUpdateChannels(cfg.Queries))
+			admin.POST("/channels/test/:channel", handleTestChannel(cfg.ChannelRouter))
+
+			// Employees with channels
+			admin.GET("/employees", handleAdminListEmployees(cfg.Queries))
+			admin.PUT("/employees/:id/channels", handleUpdateEmployeeChannels(cfg.Queries))
+			admin.PUT("/employees/:id/preferred", handleUpdateEmployeePreferred(cfg.Queries))
+
+			// Reports
+			admin.GET("/reports", handleAdminListReports(cfg.Queries))
+			admin.GET("/reports/stats", handleReportStats(cfg.Queries))
+
+			// Mentors (reuse existing mentorDescriptions from handlers.go)
+			admin.GET("/mentors", handleListMentors())
+
+			// Scheduler
+			admin.GET("/scheduler", handleListSchedulerJobs(cfg.Scheduler))
+			admin.PUT("/scheduler/:job/schedule", handleUpdateJobSchedule(cfg.Scheduler))
+			admin.POST("/scheduler/:job/trigger", handleTriggerJob(cfg.Scheduler))
+
+			// Memories (admin view — reuses existing handlers from memory_handlers.go)
+			if cfg.MemoryStore != nil {
+				admin.GET("/memories", handleListMemories(cfg.MemoryStore))
+				admin.GET("/memories/stats", handleMemoryStats(cfg.MemoryStore))
+				admin.DELETE("/memories/:id", handleDeleteMemory(cfg.MemoryStore))
+				if cfg.MemoryEngine != nil {
+					admin.POST("/memories/search", handleSearchMemories(cfg.MemoryEngine))
+				}
+			}
 		}
 	}
 

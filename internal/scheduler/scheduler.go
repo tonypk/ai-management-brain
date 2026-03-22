@@ -200,6 +200,16 @@ func (s *Scheduler) UpdateJobSchedule(name, cron string) error {
 	return nil
 }
 
+// TriggerJob runs a job immediately by name.
+func (s *Scheduler) TriggerJob(ctx context.Context, name string) error {
+	for _, j := range s.jobs {
+		if j.name == name {
+			return j.callback(ctx)
+		}
+	}
+	return fmt.Errorf("job %q not found", name)
+}
+
 // getLastRun returns the last run time from Redis.
 func (s *Scheduler) getLastRun(name string) time.Time {
 	raw, err := s.redis.Get(context.Background(), fmt.Sprintf("scheduler:last_run:%s", name))
