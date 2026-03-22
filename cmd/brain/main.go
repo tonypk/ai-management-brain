@@ -303,7 +303,29 @@ CREATE INDEX IF NOT EXISTS idx_memories_merged ON memories(merged_into) WHERE me
 
 	// Migration 000006: see sql/migrations/000006_vector384.up.sql
 	migration006 := `ALTER TABLE memories ALTER COLUMN embedding TYPE vector(384);`
-	_, err := pool.Exec(ctx, migration006)
+	if _, err := pool.Exec(ctx, migration006); err != nil {
+		return err
+	}
+
+	// Migration 000007: Multi-channel support
+	migration007 := `
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS signal_phone VARCHAR(20);
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS slack_id VARCHAR(50);
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS lark_id VARCHAR(50);
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS preferred_channel VARCHAR(20) NOT NULL DEFAULT 'telegram';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_signal ON employees(signal_phone) WHERE signal_phone IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_slack ON employees(slack_id) WHERE slack_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_lark ON employees(lark_id) WHERE lark_id IS NOT NULL;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slack_bot_token TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slack_signing_secret TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS lark_app_id TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS lark_app_secret TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS signal_phone VARCHAR(20);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS enabled_channels TEXT[] NOT NULL DEFAULT '{telegram}';
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS channel VARCHAR(20) NOT NULL DEFAULT 'telegram';
+ALTER TABLE chase_logs ADD COLUMN IF NOT EXISTS channel VARCHAR(20) NOT NULL DEFAULT 'telegram';
+`
+	_, err := pool.Exec(ctx, migration007)
 	return err
 }
 
