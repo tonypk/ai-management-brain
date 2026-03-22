@@ -34,9 +34,9 @@ ALTER TABLE employees ADD COLUMN slack_id VARCHAR(50);
 ALTER TABLE employees ADD COLUMN lark_id VARCHAR(50);
 ALTER TABLE employees ADD COLUMN preferred_channel VARCHAR(20) NOT NULL DEFAULT 'telegram';
 
-CREATE INDEX idx_employees_signal ON employees(signal_phone) WHERE signal_phone IS NOT NULL;
-CREATE INDEX idx_employees_slack ON employees(slack_id) WHERE slack_id IS NOT NULL;
-CREATE INDEX idx_employees_lark ON employees(lark_id) WHERE lark_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_employees_signal ON employees(signal_phone) WHERE signal_phone IS NOT NULL;
+CREATE UNIQUE INDEX idx_employees_slack ON employees(slack_id) WHERE slack_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_employees_lark ON employees(lark_id) WHERE lark_id IS NOT NULL;
 ```
 
 #### Tenant Channel Configuration
@@ -271,6 +271,10 @@ type RouterConfig struct {
 ```
 
 Admin handlers use the existing `mentorDescriptions` map (defined in `handlers.go`, currently 14 mentors) and `*sqlc.Queries` directly — no new interface needed.
+
+> **Additional RouterConfig fields needed**: `SlackAdapter *channel.SlackAdapter` and `LarkAdapter *channel.LarkAdapter` for the test-channel endpoint and webhook registration.
+
+> **Scheduler gap**: The existing `Scheduler` struct has no method to update a job's cron expression at runtime. Add `UpdateJobSchedule(name, cron string) error` (remove + re-add the job in gocron).
 
 ### Common Patterns
 
@@ -510,7 +514,8 @@ New file `internal/channel/commands.go`:
 ```go
 package channel
 
-type CommandHandler struct {
+// Named MessageHandler to avoid collision with existing CommandHandler func type in adapter.go
+type MessageHandler struct {
     queries   *sqlc.Queries
     collector *report.Collector
     brain     *brain.Engine
@@ -586,7 +591,7 @@ func (t *TelegramAdapter) handleText(c tele.Context) error {
         Text:        c.Text(),
         IsCommand:   false,
     }
-    return t.cmdHandler.HandleMessage(context.Background(), msg)
+    return t.msgHandler.HandleMessage(context.Background(), msg)
 }
 ```
 
@@ -616,7 +621,7 @@ func (s *SlackAdapter) HandleSlackEvent(c *gin.Context) {
     // 1. Verify Slack request signature using signing secret
     // 2. Handle URL verification challenge (return challenge value)
     // 3. Parse event payload (event_callback type)
-    // 4. For message events: create channel.Message, call cmdHandler.HandleMessage()
+    // 4. For message events: create channel.Message, call msgHandler.HandleMessage()
 }
 ```
 
@@ -631,7 +636,7 @@ func (l *LarkAdapter) HandleLarkEvent(c *gin.Context) {
     // 1. Decrypt event body using lark_app_secret
     // 2. Handle URL verification challenge
     // 3. Parse event payload
-    // 4. For message events: create channel.Message, call cmdHandler.HandleMessage()
+    // 4. For message events: create channel.Message, call msgHandler.HandleMessage()
 }
 ```
 
