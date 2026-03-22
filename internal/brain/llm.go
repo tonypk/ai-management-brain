@@ -18,6 +18,17 @@ type LLMClient interface {
 	Chat(ctx context.Context, systemPrompt, userPrompt string) (string, error)
 }
 
+// ChatMessage represents a single message in a multi-turn conversation.
+type ChatMessage struct {
+	Role    string // "user" or "assistant"
+	Content string
+}
+
+// ChatLLMClient extends LLM capabilities with multi-turn conversation.
+type ChatLLMClient interface {
+	ChatWithHistory(ctx context.Context, systemPrompt string, history []ChatMessage, userMessage string) (string, error)
+}
+
 // ReportData holds one employee's report for summary generation.
 type ReportData struct {
 	EmployeeName string
@@ -123,6 +134,69 @@ func (a *AnthropicClient) Chat(ctx context.Context, systemPrompt, userPrompt str
 // ChatLong sends a message to Claude with higher token limit for complex generation.
 func (a *AnthropicClient) ChatLong(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	return a.chatWithTokens(ctx, systemPrompt, userPrompt, 4096)
+}
+
+// ChatWithHistory sends a multi-turn conversation to Claude and returns the response.
+func (a *AnthropicClient) ChatWithHistory(ctx context.Context, systemPrompt string, history []ChatMessage, userMessage string) (string, error) {
+	start := time.Now()
+	var lastErr error
+
+	// Build messages array from history + new user message
+	messages := make([]anthropic.MessageParam, 0, len(history)+1)
+	for _, msg := range history {
+		switch msg.Role {
+		case "user":
+			messages = append(messages, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
+		case "assistant":
+			messages = append(messages, anthropic.NewAssistantMessage(anthropic.NewTextBlock(msg.Content)))
+		}
+	}
+	messages = append(messages, anthropic.NewUserMessage(anthropic.NewTextBlock(userMessage)))
+
+	backoffs := []time.Duration{1 * time.Second, 4 * time.Second, 16 * time.Second}
+	for attempt := 0; attempt <= 2; attempt++ {
+		resp, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
+			Model:     a.model,
+			MaxTokens: 1024,
+			System: []anthropic.TextBlockParam{
+				{Text: systemPrompt},
+			},
+			Messages: messages,
+		})
+		if err != nil {
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "401") || strings.Contains(errMsg, "403") ||
+				strings.Contains(errMsg, "authentication") || strings.Contains(errMsg, "unauthorized") {
+				return "", &AuthError{Msg: errMsg}
+			}
+			lastErr = err
+			slog.Warn("LLM ChatWithHistory API call failed",
+				"attempt", attempt+1,
+				"error", err,
+				"duration", time.Since(start),
+			)
+			if attempt < 2 {
+				time.Sleep(backoffs[attempt])
+			}
+			continue
+		}
+
+		var result string
+		for _, block := range resp.Content {
+			if block.Type == "text" {
+				result += block.Text
+			}
+		}
+		slog.Info("LLM ChatWithHistory succeeded",
+			"duration", time.Since(start),
+			"input_tokens", resp.Usage.InputTokens,
+			"output_tokens", resp.Usage.OutputTokens,
+			"history_len", len(history),
+		)
+		return result, nil
+	}
+
+	return "", fmt.Errorf("LLM ChatWithHistory failed after 3 attempts: %w", lastErr)
 }
 
 // LLMService wraps an LLMClient with domain-specific methods.
