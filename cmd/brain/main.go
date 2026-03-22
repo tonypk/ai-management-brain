@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	tele "gopkg.in/telebot.v3"
 
 	"github.com/tonypk/ai-management-brain/internal/api"
 	"github.com/tonypk/ai-management-brain/internal/bot"
@@ -98,6 +100,61 @@ func (r *redisWrapper) Set(ctx context.Context, key string, value interface{}, t
 
 func (r *redisWrapper) Del(ctx context.Context, keys ...string) error {
 	return r.client.Del(ctx, keys...).Err()
+}
+
+func (r *redisWrapper) Incr(ctx context.Context, key string) (int64, error) {
+	return r.client.Incr(ctx, key).Result()
+}
+
+func (r *redisWrapper) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	return r.client.Expire(ctx, key, ttl).Err()
+}
+
+// fetchBossContext gathers team data for boss chat from the database.
+func fetchBossContext(ctx context.Context, queries *sqlc.Queries, tenantID string, loc *time.Location) brain.BossContext {
+	uid, err := parseUUIDForChat(tenantID)
+	if err != nil {
+		return brain.BossContext{}
+	}
+
+	latestSummary := ""
+	if summary, err := queries.GetLatestSummary(ctx, uid); err == nil {
+		latestSummary = summary.Content
+	}
+
+	today := time.Now().In(loc).Format("2006-01-02")
+	todayDate, _ := time.Parse("2006-01-02", today)
+	pgDate := pgtype.Date{Time: todayDate, Valid: true}
+	submitted, _ := queries.CountReportsByTenantDate(ctx, sqlc.CountReportsByTenantDateParams{
+		TenantID:   uid,
+		ReportDate: pgDate,
+	})
+
+	emps, _ := queries.ListActiveEmployees(ctx, uid)
+	roster := make([]brain.RosterEntry, 0, len(emps))
+	for _, e := range emps {
+		roster = append(roster, brain.RosterEntry{
+			Name:     e.Name,
+			Role:     e.Role,
+			IsActive: e.IsActive,
+		})
+	}
+
+	return brain.BossContext{
+		LatestSummary:  latestSummary,
+		SubmittedCount: int(submitted),
+		TotalEmployees: len(emps),
+		EmployeeRoster: roster,
+	}
+}
+
+// parseUUIDForChat parses a UUID string into pgtype.UUID.
+func parseUUIDForChat(s string) (pgtype.UUID, error) {
+	var uid pgtype.UUID
+	if err := uid.Scan(s); err != nil {
+		return uid, err
+	}
+	return uid, nil
 }
 
 // runMigrations applies database migrations idempotently.
@@ -411,6 +468,7 @@ func main() {
 	var llmService *brain.LLMService
 	var orgWizard *brain.OrgWizard
 	var orgEngine *brain.OrgEngine
+	var chatService *brain.ChatService
 	if cfg.AnthropicKey != "" {
 		llmClient, err := brain.NewAnthropicClient(cfg.AnthropicKey)
 		if err != nil {
@@ -420,7 +478,16 @@ func main() {
 		llmService = brain.NewLLMService(llmClient)
 		orgEngine = brain.NewOrgEngine(llmClient)
 		orgWizard = brain.NewOrgWizard(llmClient)
-		slog.Info("Anthropic LLM client initialized (org engine ready)")
+
+		// Create ChatService (uses same llmClient)
+		chatService = brain.NewChatService(brain.ChatServiceConfig{
+			LLM:           llmClient,
+			Redis:         &redisWrapper{client: rdb},
+			EngineFactory: engineFactory,
+			BossTgID:      cfg.BossTelegramID,
+		})
+
+		slog.Info("Anthropic LLM client initialized (org engine + chat ready)")
 	} else {
 		slog.Warn("ANTHROPIC_API_KEY not set — AI features disabled, using template fallbacks")
 	}
@@ -593,37 +660,59 @@ func main() {
 
 	tgBot.RegisterCommands(cmdHandler)
 
-	// Register text handler for report collection conversation
+	// Register text handler for report collection conversation + mentor chat
 	tgBot.RegisterTextHandler(func(senderID int64, text string, sendReply func(string) error) error {
+		ctx := context.Background()
+
+		// Check if sender is the boss FIRST (boss may not be in employees table)
+		if senderID == cfg.BossTelegramID {
+			if chatService == nil {
+				return sendReply(brain.AIDisabledMessage())
+			}
+			tgAdapter.Bot().Notify(tele.ChatID(senderID), tele.Typing)
+			tenant, err := botDB.GetTenantByBossChatID(ctx, senderID)
+			if err != nil {
+				slog.Error("boss chat: get tenant", "error", err)
+				return sendReply(brain.AIErrorMessage())
+			}
+			bossCtx := fetchBossContext(ctx, queries, tenant.ID, loc)
+			resp, err := chatService.HandleBoss(ctx, tenant.ID, tenant.MentorID, "default", text, bossCtx)
+			if err != nil {
+				slog.Error("boss chat failed", "error", err)
+				return sendReply(brain.AIErrorMessage())
+			}
+			return sendReply(resp)
+		}
+
 		// Look up employee by telegram_id
-		emp, err := botDB.GetEmployeeByTelegramID(context.Background(), senderID)
+		emp, err := botDB.GetEmployeeByTelegramID(ctx, senderID)
 		if err != nil {
 			return nil
 		}
 
 		empID := emp.ID
-		state := collector.GetState(context.Background(), empID)
+		state := collector.GetState(ctx, empID)
 		lower := strings.ToLower(strings.TrimSpace(text))
 
 		switch state {
 		case report.StateConfirming:
 			if lower == "confirm" {
-				answers := collector.GetAnswers(context.Background(), empID)
-				cState, msg, err := collector.Confirm(context.Background(), empID)
+				answers := collector.GetAnswers(ctx, empID)
+				cState, msg, err := collector.Confirm(ctx, empID)
 				if err != nil {
 					slog.Error("confirm report", "employee_id", empID, "error", err)
 					return sendReply("Error confirming report. Please try again.")
 				}
 				if cState == report.StateComplete && answers != nil {
 					today := time.Now().In(loc).Format("2006-01-02")
-					if err := reportDB.CreateReport(context.Background(), emp.TenantID, empID, today, answers); err != nil {
+					if err := reportDB.CreateReport(ctx, emp.TenantID, empID, today, answers); err != nil {
 						slog.Error("save report", "employee_id", empID, "error", err)
 						return sendReply("Report confirmed but failed to save. Please contact your manager.")
 					}
 					slog.Info("report saved", "employee_id", empID, "date", today)
 
 					// Publish report submitted event
-					_ = eventBus.PublishPayload(context.Background(), events.ReportSubmitted, emp.TenantID, events.ReportSubmittedPayload{
+					_ = eventBus.PublishPayload(ctx, events.ReportSubmitted, emp.TenantID, events.ReportSubmittedPayload{
 						EmployeeID:   empID,
 						EmployeeName: emp.Name,
 						ReportDate:   today,
@@ -640,7 +729,7 @@ func main() {
 				return sendReply(msg)
 			}
 			if lower == "edit" {
-				_, firstQ, err := collector.Start(context.Background(), empID)
+				_, firstQ, err := collector.Start(ctx, empID)
 				if err != nil {
 					return sendReply("Error restarting. Please try again.")
 				}
@@ -649,7 +738,7 @@ func main() {
 			return sendReply("Please reply 'confirm' to submit or 'edit' to start over.")
 
 		case report.StateCollecting:
-			cState, nextMsg, err := collector.HandleAnswer(context.Background(), empID, text)
+			cState, nextMsg, err := collector.HandleAnswer(ctx, empID, text)
 			if err != nil {
 				slog.Error("handle answer", "employee_id", empID, "error", err)
 				return sendReply("Error processing your answer. Please try again.")
@@ -660,7 +749,24 @@ func main() {
 			}
 
 		default:
-			// No active conversation
+			// Mentor chat — idle state
+			if chatService == nil {
+				return nil
+			}
+			tgAdapter.Bot().Notify(tele.ChatID(senderID), tele.Typing)
+			tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID)
+			if err != nil {
+				slog.Warn("mentor chat: get tenant", "error", err)
+				return nil
+			}
+			resp, err := chatService.HandleEmployee(ctx, empID, emp.TenantID, emp.Name, tenant.MentorID, emp.CultureCode, text)
+			if err != nil {
+				slog.Error("mentor chat failed", "employee_id", empID, "error", err)
+				return nil
+			}
+			if resp != "" {
+				return sendReply(resp)
+			}
 		}
 
 		return nil
@@ -716,8 +822,24 @@ func main() {
 					return "Error processing your answer. Please try again.", nil
 				}
 				return nextMsg, nil
+
+			default:
+				// Mentor chat — idle state
+				if chatService == nil {
+					return "", nil
+				}
+				tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID)
+				if err != nil {
+					return "", nil
+				}
+				// V1: employee name not available in OnText, pass empty string
+				resp, err := chatService.HandleEmployee(ctx, employeeID, tenantID, "", tenant.MentorID, "default", text)
+				if err != nil {
+					slog.Error("unified mentor chat failed", "employee_id", employeeID, "error", err)
+					return "", nil
+				}
+				return resp, nil
 			}
-			return "", nil
 		},
 	})
 
