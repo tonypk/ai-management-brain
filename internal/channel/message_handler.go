@@ -14,7 +14,7 @@ import (
 type UnifiedHandler struct {
 	queries   *sqlc.Queries
 	sender    Sender
-	onText    func(ctx context.Context, employeeID, tenantID, text, channelType string) (response string, err error)
+	onText    func(ctx context.Context, employeeID, tenantID, text, channelType, empName, empJobTitle, empResponsibilities, empCountry, empLanguage, empCultureCode string) (response string, err error)
 	onCommand func(ctx context.Context, employeeID, tenantID, command, args, channelType string) (response string, err error)
 }
 
@@ -22,7 +22,7 @@ type UnifiedHandler struct {
 type UnifiedHandlerConfig struct {
 	Queries   *sqlc.Queries
 	Sender    Sender
-	OnText    func(ctx context.Context, employeeID, tenantID, text, channelType string) (response string, err error)
+	OnText    func(ctx context.Context, employeeID, tenantID, text, channelType, empName, empJobTitle, empResponsibilities, empCountry, empLanguage, empCultureCode string) (response string, err error)
 	OnCommand func(ctx context.Context, employeeID, tenantID, command, args, channelType string) (response string, err error)
 }
 
@@ -51,7 +51,7 @@ func (h *UnifiedHandler) HandleMessage(ctx context.Context, msg Message) error {
 	if msg.IsCommand && h.onCommand != nil {
 		response, err = h.onCommand(ctx, empID, tenantID, msg.Command, msg.Args, string(msg.ChannelType))
 	} else if h.onText != nil {
-		response, err = h.onText(ctx, empID, tenantID, msg.Text, string(msg.ChannelType))
+		response, err = h.onText(ctx, empID, tenantID, msg.Text, string(msg.ChannelType), emp.Name, emp.JobTitle, emp.Responsibilities, emp.Country, emp.Language, emp.CultureCode)
 	}
 
 	if err != nil {

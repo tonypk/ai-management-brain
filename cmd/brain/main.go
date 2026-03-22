@@ -135,6 +135,7 @@ func fetchBossContext(ctx context.Context, queries *sqlc.Queries, tenantID strin
 	for _, e := range emps {
 		roster = append(roster, brain.RosterEntry{
 			Name:     e.Name,
+			JobTitle: e.JobTitle,
 			Role:     e.Role,
 			IsActive: e.IsActive,
 		})
@@ -794,7 +795,7 @@ func main() {
 	unifiedHandler := channel.NewUnifiedHandler(channel.UnifiedHandlerConfig{
 		Queries: queries,
 		Sender:  channelSender,
-		OnText: func(ctx context.Context, employeeID, tenantID, text, channelType string) (string, error) {
+		OnText: func(ctx context.Context, employeeID, tenantID, text, channelType, empName, empJobTitle, empResponsibilities, empCountry, empLanguage, empCultureCode string) (string, error) {
 			state := collector.GetState(ctx, employeeID)
 			lower := strings.ToLower(strings.TrimSpace(text))
 
@@ -850,13 +851,17 @@ func main() {
 				if err != nil {
 					return "", nil
 				}
-				// V1: employee name not available in OnText, pass empty string
 				resp, err := chatService.HandleEmployee(ctx, brain.EmployeeChatRequest{
-					EmployeeID:  employeeID,
-					TenantID:    tenantID,
-					MentorID:    tenant.MentorID,
-					CultureCode: "default",
-					Text:        text,
+					EmployeeID:       employeeID,
+					TenantID:         tenantID,
+					Name:             empName,
+					JobTitle:         empJobTitle,
+					Responsibilities: empResponsibilities,
+					Country:          empCountry,
+					Language:         empLanguage,
+					MentorID:         tenant.MentorID,
+					CultureCode:      empCultureCode,
+					Text:             text,
 				})
 				if err != nil {
 					slog.Error("unified mentor chat failed", "employee_id", employeeID, "error", err)
