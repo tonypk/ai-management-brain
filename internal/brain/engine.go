@@ -73,6 +73,11 @@ func (e *Engine) MentorID() string {
 	return e.mentor.ID
 }
 
+// MentorName returns the loaded mentor's display name.
+func (e *Engine) MentorName() string {
+	return e.mentor.Name
+}
+
 // EngineFactory creates Engine instances with caching.
 type EngineFactory struct {
 	mu           sync.RWMutex
@@ -301,6 +306,55 @@ func (e *Engine) BuildSystemPromptWithMemory(ctx context.Context, tenantID, empl
 	if memorySection != "" {
 		prompt += "\n\n" + memorySection + "\n"
 	}
+
+	return prompt
+}
+
+// BuildBossContext holds the team data to inject into the boss system prompt.
+type BuildBossContext struct {
+	LatestSummary  string
+	SubmissionRate string
+	EmployeeList   string
+	MemorySection  string // pre-formatted memory recall (empty if no employee mentioned)
+}
+
+// BuildBossPrompt assembles the system prompt for boss (chairman) conversations.
+func (e *Engine) BuildBossPrompt(ctx context.Context, tenantID string, bctx BuildBossContext) string {
+	prompt := e.BuildSystemPrompt()
+
+	prompt += "\n\n<team_context>\n"
+	prompt += "## Latest Team Summary\n"
+	if bctx.LatestSummary != "" {
+		prompt += bctx.LatestSummary
+	} else {
+		prompt += "(No summary available yet)"
+	}
+	prompt += "\n\n## Today's Status\n"
+	prompt += "Submission rate: " + bctx.SubmissionRate + "\n"
+	prompt += "\n## Team Roster\n"
+	prompt += bctx.EmployeeList + "\n"
+	prompt += "</team_context>\n"
+
+	if bctx.MemorySection != "" {
+		prompt += "\n" + bctx.MemorySection + "\n"
+	}
+
+	prompt += fmt.Sprintf("\nYou are %s, acting as CEO reporting to the chairman. "+
+		"The chairman is consulting you about management decisions. "+
+		"Provide data-driven insights based on team performance. Be candid and strategic.",
+		e.MentorName())
+
+	return prompt
+}
+
+// BuildEmployeeChatPrompt assembles the system prompt for employee mentor conversations.
+func (e *Engine) BuildEmployeeChatPrompt(ctx context.Context, tenantID, employeeID, employeeName, queryText string) string {
+	prompt := e.BuildSystemPromptWithMemory(ctx, tenantID, employeeID, queryText)
+
+	prompt += fmt.Sprintf("\nYou are %s, acting as CEO and management coach. "+
+		"The employee %q is asking you for guidance. "+
+		"Respond based on your management philosophy. Keep responses concise and actionable.",
+		e.MentorName(), employeeName)
 
 	return prompt
 }
