@@ -32,10 +32,14 @@ type CreateTenantParams struct {
 
 // CreateEmployeeParams holds parameters for employee creation.
 type CreateEmployeeParams struct {
-	TenantID    string
-	Name        string
-	CultureCode string
-	InviteCode  string
+	TenantID         string
+	Name             string
+	CultureCode      string
+	InviteCode       string
+	JobTitle         string
+	Responsibilities string
+	Country          string
+	Language         string
 }
 
 // CommandQuerier defines DB operations for command handlers.
@@ -99,7 +103,7 @@ func (h *CommandHandler) HandleStart(c BotContext) error {
 	}
 
 	return c.Send(fmt.Sprintf(
-		"Welcome to AI Management Brain!\n\nYour team '%s' is set up.\n\nUse:\n/addemployee <name> <culture> — Add team member\n/status — View team status\n/mentor <id> — Switch mentor\n/help — Show all commands",
+		"Welcome to AI Management Brain!\n\nYour team '%s' is set up.\n\nUse:\n/addemployee name | job | resp | country | lang — Add team member\n/status — View team status\n/mentor <id> — Switch mentor\n/help — Show all commands",
 		tenant.Name,
 	))
 }
@@ -142,7 +146,7 @@ func (h *CommandHandler) HandleHelp(c BotContext) error {
 
 /start — Initialize your team
 /status — View team & report status
-/addemployee <name> <culture> — Add team member
+/addemployee name | job | resp | country | lang — Add team member
 /join <code> — Link your Telegram (for employees)
 /mentor <id> — Switch mentor (inamori, dalio, grove, ren)
 /blend <primary> <weight> <secondary> — Blend mentors (e.g., /blend inamori 70 dalio)
@@ -159,13 +163,37 @@ func (h *CommandHandler) HandleAddEmployee(c BotContext) error {
 		return c.Send("Permission denied")
 	}
 
-	parts := strings.Fields(c.Text())
-	if len(parts) < 3 {
-		return c.Send("Usage: /addemployee <name> <culture>\nExample: /addemployee Alice ph")
+	raw := strings.TrimSpace(c.Text())
+	idx := strings.Index(raw, " ")
+	if idx < 0 {
+		return c.Send("Usage: /addemployee name | job_title | responsibilities | country | language\nOnly name is required.\nExample: /addemployee Alice | Frontend Developer | Handles UI/UX | Philippines | Chinese")
+	}
+	body := strings.TrimSpace(raw[idx+1:])
+
+	parts := strings.SplitN(body, "|", 5)
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
 	}
 
-	name := parts[1]
-	culture := parts[2]
+	name := parts[0]
+	if name == "" {
+		return c.Send("Name is required.\nUsage: /addemployee name | job_title | responsibilities | country | language")
+	}
+
+	var jobTitle, responsibilities, country, language string
+	if len(parts) > 1 {
+		jobTitle = parts[1]
+	}
+	if len(parts) > 2 {
+		responsibilities = parts[2]
+	}
+	if len(parts) > 3 {
+		country = parts[3]
+	}
+	if len(parts) > 4 {
+		language = parts[4]
+	}
+
 	inviteCode := generateInviteCode()
 
 	tenant, err := h.db.GetTenantByBossChatID(context.Background(), c.SenderID())
@@ -174,19 +202,32 @@ func (h *CommandHandler) HandleAddEmployee(c BotContext) error {
 	}
 
 	emp, err := h.db.CreateEmployee(context.Background(), CreateEmployeeParams{
-		TenantID:    tenant.ID,
-		Name:        name,
-		CultureCode: culture,
-		InviteCode:  inviteCode,
+		TenantID:         tenant.ID,
+		Name:             name,
+		CultureCode:      "default",
+		InviteCode:       inviteCode,
+		JobTitle:         jobTitle,
+		Responsibilities: responsibilities,
+		Country:          country,
+		Language:         language,
 	})
 	if err != nil {
 		return fmt.Errorf("create employee: %w", err)
 	}
 
-	return c.Send(fmt.Sprintf(
-		"Employee '%s' added!\nInvite code: %s\n\nShare this code. They can join with: /join %s",
-		emp.Name, inviteCode, inviteCode,
-	))
+	msg := fmt.Sprintf("Employee added!\nName: %s", emp.Name)
+	if jobTitle != "" {
+		msg += fmt.Sprintf("\nJob: %s", jobTitle)
+	}
+	if country != "" {
+		msg += fmt.Sprintf("\nCountry: %s", country)
+	}
+	if language != "" {
+		msg += fmt.Sprintf("\nLanguage: %s", language)
+	}
+	msg += fmt.Sprintf("\nInvite code: %s\n\nShare this code with %s to join via /join %s", inviteCode, name, inviteCode)
+
+	return c.Send(msg)
 }
 
 // HandleJoin links a Telegram user to an employee record via invite code.
@@ -365,18 +406,24 @@ func (h *CommandHandler) HandleProfile(c BotContext) error {
 		status = "active"
 	}
 
-	return c.Send(fmt.Sprintf(
-		"Employee Profile: %s\n\n"+
-			"Status: %s\n"+
-			"Culture: %s\n\n"+
-			"Last 7 days: %d/7 submitted\n"+
-			"Last 30 days: %d submitted\n"+
-			"Current streak: %d days\n"+
-			"Sentiment trend: %s",
-		found.Name, status, found.CultureCode,
+	msg := fmt.Sprintf("Employee Profile: %s\n\nStatus: %s", found.Name, status)
+	if found.JobTitle != "" {
+		msg += fmt.Sprintf("\nJob Title: %s", found.JobTitle)
+	}
+	if found.Responsibilities != "" {
+		msg += fmt.Sprintf("\nResponsibilities: %s", found.Responsibilities)
+	}
+	if found.Country != "" {
+		msg += fmt.Sprintf("\nCountry: %s", found.Country)
+	}
+	if found.Language != "" {
+		msg += fmt.Sprintf("\nLanguage: %s", found.Language)
+	}
+	msg += fmt.Sprintf("\nCulture: %s", found.CultureCode)
+	msg += fmt.Sprintf("\n\nLast 7 days: %d/7 submitted\nLast 30 days: %d submitted\nCurrent streak: %d days\nSentiment trend: %s",
 		profile.SubmittedLast7, profile.SubmittedLast30,
-		profile.CurrentStreak, profile.SentimentTrend,
-	))
+		profile.CurrentStreak, profile.SentimentTrend)
+	return c.Send(msg)
 }
 
 // HandleDiagnostics shows system diagnostics to the boss.

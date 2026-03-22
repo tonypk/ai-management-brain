@@ -70,11 +70,15 @@ func (a *DBAdapter) CreateEmployee(ctx context.Context, params CreateEmployeePar
 		return nil, err
 	}
 	e, err := a.q.CreateEmployee(ctx, sqlc.CreateEmployeeParams{
-		TenantID:    uid,
-		Name:        params.Name,
-		CultureCode: params.CultureCode,
-		Role:        "member",
-		InviteCode:  pgtype.Text{String: params.InviteCode, Valid: true},
+		TenantID:         uid,
+		Name:             params.Name,
+		CultureCode:      params.CultureCode,
+		Role:             "member",
+		InviteCode:       pgtype.Text{String: params.InviteCode, Valid: true},
+		JobTitle:         params.JobTitle,
+		Responsibilities: params.Responsibilities,
+		Country:          params.Country,
+		Language:         params.Language,
 	})
 	if err != nil {
 		return nil, err
@@ -227,10 +231,14 @@ func sqlcTenantToBot(t sqlc.Tenant) *Tenant {
 
 func sqlcEmployeeToBot(e sqlc.Employee) *Employee {
 	emp := &Employee{
-		ID:          formatUUID(e.ID),
-		Name:        e.Name,
-		TenantID:    formatUUID(e.TenantID),
-		CultureCode: e.CultureCode,
+		ID:               formatUUID(e.ID),
+		Name:             e.Name,
+		TenantID:         formatUUID(e.TenantID),
+		CultureCode:      e.CultureCode,
+		JobTitle:         e.JobTitle,
+		Responsibilities: e.Responsibilities,
+		Country:          e.Country,
+		Language:         e.Language,
 	}
 	if e.TelegramID.Valid {
 		emp.TelegramID = e.TelegramID.Int64

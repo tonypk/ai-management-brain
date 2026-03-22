@@ -8,12 +8,16 @@ import (
 
 // Employee represents a resolved employee identity.
 type Employee struct {
-	ID          string
-	Name        string
-	TenantID    string
-	TelegramID  int64
-	CultureCode string
-	InviteCode  string
+	ID               string
+	Name             string
+	TenantID         string
+	TelegramID       int64
+	CultureCode      string
+	InviteCode       string
+	JobTitle         string
+	Responsibilities string
+	Country          string
+	Language         string
 }
 
 // Tenant represents a resolved tenant.
