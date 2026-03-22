@@ -301,7 +301,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_merged ON memories(merged_into) WHERE me
 		return err
 	}
 
-	// Migration 000006: Change vector dimension from 1024 to 384 (HuggingFace all-MiniLM-L6-v2)
+	// Migration 000006: see sql/migrations/000006_vector384.up.sql
 	migration006 := `ALTER TABLE memories ALTER COLUMN embedding TYPE vector(384);`
 	_, err := pool.Exec(ctx, migration006)
 	return err
