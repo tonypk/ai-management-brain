@@ -205,6 +205,139 @@ export async function rejectSuggestion(id: string) {
   );
 }
 
+// Admin - Channels
+export async function getChannelConfig() {
+  return request<{ data: ChannelConfig }>("/admin/channels");
+}
+
+export async function updateChannelConfig(data: {
+  enabled_channels?: string[];
+  slack_bot_token?: string;
+  slack_signing_secret?: string;
+  lark_app_id?: string;
+  lark_app_secret?: string;
+  signal_phone?: string;
+}) {
+  return request<{ data: { updated: boolean } }>("/admin/channels", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function testChannel(channel: string, userId: string, text?: string) {
+  return request<{ data: { sent: boolean; channel: string } }>(
+    `/admin/channels/test/${channel}`,
+    { method: "POST", body: JSON.stringify({ user_id: userId, text }) },
+  );
+}
+
+// Admin - Employees
+export async function listEmployeesWithChannels() {
+  return request<{ data: EmployeeWithChannels[] }>("/admin/employees");
+}
+
+export async function updateEmployeeChannels(
+  id: string,
+  data: { signal_phone?: string; slack_id?: string; lark_id?: string; preferred_channel?: string },
+) {
+  return request<{ data: { updated: boolean } }>(`/admin/employees/${id}/channels`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateEmployeePreferred(id: string, preferredChannel: string) {
+  return request<{ data: { preferred_channel: string } }>(
+    `/admin/employees/${id}/preferred`,
+    { method: "PUT", body: JSON.stringify({ preferred_channel: preferredChannel }) },
+  );
+}
+
+// Admin - Reports
+export async function listAdminReports(params: {
+  page?: number;
+  limit?: number;
+  date_from?: string;
+  date_to?: string;
+  employee_id?: string;
+  channel?: string;
+}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+  });
+  return request<{ data: AdminReport[]; meta: { total: number; page: number; limit: number; has_more: boolean } }>(
+    `/admin/reports?${qs}`,
+  );
+}
+
+export async function getReportStats(dateFrom?: string, dateTo?: string) {
+  const qs = new URLSearchParams();
+  if (dateFrom) qs.set("date_from", dateFrom);
+  if (dateTo) qs.set("date_to", dateTo);
+  return request<{ data: { channel: string; count: number }[] }>(
+    `/admin/reports/stats?${qs}`,
+  );
+}
+
+// Admin - Mentors
+export async function listAllMentors() {
+  return request<{ data: MentorInfo[] }>("/admin/mentors");
+}
+
+// Admin - Scheduler
+export async function listSchedulerJobs() {
+  return request<{ data: SchedulerJob[] }>("/admin/scheduler");
+}
+
+export async function updateJobSchedule(job: string, cron: string) {
+  return request<{ data: { job: string; cron: string } }>(
+    `/admin/scheduler/${job}/schedule`,
+    { method: "PUT", body: JSON.stringify({ cron }) },
+  );
+}
+
+export async function triggerJob(job: string) {
+  return request<{ data: { triggered: string } }>(
+    `/admin/scheduler/${job}/trigger`,
+    { method: "POST" },
+  );
+}
+
+// Admin - Memories
+export async function listAdminMemories(params: {
+  page?: number;
+  limit?: number;
+  type?: string;
+  tier?: string;
+  employee_id?: string;
+}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+  });
+  return request<{ data: MemoryItem[]; meta: { total: number; page: number; limit: number; has_more: boolean } }>(
+    `/admin/memories?${qs}`,
+  );
+}
+
+export async function searchAdminMemories(query: string, limit?: number) {
+  return request<{ data: MemoryItem[] }>("/admin/memories/search", {
+    method: "POST",
+    body: JSON.stringify({ query, limit: limit || 10 }),
+  });
+}
+
+export async function deleteAdminMemory(id: string) {
+  return request<{ data: { deleted: boolean } }>(`/admin/memories/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getMemoryStats() {
+  return request<{ data: MemoryStats }>("/admin/memories/stats");
+}
+
 // Types
 export interface DashboardStats {
   employee_count: number;
@@ -400,4 +533,67 @@ export interface AISuggestion {
   status: string;
   created_at: string;
   reviewed_at?: string;
+}
+
+// Admin types
+export interface ChannelStatus {
+  type: string;
+  configured: boolean;
+}
+
+export interface ChannelConfig {
+  enabled_channels: string[];
+  channels: ChannelStatus[];
+  registered_channels: string[];
+}
+
+export interface EmployeeWithChannels {
+  id: string;
+  name: string;
+  telegram_id: boolean;
+  signal_phone: string;
+  slack_id: string;
+  lark_id: string;
+  preferred_channel: string;
+  culture_code: string;
+  role: string;
+}
+
+export interface AdminReport {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  report_date: string;
+  answers: Record<string, string>;
+  blockers?: string;
+  sentiment?: string;
+  channel: string;
+  submitted_at: string;
+}
+
+export interface SchedulerJob {
+  name: string;
+  cron: string;
+  last_run: string;
+  next_run: string;
+}
+
+export interface MemoryItem {
+  id: string;
+  tenant_id: string;
+  memory_type: string;
+  memory_tier: string;
+  employee_id: string | null;
+  content: string;
+  summary: string | null;
+  importance: number;
+  access_count: number;
+  metadata: Record<string, unknown>;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemoryStats {
+  total: number;
 }

@@ -54,6 +54,36 @@ const routes = [
     component: () => import("../views/AnalyticsView.vue"),
     meta: { requiresAuth: true },
   },
+  {
+    path: "/admin/channels",
+    name: "AdminChannels",
+    component: () => import("../views/admin/ChannelsView.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/admin/team-channels",
+    name: "AdminTeamChannels",
+    component: () => import("../views/admin/TeamChannelsView.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/admin/reports",
+    name: "AdminReports",
+    component: () => import("../views/admin/ReportsView.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/admin/mentor-scheduler",
+    name: "AdminMentorScheduler",
+    component: () => import("../views/admin/MentorSchedulerView.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/admin/memory",
+    name: "AdminMemory",
+    component: () => import("../views/admin/MemoryView.vue"),
+    meta: { requiresAuth: true },
+  },
 ];
 
 const router = createRouter({

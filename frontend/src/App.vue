@@ -22,6 +22,14 @@ const navItems = [
   { path: '/ai-roles', label: 'AI Roles', icon: '🤖' },
   { path: '/analytics', label: 'Analytics', icon: '📈' },
 ]
+
+const adminItems = [
+  { path: '/admin/channels', label: 'Channels', icon: '📡' },
+  { path: '/admin/team-channels', label: 'Team Channels', icon: '🔗' },
+  { path: '/admin/reports', label: 'Reports', icon: '📋' },
+  { path: '/admin/mentor-scheduler', label: 'Mentor & Scheduler', icon: '⚙️' },
+  { path: '/admin/memory', label: 'Memory', icon: '💾' },
+]
 </script>
 
 <template>
@@ -34,6 +42,17 @@ const navItems = [
       <div class="nav-items">
         <router-link
           v-for="item in navItems"
+          :key="item.path"
+          :to="item.path"
+          class="nav-item"
+          :class="{ active: route.path === item.path }"
+        >
+          <span class="icon">{{ item.icon }}</span>
+          <span>{{ item.label }}</span>
+        </router-link>
+        <div class="nav-section">Admin</div>
+        <router-link
+          v-for="item in adminItems"
           :key="item.path"
           :to="item.path"
           class="nav-item"
@@ -91,4 +110,5 @@ input:focus, select:focus { border-color: #6366f1; }
 .badge-mixed { background: #fef3c7; color: #92400e; }
 .error-msg { color: #e74c3c; font-size: 0.85rem; margin-top: 0.5rem; }
 .loading { text-align: center; padding: 2rem; color: #888; }
+.nav-section { padding: 0.5rem 1.5rem; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; color: #666; margin-top: 1rem; letter-spacing: 0.5px; }
 </style>
