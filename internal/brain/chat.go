@@ -1,0 +1,316 @@
+package brain
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+)
+
+const (
+	maxHistoryMessages = 10
+	historyTTL         = 24 * time.Hour
+	rateLimitWindow    = 60 * time.Second
+	rateLimitMax       = 5
+	gapThreshold       = 6 * time.Hour
+	rateLimitMessage   = "请稍等一下再继续对话"
+	aiDisabledMessage  = "AI功能未启用，请联系管理员"
+	aiErrorMessage     = "系统繁忙，请稍后再试"
+)
+
+// ChatRedisClient defines the Redis operations needed by ChatService.
+type ChatRedisClient interface {
+	Get(ctx context.Context, key string) (string, error)
+	Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error
+	Del(ctx context.Context, keys ...string) error
+	Incr(ctx context.Context, key string) (int64, error)
+	Expire(ctx context.Context, key string, ttl time.Duration) error
+}
+
+// chatHistoryMessage represents a single message stored in Redis history.
+type chatHistoryMessage struct {
+	Role    string    `json:"role"`
+	Content string    `json:"content"`
+	TS      time.Time `json:"ts"`
+}
+
+// RosterEntry holds basic employee info for boss context.
+type RosterEntry struct {
+	Name     string
+	Role     string
+	IsActive bool
+}
+
+// BossContext holds team data fetched from DB for boss chat.
+type BossContext struct {
+	LatestSummary  string
+	SubmittedCount int
+	TotalEmployees int
+	EmployeeRoster []RosterEntry
+}
+
+// ChatServiceConfig holds dependencies for creating a ChatService.
+type ChatServiceConfig struct {
+	LLM           ChatLLMClient
+	Redis         ChatRedisClient
+	EngineFactory *EngineFactory
+	BossTgID      int64
+}
+
+// ChatService orchestrates mentor chat for employees and boss.
+type ChatService struct {
+	llm           ChatLLMClient
+	redis         ChatRedisClient
+	engineFactory *EngineFactory
+	bossTgID      int64
+}
+
+// NewChatService creates a new ChatService.
+func NewChatService(cfg ChatServiceConfig) *ChatService {
+	return &ChatService{
+		llm:           cfg.LLM,
+		redis:         cfg.Redis,
+		engineFactory: cfg.EngineFactory,
+		bossTgID:      cfg.BossTgID,
+	}
+}
+
+// AIDisabledMessage returns the user-facing message when AI is not configured.
+func AIDisabledMessage() string { return aiDisabledMessage }
+
+// AIErrorMessage returns the user-facing message when AI encounters an error.
+func AIErrorMessage() string { return aiErrorMessage }
+
+// HandleEmployee processes a chat message from an employee.
+func (s *ChatService) HandleEmployee(ctx context.Context, employeeID, tenantID, employeeName, mentorID, cultureCode, text string) (string, error) {
+	if s.llm == nil {
+		return aiDisabledMessage, nil
+	}
+
+	// Rate limiting
+	if limited, err := s.checkRateLimit(ctx, employeeID); err != nil {
+		slog.Error("rate limit check failed", "employee_id", employeeID, "error", err)
+	} else if limited {
+		return rateLimitMessage, nil
+	}
+
+	// Load engine for this tenant's mentor+culture
+	engine, err := s.engineFactory.ForTenant(mentorID, cultureCode)
+	if err != nil {
+		engine, _ = s.engineFactory.ForTenant("inamori", "default")
+	}
+
+	// Load history and check for gap-based extraction
+	history, err := s.loadHistory(ctx, chatKey(employeeID))
+	if err != nil {
+		slog.Warn("load chat history failed", "employee_id", employeeID, "error", err)
+	}
+	history = s.checkGapAndTrim(ctx, chatKey(employeeID), history, employeeID, tenantID)
+
+	// Build system prompt with memory recall
+	systemPrompt := engine.BuildEmployeeChatPrompt(ctx, tenantID, employeeID, employeeName, text)
+
+	// Convert history to ChatMessage format
+	chatHistory := historyToChatMessages(history)
+
+	// Call LLM
+	response, err := s.llm.ChatWithHistory(ctx, systemPrompt, chatHistory, text)
+	if err != nil {
+		slog.Error("chat LLM call failed", "employee_id", employeeID, "error", err)
+		if IsAuthError(err) {
+			return aiDisabledMessage, nil
+		}
+		return aiErrorMessage, nil
+	}
+
+	// Append user message and assistant response to history
+	now := time.Now()
+	history = append(history,
+		chatHistoryMessage{Role: "user", Content: text, TS: now},
+		chatHistoryMessage{Role: "assistant", Content: response, TS: now},
+	)
+
+	// Trim to max and save
+	if len(history) > maxHistoryMessages {
+		history = history[len(history)-maxHistoryMessages:]
+	}
+	if err := s.saveHistory(ctx, chatKey(employeeID), history); err != nil {
+		slog.Error("save chat history failed", "employee_id", employeeID, "error", err)
+	}
+
+	return response, nil
+}
+
+// HandleBoss processes a chat message from the boss (chairman).
+// Boss has no rate limit (per spec).
+func (s *ChatService) HandleBoss(ctx context.Context, tenantID, mentorID, cultureCode, text string, bctx BossContext) (string, error) {
+	if s.llm == nil {
+		return aiDisabledMessage, nil
+	}
+
+	engine, err := s.engineFactory.ForTenant(mentorID, cultureCode)
+	if err != nil {
+		engine, _ = s.engineFactory.ForTenant("inamori", "default")
+	}
+
+	// Load boss history
+	bossKey := bossHistoryKey(tenantID)
+	history, err := s.loadHistory(ctx, bossKey)
+	if err != nil {
+		slog.Warn("load boss chat history failed", "tenant_id", tenantID, "error", err)
+	}
+	history = s.checkGapAndTrim(ctx, bossKey, history, "", tenantID)
+
+	// Build employee roster text
+	var rosterSB strings.Builder
+	for i, emp := range bctx.EmployeeRoster {
+		status := "active"
+		if !emp.IsActive {
+			status = "inactive"
+		}
+		fmt.Fprintf(&rosterSB, "%d. %s (%s, %s)\n", i+1, emp.Name, emp.Role, status)
+	}
+
+	// Check if boss mentions an employee by name
+	memorySection := ""
+	if engine.MemoryEngine() != nil {
+		for _, emp := range bctx.EmployeeRoster {
+			if matchEmployeeName(text, emp.Name) {
+				// TODO: need employeeID for recall — for V1, skip dynamic employee memory
+				break
+			}
+		}
+	}
+
+	// Build rate string
+	rate := "0% (0/0)"
+	if bctx.TotalEmployees > 0 {
+		pct := float64(bctx.SubmittedCount) / float64(bctx.TotalEmployees) * 100
+		rate = fmt.Sprintf("%.0f%% (%d/%d)", pct, bctx.SubmittedCount, bctx.TotalEmployees)
+	}
+
+	systemPrompt := engine.BuildBossPrompt(ctx, tenantID, BuildBossContext{
+		LatestSummary:  bctx.LatestSummary,
+		SubmissionRate: rate,
+		EmployeeList:   rosterSB.String(),
+		MemorySection:  memorySection,
+	})
+
+	chatHistory := historyToChatMessages(history)
+
+	response, err := s.llm.ChatWithHistory(ctx, systemPrompt, chatHistory, text)
+	if err != nil {
+		slog.Error("boss chat LLM call failed", "tenant_id", tenantID, "error", err)
+		if IsAuthError(err) {
+			return aiDisabledMessage, nil
+		}
+		return aiErrorMessage, nil
+	}
+
+	now := time.Now()
+	history = append(history,
+		chatHistoryMessage{Role: "user", Content: text, TS: now},
+		chatHistoryMessage{Role: "assistant", Content: response, TS: now},
+	)
+	if len(history) > maxHistoryMessages {
+		history = history[len(history)-maxHistoryMessages:]
+	}
+	if err := s.saveHistory(ctx, bossKey, history); err != nil {
+		slog.Error("save boss chat history failed", "tenant_id", tenantID, "error", err)
+	}
+
+	return response, nil
+}
+
+// --- Rate Limiting ---
+
+func (s *ChatService) checkRateLimit(ctx context.Context, employeeID string) (bool, error) {
+	key := "chat_rate:" + employeeID
+	count, err := s.redis.Incr(ctx, key)
+	if err != nil {
+		return false, err
+	}
+	if count == 1 {
+		if err := s.redis.Expire(ctx, key, rateLimitWindow); err != nil {
+			slog.Warn("set rate limit expire failed", "error", err)
+		}
+	}
+	return count > rateLimitMax, nil
+}
+
+// --- History Management ---
+
+func chatKey(employeeID string) string {
+	return "chat:" + employeeID
+}
+
+func bossHistoryKey(tenantID string) string {
+	return "chat:boss:" + tenantID
+}
+
+func (s *ChatService) loadHistory(ctx context.Context, key string) ([]chatHistoryMessage, error) {
+	data, err := s.redis.Get(ctx, key)
+	if err != nil {
+		return nil, nil // Key not found = empty history
+	}
+	var history []chatHistoryMessage
+	if err := json.Unmarshal([]byte(data), &history); err != nil {
+		return nil, err
+	}
+	return history, nil
+}
+
+func (s *ChatService) saveHistory(ctx context.Context, key string, history []chatHistoryMessage) error {
+	data, err := json.Marshal(history)
+	if err != nil {
+		return err
+	}
+	return s.redis.Set(ctx, key, string(data), historyTTL)
+}
+
+// checkGapAndTrim checks if there's a >6h gap since last message.
+// If so, clears history for fresh conversation start.
+func (s *ChatService) checkGapAndTrim(ctx context.Context, key string, history []chatHistoryMessage, employeeID, tenantID string) []chatHistoryMessage {
+	if len(history) == 0 {
+		return history
+	}
+
+	lastMsg := history[len(history)-1]
+	if time.Since(lastMsg.TS) > gapThreshold {
+		slog.Info("chat gap detected, clearing history for extraction",
+			"key", key,
+			"last_message", lastMsg.TS,
+			"gap", time.Since(lastMsg.TS),
+		)
+		_ = s.redis.Del(ctx, key)
+		return nil
+	}
+	return history
+}
+
+// --- Helpers ---
+
+func historyToChatMessages(history []chatHistoryMessage) []ChatMessage {
+	msgs := make([]ChatMessage, len(history))
+	for i, h := range history {
+		msgs[i] = ChatMessage{Role: h.Role, Content: h.Content}
+	}
+	return msgs
+}
+
+// matchEmployeeName checks if the text mentions an employee by name.
+func matchEmployeeName(text, employeeName string) bool {
+	lower := strings.ToLower(text)
+	if strings.Contains(lower, strings.ToLower(employeeName)) {
+		return true
+	}
+	parts := strings.Fields(employeeName)
+	for _, part := range parts {
+		if strings.Contains(lower, strings.ToLower(part)) {
+			return true
+		}
+	}
+	return false
+}
