@@ -116,6 +116,12 @@ func handleUpdateChannels(queries *sqlc.Queries) gin.HandlerFunc {
 			params.SignalPhone = pgtype.Text{String: *req.SignalPhone, Valid: *req.SignalPhone != ""}
 		}
 		if req.EnabledChannels != nil {
+			for _, ch := range req.EnabledChannels {
+				if !validPreferredChannels[ch] {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid channel in enabled_channels: " + ch})
+					return
+				}
+			}
 			params.EnabledChannels = req.EnabledChannels
 		}
 
@@ -213,9 +219,24 @@ type updateEmployeeChannelsRequest struct {
 // handleUpdateEmployeeChannels updates an employee's channel identifiers.
 func handleUpdateEmployeeChannels(queries *sqlc.Queries) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		tenantID, err := parseUUID(TenantFromContext(c))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
+
 		empID, err := parseUUID(c.Param("id"))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid employee ID"})
+			return
+		}
+
+		// Verify employee belongs to tenant
+		if _, err := queries.GetEmployee(c.Request.Context(), sqlc.GetEmployeeParams{
+			ID:       empID,
+			TenantID: tenantID,
+		}); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "employee not found"})
 			return
 		}
 
@@ -267,9 +288,24 @@ var validPreferredChannels = map[string]bool{
 // handleUpdateEmployeePreferred updates an employee's preferred channel.
 func handleUpdateEmployeePreferred(queries *sqlc.Queries) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		tenantID, err := parseUUID(TenantFromContext(c))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
+
 		empID, err := parseUUID(c.Param("id"))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid employee ID"})
+			return
+		}
+
+		// Verify employee belongs to tenant
+		if _, err := queries.GetEmployee(c.Request.Context(), sqlc.GetEmployeeParams{
+			ID:       empID,
+			TenantID: tenantID,
+		}); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "employee not found"})
 			return
 		}
 
