@@ -13,9 +13,10 @@ import (
 
 // SlackConfig holds configuration for the Slack adapter.
 type SlackConfig struct {
-	BotToken   string // xoxb-...
-	AppToken   string // xapp-... (for Socket Mode, optional)
-	WebhookURL string // Incoming webhook URL (optional, for simple posting)
+	BotToken      string // xoxb-...
+	AppToken      string // xapp-... (for Socket Mode, optional)
+	WebhookURL    string // Incoming webhook URL (optional, for simple posting)
+	SigningSecret string // For verifying Slack Events API request signatures
 }
 
 // SlackAdapter implements Channel for Slack using the Web API.

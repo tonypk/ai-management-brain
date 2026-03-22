@@ -35,6 +35,14 @@ type Config struct {
 	SignalPhone  string // registered phone number, e.g. "+639123456789"
 	SignalAPIURL string // signal-cli-rest-api URL, e.g. "http://signal-cli:8080"
 
+	// Slack (optional)
+	SlackBotToken      string
+	SlackSigningSecret string
+
+	// Lark/Feishu (optional)
+	LarkAppID     string
+	LarkAppSecret string
+
 	// Embedding (free HuggingFace Inference API)
 	EmbeddingModel string
 	EmbeddingBatch int
@@ -129,6 +137,14 @@ func Load() (*Config, error) {
 	// Signal (optional)
 	cfg.SignalPhone = os.Getenv("SIGNAL_PHONE")
 	cfg.SignalAPIURL = getEnv("SIGNAL_API_URL", "http://signal-cli:8080")
+
+	// Slack (optional)
+	cfg.SlackBotToken = os.Getenv("SLACK_BOT_TOKEN")
+	cfg.SlackSigningSecret = os.Getenv("SLACK_SIGNING_SECRET")
+
+	// Lark/Feishu (optional)
+	cfg.LarkAppID = os.Getenv("LARK_APP_ID")
+	cfg.LarkAppSecret = os.Getenv("LARK_APP_SECRET")
 
 	// Embedding model (free HuggingFace Inference API)
 	cfg.EmbeddingModel = getEnv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")

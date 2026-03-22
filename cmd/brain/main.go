@@ -569,6 +569,7 @@ func main() {
 						EmployeeID:   empID,
 						EmployeeName: emp.Name,
 						ReportDate:   today,
+						Channel:      "telegram",
 					})
 
 					// Run async blocker/sentiment analysis

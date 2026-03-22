@@ -37,6 +37,7 @@ type ReportSubmittedPayload struct {
 	EmployeeID   string `json:"employee_id"`
 	EmployeeName string `json:"employee_name"`
 	ReportDate   string `json:"report_date"`
+	Channel      string `json:"channel"`
 }
 
 // ReportAnalyzedPayload is sent after blocker/sentiment analysis completes.
@@ -65,6 +66,7 @@ type ChaseCompletedPayload struct {
 	Step         int    `json:"step"`
 	Action       string `json:"action"`
 	Message      string `json:"message"`
+	Channel      string `json:"channel"`
 }
 
 // Handler processes events.
