@@ -759,12 +759,7 @@ func TestHandleListReports_WithDate(t *testing.T) {
 	db := newMockDBTX()
 
 	// GetReportsByTenantDate is a :many query — uses Query.
-	// The query scans: id, tenant_id, employee_id, report_date, answers, blockers, sentiment, submitted_at, employee_name
-	// mockRows.Scan handles pgtype.UUID, pgtype.Text, pgtype.Timestamptz, []byte, string
-	// but NOT pgtype.Date. The report_date column is scanned by sqlc into pgtype.Date.
-	// Since our mockRows doesn't handle pgtype.Date, the field will remain zero-valued,
-	// but the handler formats it with .Time.Format("2006-01-02") which yields "0001-01-01".
-	// We still verify the rest of the fields work correctly.
+	// The query scans: id, tenant_id, employee_id, report_date, answers, blockers, sentiment, submitted_at, channel, employee_name
 	db.queryResults["-- name: GetReportsByTenantDate"] = &mockRows{
 		items: [][]interface{}{
 			{
@@ -776,6 +771,7 @@ func TestHandleListReports_WithDate(t *testing.T) {
 				pgtype.Text{String: "none", Valid: true},                // blockers (pgtype.Text)
 				pgtype.Text{String: "positive", Valid: true},            // sentiment (pgtype.Text)
 				pgtype.Timestamptz{},                                    // submitted_at
+				"telegram",                                              // channel (string)
 				"Alice",                                                 // employee_name (string)
 			},
 		},
