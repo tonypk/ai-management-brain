@@ -20,7 +20,6 @@ const navItems = [
   { path: '/mentor', label: 'Mentor', icon: '🧠' },
   { path: '/organization', label: 'Organization', icon: '🏢' },
   { path: '/ai-roles', label: 'AI Roles', icon: '🤖' },
-  { path: '/analytics', label: 'Analytics', icon: '📈' },
 ]
 
 const adminItems = [
