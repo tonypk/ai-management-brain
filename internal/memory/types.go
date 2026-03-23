@@ -98,3 +98,9 @@ type SummaryInput struct {
 	SummaryID string
 	Content   string
 }
+
+type ChatInput struct {
+	TenantID   string
+	EmployeeID string
+	Transcript string // formatted conversation transcript
+}

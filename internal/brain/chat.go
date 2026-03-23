@@ -75,6 +75,7 @@ type ChatServiceConfig struct {
 	Redis         ChatRedisClient
 	EngineFactory *EngineFactory
 	BossTgID      int64
+	MemoryEngine  *memory.MemoryEngine // optional, nil = no chat extraction
 }
 
 // ChatService orchestrates mentor chat for employees and boss.
@@ -83,6 +84,7 @@ type ChatService struct {
 	redis         ChatRedisClient
 	engineFactory *EngineFactory
 	bossTgID      int64
+	memoryEngine  *memory.MemoryEngine
 }
 
 // NewChatService creates a new ChatService.
@@ -92,7 +94,13 @@ func NewChatService(cfg ChatServiceConfig) *ChatService {
 		redis:         cfg.Redis,
 		engineFactory: cfg.EngineFactory,
 		bossTgID:      cfg.BossTgID,
+		memoryEngine:  cfg.MemoryEngine,
 	}
+}
+
+// SetMemoryEngine injects the memory engine for chat extraction.
+func (s *ChatService) SetMemoryEngine(me *memory.MemoryEngine) {
+	s.memoryEngine = me
 }
 
 // AIDisabledMessage returns the user-facing message when AI is not configured.
@@ -317,7 +325,7 @@ func (s *ChatService) saveHistory(ctx context.Context, key string, history []cha
 }
 
 // checkGapAndTrim checks if there's a >6h gap since last message.
-// If so, clears history for fresh conversation start.
+// If so, extracts memories from the conversation and clears history.
 func (s *ChatService) checkGapAndTrim(ctx context.Context, key string, history []chatHistoryMessage, employeeID, tenantID string) []chatHistoryMessage {
 	if len(history) == 0 {
 		return history
@@ -325,11 +333,37 @@ func (s *ChatService) checkGapAndTrim(ctx context.Context, key string, history [
 
 	lastMsg := history[len(history)-1]
 	if time.Since(lastMsg.TS) > gapThreshold {
-		slog.Info("chat gap detected, clearing history for extraction",
+		slog.Info("chat gap detected, extracting memories and clearing history",
 			"key", key,
 			"last_message", lastMsg.TS,
 			"gap", time.Since(lastMsg.TS),
 		)
+
+		// Extract memories from the completed conversation (fire-and-forget)
+		if s.memoryEngine != nil && s.memoryEngine.Enabled() && len(history) >= 2 {
+			transcript := formatTranscript(history)
+			go func() {
+				extractCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				if err := s.memoryEngine.ExtractFromChat(extractCtx, memory.ChatInput{
+					TenantID:   tenantID,
+					EmployeeID: employeeID,
+					Transcript: transcript,
+				}); err != nil {
+					slog.Error("chat memory extraction failed",
+						"employee_id", employeeID,
+						"tenant_id", tenantID,
+						"error", err,
+					)
+				} else {
+					slog.Info("chat memories extracted",
+						"employee_id", employeeID,
+						"messages", len(history),
+					)
+				}
+			}()
+		}
+
 		_ = s.redis.Del(ctx, key)
 		return nil
 	}
@@ -344,6 +378,19 @@ func historyToChatMessages(history []chatHistoryMessage) []ChatMessage {
 		msgs[i] = ChatMessage{Role: h.Role, Content: h.Content}
 	}
 	return msgs
+}
+
+// formatTranscript formats chat history into a readable transcript for memory extraction.
+func formatTranscript(history []chatHistoryMessage) string {
+	var sb strings.Builder
+	for _, msg := range history {
+		label := "Employee"
+		if msg.Role == "assistant" {
+			label = "Mentor"
+		}
+		fmt.Fprintf(&sb, "[%s] %s: %s\n", msg.TS.Format("15:04"), label, msg.Content)
+	}
+	return sb.String()
 }
 
 // matchEmployeeName checks if the text mentions an employee by name.

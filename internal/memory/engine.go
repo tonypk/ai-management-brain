@@ -90,6 +90,25 @@ func (e *MemoryEngine) ExtractFromChase(ctx context.Context, input ChaseInput) e
 	return nil
 }
 
+// ExtractFromChat extracts and stores memories from a completed chat conversation.
+func (e *MemoryEngine) ExtractFromChat(ctx context.Context, input ChatInput) error {
+	if !e.Enabled() || e.extractor == nil {
+		return nil
+	}
+
+	memories, err := e.extractor.FromChat(ctx, input)
+	if err != nil {
+		return fmt.Errorf("extract from chat: %w", err)
+	}
+
+	for _, m := range memories {
+		if _, err := e.store.Create(ctx, m); err != nil {
+			slog.Error("store memory failed", "source", "chat", "error", err)
+		}
+	}
+	return nil
+}
+
 // ExtractFromSummary extracts and stores memories from a generated summary.
 func (e *MemoryEngine) ExtractFromSummary(ctx context.Context, input SummaryInput) error {
 	if !e.Enabled() || e.extractor == nil {

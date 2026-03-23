@@ -56,6 +56,10 @@ func (e *Extractor) FromSummary(ctx context.Context, input SummaryInput) ([]Memo
 	return e.extract(ctx, input.TenantID, "", SourceSummary, input.SummaryID, input.Content)
 }
 
+func (e *Extractor) FromChat(ctx context.Context, input ChatInput) ([]Memory, error) {
+	return e.extract(ctx, input.TenantID, input.EmployeeID, SourceConversation, "", input.Transcript)
+}
+
 func (e *Extractor) extract(ctx context.Context, tenantID, employeeID, sourceType, sourceID, content string) ([]Memory, error) {
 	response, err := e.llm.Chat(ctx, extractSystemPrompt, content)
 	if err != nil {

@@ -537,8 +537,11 @@ func main() {
 		profiler := memory.NewProfileBuilder(memStore, memLLM, embedder)
 		memEngine = memory.NewMemoryEngine(memStore, embedder, retriever, extractor, consolidator, profiler)
 
-		// Inject memory engine into brain engine factory
+		// Inject memory engine into brain engine factory and chat service
 		engineFactory.SetMemoryEngine(memEngine)
+		if chatService != nil {
+			chatService.SetMemoryEngine(memEngine)
+		}
 
 		slog.Info("memory engine enabled", "embedding_model", cfg.EmbeddingModel)
 	} else {
