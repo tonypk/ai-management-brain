@@ -134,6 +134,7 @@ func fetchBossContext(ctx context.Context, queries *sqlc.Queries, tenantID strin
 	roster := make([]brain.RosterEntry, 0, len(emps))
 	for _, e := range emps {
 		roster = append(roster, brain.RosterEntry{
+			ID:       formatPgUUID(e.ID),
 			Name:     e.Name,
 			JobTitle: e.JobTitle,
 			Role:     e.Role,
@@ -156,6 +157,15 @@ func parseUUIDForChat(s string) (pgtype.UUID, error) {
 		return uid, err
 	}
 	return uid, nil
+}
+
+// formatPgUUID formats a pgtype.UUID as a hex string.
+func formatPgUUID(u pgtype.UUID) string {
+	if !u.Valid {
+		return ""
+	}
+	b := u.Bytes
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 // runMigrations applies database migrations idempotently.

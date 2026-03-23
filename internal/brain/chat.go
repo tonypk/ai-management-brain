@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/tonypk/ai-management-brain/internal/memory"
 )
 
 const (
@@ -38,6 +40,7 @@ type chatHistoryMessage struct {
 
 // RosterEntry holds basic employee info for boss context.
 type RosterEntry struct {
+	ID       string
 	Name     string
 	JobTitle string
 	Role     string
@@ -198,15 +201,33 @@ func (s *ChatService) HandleBoss(ctx context.Context, tenantID, mentorID, cultur
 		}
 	}
 
-	// Check if boss mentions an employee by name
+	// Check if boss mentions an employee by name — recall their memories
 	memorySection := ""
-	if engine.MemoryEngine() != nil {
+	if me := engine.MemoryEngine(); me != nil && me.Enabled() {
+		const maxRecall = 3
+		matched := 0
+		var memorySB strings.Builder
 		for _, emp := range bctx.EmployeeRoster {
-			if matchEmployeeName(text, emp.Name) {
-				// TODO: need employeeID for recall — for V1, skip dynamic employee memory
+			if matched >= maxRecall {
 				break
 			}
+			if matchEmployeeName(text, emp.Name) {
+				result, err := me.RecallForMentor(ctx, tenantID, emp.ID, text)
+				if err != nil {
+					slog.Warn("boss memory recall failed", "employee", emp.Name, "error", err)
+					continue
+				}
+				formatted := memory.FormatForPrompt(result)
+				if formatted != "" {
+					if matched > 0 {
+						memorySB.WriteString("\n")
+					}
+					fmt.Fprintf(&memorySB, "<!-- Memories for %s -->\n%s", emp.Name, formatted)
+					matched++
+				}
+			}
 		}
+		memorySection = memorySB.String()
 	}
 
 	// Build rate string
