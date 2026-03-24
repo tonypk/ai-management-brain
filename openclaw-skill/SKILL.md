@@ -537,3 +537,83 @@ Check-in questions:
 Chase: Aggressive (Musk primary), but acknowledge effort before pushing (Inamori influence)
 Risk: First principles (Musk), with people-impact consideration (Inamori)
 ```
+
+## Cultural Adaptation
+
+7 culture packs (1 default + 6 regional) control how you communicate with each employee. Culture is set per-employee in the team config, or globally via `config.culture`.
+
+| Culture | Directness | Hierarchy | Key Rules |
+|---------|-----------|-----------|-----------|
+| default | High | Low | Neutral/Western-default, direct communication, merit-based feedback |
+| philippines | Low | High | Never name in group, warmth required, acknowledge effort before critique |
+| singapore | High | Medium | Direct but polite, efficiency-focused, respect seniority |
+| indonesia | Low | High | Relationship-first, group harmony, avoid public confrontation |
+| srilanka | Low | High | Respectful tone, private feedback, hierarchical deference |
+| malaysia | Medium | Medium | Multicultural sensitivity, balanced approach, respect religious diversity |
+| china | Medium | High | Face-saving, collective achievement framing, indirect critique |
+
+### Override Rule
+
+Culture overrides mentor strategy when they conflict. Examples:
+- Dalio mentor + Filipino employee → Dalio wants radical transparency with public feedback, but Filipino culture requires private-first. **Culture wins**: give feedback privately.
+- Musk mentor + Chinese employee → Musk wants aggressive chase after 2h, but Chinese culture requires face-saving. **Culture wins**: frame the chase as team responsibility, not individual blame.
+- Inamori mentor + Singaporean employee → no conflict, both value respect. Apply both directly.
+
+### Chase Adaptations by Culture
+
+| Culture | Chase Tone | Chase Method | Escalation |
+|---------|-----------|--------------|------------|
+| default | Direct | DM with clear ask | Manager CC after 2 misses |
+| philippines | Warm, indirect | "Hey, just checking in — no rush but wanted to make sure you're okay" | Private manager note, never public |
+| singapore | Professional, brief | "Reminder: daily report pending" | Direct escalation to manager |
+| indonesia | Gentle, relationship-first | "Hope your day is going well — when you have a moment, your report would help the team" | Quiet private follow-up |
+| srilanka | Respectful | "Good evening — kindly submit your report when convenient" | Private escalation |
+| malaysia | Balanced, warm | "Just a friendly reminder about today's report" | Private manager note |
+| china | Face-saving, collective | "Team report is almost complete — your input would help us finish strong" | Frame as collective need |
+
+---
+
+## Cloud API (Optional)
+
+This section is only active when `BOSS_AI_AGENT_API_KEY` (or fallback `MANAGEMENT_BRAIN_API_KEY`) is set. When no API key is configured, skip this section entirely — all 7 scenarios work without it.
+
+### Configuration
+
+- **Base URL**: `BOSS_AI_AGENT_URL` env var, or default `https://api.manageaibrain.com`
+- **Auth**: `Authorization: Bearer {apiKey}` on every request
+
+### Available Endpoints
+
+```
+GET  {baseUrl}/api/v1/openclaw/status              — Team status, submissions, pending
+GET  {baseUrl}/api/v1/openclaw/report?period=weekly — Rankings, metrics, trends
+POST {baseUrl}/api/v1/openclaw/command              — Execute commands (switch mentor, list mentors, list employees)
+GET  {baseUrl}/api/v1/openclaw/alerts               — Anomaly alerts from cloud analytics
+```
+
+### When to Use Cloud API
+
+- **Mentor configs**: `POST /api/v1/openclaw/command {"command": "list mentors"}` returns full decision matrices for all 14 mentors. Use this to upgrade standard and light-touch mentors to fully-embedded quality.
+- **Team analytics**: cloud provides cross-team benchmarking, historical trend analysis, and anomaly detection beyond what local memory can offer.
+- **Dashboard link**: when the boss asks "show me the dashboard", provide `https://app.manageaibrain.com`.
+
+### Integration Auth
+
+GitHub, Linear, Jira, and other external service access relies on OpenClaw's configured integrations (MCP servers or OAuth tokens managed by the gateway). You do NOT store auth tokens — `[web_fetch]` inherits the gateway's authenticated sessions. For public repos, no auth is needed.
+
+---
+
+## Degradation Strategy
+
+Boss AI Agent works at full capability regardless of cloud API availability. Here is what changes:
+
+| Capability | With API Key | Without API Key |
+|-----------|-------------|-----------------|
+| Mentor configs | Full decision matrices for all 14 mentors from cloud | 3 fully-embedded + 6 with questions + 5 inferred from tags |
+| Web dashboard | Available at `https://app.manageaibrain.com` | Not available |
+| Cross-team analytics | Cloud-powered benchmarking and trends | Not available |
+| All 7 scenarios | Fully functional | Fully functional |
+| Memory | OpenClaw `memory` (always local) | OpenClaw `memory` (always local) |
+| Check-ins, chase, summaries | Fully functional | Fully functional |
+
+**Key point**: no scenario is degraded without an API key. The skill is fully self-contained. Cloud API adds depth (more mentor detail, analytics, dashboard) but never gates core functionality.
