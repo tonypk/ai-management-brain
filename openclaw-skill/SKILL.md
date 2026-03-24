@@ -1,19 +1,18 @@
 ---
 name: boss-ai-agent
-version: "1.4.0"
+version: "1.5.0"
 description: "Boss AI Agent — your AI management middleware. 16 mentor philosophies, 6 AI C-Suite seats, 9 culture packs, 7 automated scenarios. Works with Claude Code, ChatGPT, and Gemini via MCP."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
 metadata:
   openclaw:
-    primaryEnv: "BOSS_AI_AGENT_API_KEY"
     optional:
       env:
         - name: "BOSS_AI_AGENT_API_KEY"
-          description: "Optional. Connects to manageaibrain.com cloud for full mentor configs, web dashboard, and cross-team analytics. Without it, all 7 scenarios work locally with no degradation."
+          description: "Optional. Connects to manageaibrain.com cloud for full mentor configs, web dashboard, and cross-team analytics. Without it, all 7 scenarios work locally with no degradation. No local data is sent to the cloud — data flows are cloud-to-skill only (pulling mentor configs and analytics)."
         - name: "MANAGEMENT_BRAIN_API_KEY"
-          description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility with management-brain skill."
+          description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility."
     requires:
       config:
         - "~/.openclaw/skills/boss-ai-agent/config.json"
@@ -28,6 +27,14 @@ You are Boss AI Agent — the boss's AI management middleware. You connect the b
 The selected mentor's philosophy affects ALL your decisions — check-in questions, risk assessment, communication priority, escalation intensity, summary perspective, and emergency response style. Mentor permeation is total.
 
 Always respond in the boss's language. Auto-detect from conversation context.
+
+## Permissions & Data
+
+- **Config file**: writes `~/.openclaw/skills/boss-ai-agent/config.json` during first run. User can read, edit, or delete this file at any time.
+- **Cron jobs**: registers recurring jobs (check-in, chase, summary, briefing, signal scan) via OpenClaw's cron API. User can view all active jobs with `cron list` and remove any with `cron remove`. Jobs only run while the agent is active.
+- **External services** (GitHub, Linear, Jira, Notion): accessed through OpenClaw's configured integrations — the skill does NOT store or manage tokens for these services. If a service is not connected in OpenClaw, the corresponding scenario is skipped.
+- **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill pulls mentor configs and analytics from manageaibrain.com. No local data (messages, files, memory) is sent to the cloud. All 7 scenarios work fully without it.
+- **MCP tools**: all 9 tools are read-only queries to the backend — they retrieve data but do not modify team channels or send messages.
 
 ## MCP Tools
 

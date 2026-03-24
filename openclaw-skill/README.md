@@ -1,19 +1,18 @@
 ---
 name: boss-ai-agent
-version: "1.4.0"
+version: "1.5.0"
 description: "Boss AI Agent — your AI management middleware. 16 mentor philosophies, 6 AI C-Suite seats, 9 culture packs, 7 automated scenarios. Works with Claude Code, ChatGPT, and Gemini via MCP."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
 metadata:
   openclaw:
-    primaryEnv: "BOSS_AI_AGENT_API_KEY"
     optional:
       env:
         - name: "BOSS_AI_AGENT_API_KEY"
-          description: "Optional. Connects to manageaibrain.com cloud for full mentor configs, C-Suite board, web dashboard, and cross-team analytics. Without it, all 7 scenarios work locally with no degradation."
+          description: "Optional. Connects to manageaibrain.com cloud for full mentor configs, web dashboard, and cross-team analytics. Without it, all 7 scenarios work locally with no degradation. No local data is sent to the cloud."
         - name: "MANAGEMENT_BRAIN_API_KEY"
-          description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility with management-brain skill."
+          description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility."
     requires:
       config:
         - "~/.openclaw/skills/boss-ai-agent/config.json"
@@ -32,6 +31,14 @@ Your AI management middleware — connects you to all systems through mentor wis
 - **Multi-client MCP**: works with Claude Code (stdio), ChatGPT (HTTP), and Gemini (HTTP)
 - **23+ messaging platforms**: works with any channel connected to OpenClaw
 - **Zero external dependency**: fully functional without any cloud account
+
+## How It Works
+
+Boss AI Agent connects to your team through **OpenClaw's existing integrations** (Telegram, Slack, GitHub, etc.). It does NOT store or manage tokens for external services — all service access is inherited from OpenClaw's configured connections. If a service is not connected in OpenClaw, the corresponding feature is simply skipped.
+
+**Data flow**: The optional cloud API (`BOSS_AI_AGENT_API_KEY`) only pulls mentor configs and analytics FROM the cloud. No local data (messages, memory, config) is ever sent to the cloud. All 7 scenarios work fully without it.
+
+**Persistent behavior**: The skill registers cron jobs (check-in, chase, summary) via OpenClaw's cron API. You can view all jobs with `cron list` and remove any with `cron remove` at any time.
 
 ## Install
 
@@ -123,29 +130,22 @@ Connect to manageaibrain.com for additional features:
 
 Set `BOSS_AI_AGENT_API_KEY` to enable. All 7 scenarios work without it.
 
-## Migrating from management-brain?
-
-Boss AI Agent is a new skill, not an upgrade. Your existing management-brain data is untouched.
-
-To switch:
-1. Install boss-ai-agent
-2. Run onboarding (`/boss-ai-agent`)
-3. Add your team members
-
-Legacy env var `MANAGEMENT_BRAIN_API_KEY` is accepted as fallback.
-
 ## 中文说明
 
-Boss AI Agent 是老板的 AI 管理中间件。通过已有的 OpenClaw 频道（Telegram/Slack/飞书）管理团队，零外部依赖。
+Boss AI Agent 是老板的 AI 管理中间件。通过 OpenClaw 连接已有的沟通工具（Telegram/Slack/飞书等），零外部依赖即可管理团队。
 
 **核心功能：**
-- 7 大自动化场景（签到、巡检、早报、1:1、信号扫描、知识库、紧急响应）
-- 16 位导师哲学（马斯克、稻盛和夫、马云、梅耶尔、特劳特等）
-- 6 位 AI C-Suite 高管（虚拟董事会）
-- 9 套文化包（适配菲律宾、新加坡、中国、美国、印度等文化差异）
-- 多客户端支持：Claude Code + ChatGPT + Gemini
+- 7 大自动化场景 — 签到、巡检、早报、1:1、信号扫描、知识库、紧急响应
+- 16 位导师哲学 — 马斯克、稻盛和夫、马云、达利欧、格鲁夫、任正非、孙正义、乔布斯、贝索斯、巴菲特、张一鸣、雷军、曹德旺、褚时健、梅耶尔、特劳特
+- 6 位 AI C-Suite 高管 — CEO/CFO/CMO/CTO/CHRO/COO 虚拟董事会
+- 9 套文化包 — 适配菲律宾、新加坡、中国、美国、印度等文化差异
+- 多客户端 — Claude Code (stdio) + ChatGPT/Gemini (MCP HTTP)
+
+**数据安全：** 所有场景无需云端即可运行。可选的 API Key 仅从云端拉取导师配置和分析数据，不会上传任何本地数据（消息、文件、记忆）。外部服务（GitHub/Jira/Notion）的访问通过 OpenClaw 已有的集成，本技能不存储或管理任何外部服务令牌。
 
 安装：`clawhub install boss-ai-agent`
+
+**从 management-brain 迁移？** Boss AI Agent 是全新技能，旧数据不受影响。安装后运行 `/boss-ai-agent` 即可。旧环境变量 `MANAGEMENT_BRAIN_API_KEY` 仍然兼容。
 
 ## Links
 
