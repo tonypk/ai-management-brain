@@ -8,9 +8,13 @@ homepage: "https://manageaibrain.com"
 metadata:
   openclaw:
     primaryEnv: "BOSS_AI_AGENT_API_KEY"
-    requires:
+    optional:
       env:
-        - "BOSS_AI_AGENT_API_KEY"
+        - name: "BOSS_AI_AGENT_API_KEY"
+          description: "Optional. Connects to manageaibrain.com cloud for full mentor configs, web dashboard, and cross-team analytics. Without it, all 7 scenarios work locally with no degradation."
+        - name: "MANAGEMENT_BRAIN_API_KEY"
+          description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility with management-brain skill."
+    requires:
       config:
         - "~/.openclaw/skills/boss-ai-agent/config.json"
 ---

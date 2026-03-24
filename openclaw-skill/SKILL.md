@@ -8,9 +8,13 @@ homepage: "https://manageaibrain.com"
 metadata:
   openclaw:
     primaryEnv: "BOSS_AI_AGENT_API_KEY"
-    requires:
+    optional:
       env:
-        - "BOSS_AI_AGENT_API_KEY"
+        - name: "BOSS_AI_AGENT_API_KEY"
+          description: "Optional. Connects to manageaibrain.com cloud for full mentor configs, web dashboard, and cross-team analytics. Without it, all 7 scenarios work locally with no degradation."
+        - name: "MANAGEMENT_BRAIN_API_KEY"
+          description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility with management-brain skill."
+    requires:
       config:
         - "~/.openclaw/skills/boss-ai-agent/config.json"
 ---
@@ -580,6 +584,21 @@ Culture overrides mentor strategy when they conflict. Examples:
 ## Cloud API (Optional)
 
 This section is only active when `BOSS_AI_AGENT_API_KEY` (or fallback `MANAGEMENT_BRAIN_API_KEY`) is set. When no API key is configured, skip this section entirely — all 7 scenarios work without it.
+
+### What the API Key Grants
+
+The API key connects to manageaibrain.com and grants access to:
+- **Read-only mentor configs** — full decision matrices for all 14 mentors (local skill only has 3 complete)
+- **Team analytics** — cross-team benchmarking, historical trends, anomaly detection
+- **Web dashboard** — visual management dashboard at app.manageaibrain.com
+
+The API key does NOT grant:
+- Access to your local messages, files, or OpenClaw channels
+- Ability to send messages on your behalf
+- Access to your local memory or config data
+- Any write operations to your systems
+
+All data flows are from cloud → skill (pulling mentor configs and analytics). No local data is sent to the cloud.
 
 ### Configuration
 
