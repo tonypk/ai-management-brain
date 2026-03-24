@@ -23,11 +23,11 @@ export function createServer(): McpServer {
     version: "1.0.0",
   });
 
-  // --- Group 1: Core Management ---
+  // --- Group 1: Daily Operations ---
 
   server.tool(
     "get_team_status",
-    "Get today's team check-in status — submission rate, pending employees, chase counts",
+    "Check today's daily check-in progress: how many submitted, who is still pending, and how many reminders have been sent. Use this when the user asks about today's team status, attendance, or who hasn't reported yet.",
     {},
     async () => {
       const client = makeClient();
@@ -39,8 +39,12 @@ export function createServer(): McpServer {
 
   server.tool(
     "get_report",
-    "Get team performance report with ranking and 1:1 suggestions",
-    { period: z.enum(["weekly", "monthly"]).describe("Report period") },
+    "Generate a team performance report with employee rankings by check-in rate and personalized 1:1 meeting suggestions. Use this to prepare for weekly/monthly reviews or to understand team trends over time.",
+    {
+      period: z
+        .enum(["weekly", "monthly"])
+        .describe("Time period: 'weekly' for last 7 days, 'monthly' for last 30 days"),
+    },
     async ({ period }) => {
       const client = makeClient();
       if (!client)
@@ -51,7 +55,7 @@ export function createServer(): McpServer {
 
   server.tool(
     "get_alerts",
-    "Get active alerts for employees with consecutive missed check-in days",
+    "Get urgent alerts for employees who have missed check-ins for multiple consecutive days. Returns severity levels and missed day counts. Use this to identify team members who may need immediate attention or a wellness check.",
     {},
     async () => {
       const client = makeClient();
@@ -61,15 +65,17 @@ export function createServer(): McpServer {
     },
   );
 
-  // --- Group 2: Mentors ---
+  // --- Group 2: Management Philosophy ---
 
   server.tool(
     "switch_mentor",
-    'Switch the active management mentor philosophy (e.g., "musk", "inamori")',
+    "Change the AI management mentor that shapes all advice and analysis. Each mentor brings a distinct leadership philosophy: inamori (servant leadership), dalio (radical transparency), grove (OKRs), musk (first principles), jobs (product obsession), bezos (customer obsession), ma (ecosystem thinking), ren (wolf culture), son (300-year vision). Use this when the user wants different management perspectives.",
     {
       mentor: z
         .string()
-        .describe('Mentor ID or name, e.g. "musk", "inamori", "dalio"'),
+        .describe(
+          "Mentor ID: inamori, dalio, grove, musk, jobs, bezos, ma, ren, son, buffett, leijun, zhangyiming, caodewang, chushijian, meyer, trout",
+        ),
     },
     async ({ mentor }) => {
       const client = makeClient();
@@ -81,7 +87,7 @@ export function createServer(): McpServer {
 
   server.tool(
     "list_mentors",
-    "List all available mentors with domain expertise and recommended C-Suite seats",
+    "List all available management mentors with their names, companies, core philosophies, domain expertise, and recommended C-Suite seat configurations. Use this when the user wants to explore available mentors before switching.",
     {},
     async () => {
       const client = makeClient();
@@ -91,17 +97,19 @@ export function createServer(): McpServer {
     },
   );
 
-  // --- Group 3: C-Suite ---
+  // --- Group 3: AI C-Suite Board ---
 
   server.tool(
     "board_discuss",
-    "Run a board discussion across all active C-Suite seats on a topic. Each seat responds from their expertise, followed by a synthesis.",
+    "Convene a virtual board meeting where AI-powered C-Suite executives (CEO, CFO, CMO, CTO, CHRO, COO) each analyze a topic from their domain expertise, followed by a unified synthesis. Use this for strategic decisions like market expansion, budget allocation, org restructuring, product launches, or any cross-functional question.",
     {
       topic: z
         .string()
         .min(1)
         .max(4000)
-        .describe("The topic for the board to discuss"),
+        .describe(
+          "The strategic question or business topic for the board to discuss, e.g. 'Should we expand to the Japan market?' or 'How to reduce employee turnover by 20%?'",
+        ),
     },
     async ({ topic }) => {
       const client = makeClient();
@@ -113,18 +121,18 @@ export function createServer(): McpServer {
 
   server.tool(
     "chat_with_seat",
-    "Chat directly with a specific C-Suite seat (e.g., ask the CFO about budget)",
+    "Have a direct conversation with one AI C-Suite executive. Each seat has deep domain expertise: CEO (strategy & vision), CFO (finance & budgets), CMO (marketing & growth), CTO (technology & architecture), CHRO (people & culture), COO (operations & efficiency). Use this for domain-specific questions rather than cross-functional topics.",
     {
       seat_type: z
         .string()
-        .describe(
-          'C-Suite seat type, e.g. "ceo", "cfo", "cmo", "cto", "chro", "coo"',
-        ),
+        .describe("The C-Suite role to consult: ceo, cfo, cmo, cto, chro, or coo"),
       message: z
         .string()
         .min(1)
         .max(4000)
-        .describe("Your message to the C-Suite seat"),
+        .describe(
+          "Your question or topic for this executive, e.g. 'What's our burn rate outlook for Q3?' (CFO) or 'How should we structure the engineering team for microservices?' (CTO)",
+        ),
     },
     async ({ seat_type, message }) => {
       const client = makeClient();
@@ -134,11 +142,11 @@ export function createServer(): McpServer {
     },
   );
 
-  // --- Group 4: Employees ---
+  // --- Group 4: People & Employees ---
 
   server.tool(
     "list_employees",
-    "List all active employees with their roles",
+    "List all active employees with their names and roles. Use this to get an overview of the team composition or to find an employee's exact name before looking up their profile.",
     {},
     async () => {
       const client = makeClient();
@@ -150,11 +158,13 @@ export function createServer(): McpServer {
 
   server.tool(
     "get_employee_profile",
-    "Get an employee's profile with submission history, sentiment trends, and recent reports",
+    "Look up a specific employee's detailed profile including check-in submission rate, sentiment trend over time, consecutive missed days, and recent daily reports. Supports fuzzy name matching. Use this to prepare for 1:1 meetings or to understand an individual's engagement and wellbeing.",
     {
       name: z
         .string()
-        .describe("Employee name (case-insensitive fuzzy match)"),
+        .describe(
+          "Employee name to search for (case-insensitive, fuzzy match supported), e.g. 'John' or 'john doe'",
+        ),
     },
     async ({ name }) => {
       const client = makeClient();
