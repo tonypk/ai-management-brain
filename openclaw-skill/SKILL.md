@@ -1,6 +1,6 @@
 ---
 name: boss-ai-agent
-version: "1.0.0"
+version: "1.2.0"
 description: "Boss AI Agent — your AI management middleware. Connects boss to all systems (Telegram/Slack/GitHub/Notion/Email), 14 mentor philosophies, 9 culture packs, 7 automated scenarios. OpenClaw native-first, zero external dependency."
 user-invocable: true
 emoji: "🤖"
@@ -68,7 +68,8 @@ When the boss first invokes `/boss-ai-agent`, execute the following onboarding s
   "alerts": {
     "consecutiveMisses": 3,
     "sentimentDropThreshold": -0.3,
-    "urgentKeywords": ["urgent", "down", "broken", "紧急", "挂了"]
+    "urgentKeywords": ["urgent", "down", "broken", "紧急", "挂了"],
+    "alertOnEveryRed": false
   }
 }
 ```
@@ -127,14 +128,15 @@ cron remove --label "daily-checkin"
 
 ---
 
-### memory_search / memory_get
+### memory_search / memory_get / memory_set
 
-**What**: Persistent agent memory — store and retrieve context across sessions.
+**What**: Persistent agent memory — store, retrieve, and search context across sessions.
 
 **Invoke**:
 ```
 memory_search --query "John Santos performance"
 memory_get --key "emp:john-santos"
+memory_set --key "emp:john-santos" --value '{"sentiment": 0.7, "lastReport": "2026-03-24", ...}'
 ```
 
 Key prefix conventions:
@@ -143,7 +145,7 @@ Key prefix conventions:
 - `project:{name}` — project status snapshots
 - `boss:pref` — boss preferences and settings
 
-**When**: Use to inject employee context before check-ins, analyze sentiment trends over time, and recall past decisions or project states.
+**When**: Use `memory_search` and `memory_get` to inject employee context before check-ins and recall past decisions. Use `memory_set` to record check-in results, chase events, sentiment scores, summaries, and incident logs.
 
 ---
 
@@ -280,7 +282,7 @@ This is the core scenario. It runs three automated sub-flows each weekday: check
    - Apply the mentor's chase strategy (e.g., Musk: aggressive after 2h, Inamori: gentle EOD reminder).
    - Apply cultural override (e.g., Filipino culture: never name publicly, warmth required).
    - `[message send]` a reminder following the combined mentor and culture strategy.
-3. `[memory]` record chase events for trend tracking.
+3. `[memory_set]` record chase events for trend tracking.
 4. Skip if `team` is empty.
 
 **Summary Flow** (triggered by `[cron]` at `schedule.summary`, default `0 19 * * 1-5`):
@@ -293,7 +295,7 @@ This is the core scenario. It runs three automated sub-flows each weekday: check
    - Sentiment overview.
    - Recommended 1:1s (if someone shows declining patterns).
 4. `[message send]` the summary to the boss.
-5. `[memory]` store the summary for future reference.
+5. `[memory_set]` store the summary for future reference.
 6. Skip if `team` is empty.
 
 ---
@@ -394,7 +396,7 @@ Sub-agent table:
      - Keywords: "blocked by", "need help", "stuck on", "deadline", "can't figure out"
    - 🟢 **Positive signals**: breakthroughs, shipped features, celebrations
      - Keywords: "shipped", "deployed", "fixed", "launched", "milestone"
-3. `[memory]` — record all significant signals (🔴 and 🟡) with timestamp, employee, channel, and signal text.
+3. `[memory_set]` — record all significant signals (🔴 and 🟡) with timestamp, employee, channel, and signal text.
 4. **Alert threshold**: when 2+ 🔴 signals accumulate within 1 hour → `[message send]` alert to boss immediately.
 5. Single 🔴 signals are included in the next daily briefing unless boss has set `"alertOnEveryRed": true`.
 
@@ -415,7 +417,7 @@ Sub-agent table:
    - `[web_fetch]` — append to the configured spreadsheet.
 4. If no external integration:
    - `[write]` — save as local markdown file at `~/.openclaw/skills/boss-ai-agent/knowledge/{date}-{topic}.md`.
-5. `[memory]` — always index the content in agent memory for future retrieval regardless of external storage.
+5. `[memory_set]` — always index the content in agent memory for future retrieval regardless of external storage.
 6. Confirm to boss: "Recorded: {summary}. Stored in {location}."
 
 ---
@@ -443,7 +445,7 @@ Sub-agent table:
      - Ma: "This can be turned into an opportunity. Immediate steps: {actions}"
 4. **Execution** — after boss approves a course of action:
    - `[message send]` — notify relevant team members.
-   - `[memory]` — record the incident and response for future reference.
+   - `[memory_set]` — record the incident and response for future reference.
 
 ## Mentor System
 

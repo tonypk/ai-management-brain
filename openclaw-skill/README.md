@@ -1,6 +1,6 @@
 ---
 name: boss-ai-agent
-version: "1.0.0"
+version: "1.2.0"
 description: "Boss AI Agent — your AI management middleware. Connects boss to all systems (Telegram/Slack/GitHub/Notion/Email), 14 mentor philosophies, 9 culture packs, 7 automated scenarios. OpenClaw native-first, zero external dependency."
 user-invocable: true
 emoji: "🤖"
