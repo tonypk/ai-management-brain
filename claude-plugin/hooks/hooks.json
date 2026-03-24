@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"status\":\"loaded\",\"plugin\":\"boss-ai-agent\",\"version\":\"1.0.0\"}'",
+            "async": false
+          }
+        ],
+        "description": "Confirm Boss AI Agent plugin loaded on session start"
+      }
+    ]
+  }
+}

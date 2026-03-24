@@ -1,0 +1,23 @@
+{
+  "name": "boss-ai-agent",
+  "displayName": "Boss AI Agent",
+  "version": "1.0.0",
+  "description": "AI Management OS — 14 mentor philosophies (Musk/Inamori/Jobs...), 9 culture packs, 7 automated management scenarios. Daily check-ins, smart chase, sentiment analysis, project patrol, emergency response. Works with Slack, Telegram, Gmail, GitHub, Linear, Notion.",
+  "author": {
+    "name": "tonypk",
+    "email": "tonypk25@gmail.com"
+  },
+  "homepage": "https://manageaibrain.com",
+  "repository": "https://github.com/tonypk/boss-ai-agent-claude-plugin",
+  "license": "MIT",
+  "keywords": [
+    "management",
+    "ai-agent",
+    "mentor",
+    "team-management",
+    "check-in",
+    "sentiment-analysis",
+    "productivity",
+    "human-resources"
+  ]
+}

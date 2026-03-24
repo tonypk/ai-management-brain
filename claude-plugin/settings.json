@@ -1,0 +1,8 @@
+{
+  "boss-ai-agent": {
+    "dataDir": "~/.boss-ai-agent",
+    "defaultMentor": "musk",
+    "defaultCulture": "default",
+    "language": "auto"
+  }
+}
