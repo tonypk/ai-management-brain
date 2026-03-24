@@ -72,7 +72,7 @@ describe("ApiClient", () => {
     });
 
     await expect(client.get("/api/v1/test")).rejects.toThrow(
-      "Board discussions are limited",
+      "rate limited",
     );
   });
 

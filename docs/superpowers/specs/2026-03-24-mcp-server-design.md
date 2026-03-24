@@ -132,7 +132,7 @@ All 9 tools use the same API key for every request.
 
 - **Description**: Get an employee's profile with submission history, sentiment trends, and recent reports.
 - **Parameters**: `name` (required, string — case-insensitive fuzzy match)
-- **API**: `GET /api/v1/employees/:name/profile` **(NEW endpoint)**
+- **API**: `GET /api/v1/employees/profile/:name` **(NEW endpoint)**
 - **Response format**: Wrapped in `{ data: {...} }`
 - **Returns**: `{ data: { employee: { id, name, role, job_title, country }, submission_rate, recent_reports[{ date, sentiment, blockers }], sentiment_trend, consecutive_missed } }`
 - **Matching**: Case-insensitive ILIKE with `%` wildcards on both sides (`WHERE name ILIKE '%{name}%'`). Returns first match. If no match, returns 404.
@@ -220,7 +220,7 @@ Single-seat chat endpoint for the `chat_with_seat` MCP tool.
 - **Response**: `{ "data": { "seat_type": "ceo", "title": "Chief Executive Officer", "persona_id": "musk", "response": "..." } }`
 - **Errors**: 400 if seat_type not found; 200 with inactive message if seat is inactive
 
-### 2. `GET /api/v1/employees/:name/profile`
+### 2. `GET /api/v1/employees/profile/:name`
 
 Employee profile endpoint for the `get_employee_profile` MCP tool.
 

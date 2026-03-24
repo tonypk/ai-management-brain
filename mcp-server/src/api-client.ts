@@ -47,10 +47,11 @@ export class ApiClient {
     // First attempt
     let response = await this.fetchWithErrorHandling(url, options);
 
-    // Retry once on 5xx
+    // Retry once on 5xx with fresh timeout
     if (response.status >= 500) {
       await this.sleep(500);
-      response = await this.fetchWithErrorHandling(url, options);
+      const retryOptions = { ...options, signal: AbortSignal.timeout(this.timeoutMs) };
+      response = await this.fetchWithErrorHandling(url, retryOptions);
       if (response.status >= 500) {
         throw new APIError("Server error. Please try again.", response.status);
       }
@@ -64,10 +65,11 @@ export class ApiClient {
     }
 
     if (response.status === 429) {
-      throw new APIError(
-        "Board discussions are limited to once per 5 minutes.",
-        429,
-      );
+      const errorBody = await response.json().catch(() => ({}));
+      const message =
+        (errorBody as Record<string, string>).error ||
+        "Rate limited. Please try again later.";
+      throw new APIError(message, 429);
     }
 
     if (response.status >= 400) {

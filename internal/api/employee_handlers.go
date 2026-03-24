@@ -1,10 +1,13 @@
 package api
 
 import (
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
@@ -33,7 +36,12 @@ func handleEmployeeProfile(q *sqlc.Queries) gin.HandlerFunc {
 			Column2:  pgtype.Text{String: name, Valid: true},
 		})
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("No employee found matching '%s'.", name)})
+			if errors.Is(err, pgx.ErrNoRows) {
+				c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("No employee found matching '%s'.", name)})
+				return
+			}
+			slog.Error("employee profile lookup", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 
