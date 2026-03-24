@@ -186,6 +186,10 @@ func (h *CommandHandler) HandleHelp(c BotContext) error {
 /blend <primary> <weight> <secondary> — Blend mentors (e.g., /blend inamori 70 dalio)
 /culture <name> <code> — Set employee culture
 /profile <name> — View employee profile & stats
+/talk <seat> — Chat with a C-Suite seat (e.g., /talk ceo)
+/board <topic> — Board discussion across all seats
+/team — View your C-Suite seats
+/assign <seat> <persona> — Assign persona to seat
 /diagnostics — System status
 /help — Show this message`
 	return c.Send(help)

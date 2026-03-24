@@ -19,6 +19,7 @@ const (
 	boardRateLimitTTL  = 5 * time.Minute
 	seatHistoryTTL     = 24 * time.Hour
 	maxHistoryMessages = 10
+	maxUserMessageLen  = 4000
 )
 
 // RedisClient is the subset of Redis operations SeatService needs.
@@ -69,6 +70,9 @@ func NewSeatService(cfg SeatServiceConfig) *SeatService {
 func (s *SeatService) Chat(ctx context.Context, tenantID, seatType, cultureCode, userMessage string) (string, error) {
 	if s.llm == nil {
 		return "AI features are not enabled.", nil
+	}
+	if len(userMessage) > maxUserMessageLen {
+		return "", fmt.Errorf("message too long (max %d characters)", maxUserMessageLen)
 	}
 
 	tenantUUID, err := parseUUID(tenantID)
@@ -141,6 +145,9 @@ func (s *SeatService) BoardDiscuss(ctx context.Context, tenantID, cultureCode, t
 	if s.llm == nil {
 		return nil, "", fmt.Errorf("AI features are not enabled")
 	}
+	if len(topic) > maxUserMessageLen {
+		return nil, "", fmt.Errorf("topic too long (max %d characters)", maxUserMessageLen)
+	}
 
 	tenantUUID, err := parseUUID(tenantID)
 	if err != nil {
@@ -149,8 +156,10 @@ func (s *SeatService) BoardDiscuss(ctx context.Context, tenantID, cultureCode, t
 
 	// Rate limit check
 	rateLimitKey := fmt.Sprintf("board_rate:%s", tenantID)
-	if val, _ := s.redis.Get(ctx, rateLimitKey); val != "" {
+	if val, err := s.redis.Get(ctx, rateLimitKey); err == nil && val != "" {
 		return nil, "", fmt.Errorf("board discussions are limited to once per 5 minutes")
+	} else if err != nil {
+		slog.Warn("board rate limit check failed, allowing request", "error", err)
 	}
 
 	// Get all active seats
@@ -223,7 +232,9 @@ func (s *SeatService) BoardDiscuss(ctx context.Context, tenantID, cultureCode, t
 	}
 
 	// Set rate limit
-	_ = s.redis.Set(ctx, rateLimitKey, "1", boardRateLimitTTL)
+	if err := s.redis.Set(ctx, rateLimitKey, "1", boardRateLimitTTL); err != nil {
+		slog.Warn("failed to set board rate limit", "error", err)
+	}
 
 	return responses, synthesis, nil
 }

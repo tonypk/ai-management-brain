@@ -141,7 +141,11 @@ func handleUpdateSeat(q *sqlc.Queries) gin.HandlerFunc {
 		}
 
 		// Verify tenant ownership
-		tenantID, _ := parseUUID(TenantFromContext(c))
+		tenantID, err := parseUUID(TenantFromContext(c))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
 		existing, err := q.GetSeatByID(c.Request.Context(), seatID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -191,7 +195,11 @@ func handleDeleteSeat(q *sqlc.Queries) gin.HandlerFunc {
 			return
 		}
 
-		tenantID, _ := parseUUID(TenantFromContext(c))
+		tenantID, err := parseUUID(TenantFromContext(c))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
 		existing, err := q.GetSeatByID(c.Request.Context(), seatID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -236,11 +244,17 @@ func handleBoardDiscuss(seatSvc *seats.SeatService) gin.HandlerFunc {
 
 		responses, synthesis, err := seatSvc.BoardDiscuss(c.Request.Context(), tenantID, cultureCode, req.Topic)
 		if err != nil {
-			if strings.Contains(err.Error(), "limited") {
-				c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "limited") {
+				c.JSON(http.StatusTooManyRequests, gin.H{"error": errMsg})
 				return
 			}
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			if strings.Contains(errMsg, "no active seats") || strings.Contains(errMsg, "invalid tenant") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+				return
+			}
+			slog.Error("board discuss", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 
