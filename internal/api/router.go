@@ -12,6 +12,7 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/memory"
 	"github.com/tonypk/ai-management-brain/internal/roles"
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
+	"github.com/tonypk/ai-management-brain/internal/seats"
 )
 
 // RouterConfig holds dependencies for the API router.
@@ -31,6 +32,7 @@ type RouterConfig struct {
 	SlackAdapter   *channel.SlackAdapter   // nil = Slack disabled
 	LarkAdapter    *channel.LarkAdapter    // nil = Lark disabled
 	Scheduler      *scheduler.Scheduler    // nil = scheduler disabled
+	SeatService    *seats.SeatService      // nil = seats disabled
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -90,6 +92,16 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/analytics/overview", handleAnalyticsOverview(cfg.Queries))
 		protected.GET("/analytics/activity", handleEmployeeActivity(cfg.Queries))
 
+		// Seats (C-Suite management)
+		protected.GET("/seats", handleListSeats(cfg.Queries))
+		protected.POST("/seats", RequireRole("boss"), handleCreateSeat(cfg.Queries))
+		protected.PUT("/seats/:id", RequireRole("boss"), handleUpdateSeat(cfg.Queries))
+		protected.DELETE("/seats/:id", RequireRole("boss"), handleDeleteSeat(cfg.Queries))
+		if cfg.SeatService != nil {
+			protected.POST("/board/discuss", RequireRole("boss"), handleBoardDiscuss(cfg.SeatService))
+		}
+		protected.GET("/mentors", handleListMentorsWithDomain())
+
 		// Billing
 		protected.POST("/billing/checkout", handleBillingCheckout(cfg))
 		protected.GET("/billing/status", handleBillingStatus(cfg))
@@ -148,6 +160,11 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			// Reports
 			admin.GET("/reports", handleAdminListReports(cfg.Queries))
 			admin.GET("/reports/stats", handleReportStats(cfg.Queries))
+
+			// Group chats
+			admin.GET("/groups", handleListGroups(cfg.Queries))
+			admin.PUT("/groups/:id", handleUpdateGroup(cfg.Queries))
+			admin.DELETE("/groups/:id", handleDeleteGroup(cfg.Queries))
 
 			// Mentors (reuse existing mentorDescriptions from handlers.go)
 			admin.GET("/mentors", handleListMentors())
