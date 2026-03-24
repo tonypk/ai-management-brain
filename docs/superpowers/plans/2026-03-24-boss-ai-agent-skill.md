@@ -2,13 +2,20 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rewrite the OpenClaw skill from `management-brain` to `boss-ai-agent` — a full-stack AI management middleware leveraging OpenClaw native tools across 7 scenarios with 14 mentors and 7 culture packs.
+**Goal:** Rewrite the OpenClaw skill from `management-brain` to `boss-ai-agent` — a full-stack AI management middleware leveraging OpenClaw native tools across 7 scenarios with 14 mentors and 7 culture packs (1 default + 6 regional).
 
 **Architecture:** Single SKILL.md file (~800-1200 lines) containing agent instructions organized by: identity, onboarding, tool reference, 7 scenarios, mentor system, cultural adaptation, cloud API, and Chinese docs. Separate README.md for user-facing install guide. Published to ClawHub as new `boss-ai-agent` slug.
 
 **Tech Stack:** Markdown (YAML frontmatter), ClawHub CLI v0.9.0, OpenClaw tool API
 
 **Spec:** `docs/superpowers/specs/2026-03-24-boss-ai-agent-skill-design.md`
+
+**Writing voice:** All SKILL.md content is written as instructions to the AI agent in second person imperative (e.g., "You are Boss AI Agent...", "When the boss asks..., you MUST...", "Use `[message send]` to..."). The agent is the reader.
+
+**Spec sections NOT mapped to SKILL.md content** (operational guidance only):
+- Spec S10 (Migration) → goes in README.md (Task 8)
+- Spec S11 (Versioning) → operational, not in SKILL.md
+- Spec S12 (Out of Scope) → operational, not in SKILL.md
 
 ---
 
@@ -53,8 +60,23 @@ Content must include:
 - 3 onboarding questions (team size, communication tools, project management tools)
 - Auto-detect connected channels via OpenClaw
 - Config generation: `[write]` to `~/.openclaw/skills/boss-ai-agent/config.json`
-- Cron registration: `[cron add]` for each scheduled task
+- Cron registration: `[cron add]` for each scheduled task. Default schedule (from spec S7):
+  - `checkin`: `0 9 * * 1-5` (9 AM weekdays)
+  - `chase`: `30 17 * * 1-5` (5:30 PM weekdays)
+  - `summary`: `0 19 * * 1-5` (7 PM weekdays)
+  - `weeklyReview`: `0 9 * * 1` (Monday 9 AM)
+  - `briefing`: `0 8 * * 1-5` (8 AM weekdays)
+  - `signalScan`: `*/30 9-18 * * 1-5` (every 30 min during work hours)
 - Channel verification: `[message send]` test message
+- Config schema defaults (from spec S7 lines 262-271):
+  - `mentor`: optional, default `"musk"`
+  - `culture`: optional, default `"default"`
+  - `timezone`: required, no default
+  - `team`: optional, default `[]`
+  - `integrations`: optional, all disabled by default
+  - `alerts.consecutiveMisses`: default `3`
+  - `alerts.sentimentDropThreshold`: default `-0.3`
+  - `alerts.urgentKeywords`: default `["urgent", "down", "broken", "紧急", "挂了"]`
 - Mentor recommendation based on answers
 - Env var fallback: check `MANAGEMENT_BRAIN_API_KEY` if `BOSS_AI_AGENT_API_KEY` not set
 - Empty team guard: if 0 people, enter solo founder mode (skip check-in/chase/summary crons, keep briefing/patrol)
@@ -160,10 +182,15 @@ Must include:
 
 Must include:
 - **Trigger**: boss says "check project status" / "项目状态" OR `[cron]` weekly Monday
-- **Sub-agent dispatch**: `[sessions_spawn]` 3 parallel agents (github-scanner, pm-scanner, chat-scanner) with prompt templates from spec
-- **Aggregation**: collect results, deduplicate, apply mentor risk framework
+- **Sub-agent dispatch**: `[sessions_spawn]` 3 parallel agents. Include the full sub-agent specification from spec S4 lines 121-143:
+  - **Prompt template**: "You are a {role} sub-agent for Boss AI Agent. Task: {task}. Tools: {tools}. Output: JSON {status, findings[], summary}. Timeout: 60s."
+  - **Sub-agent table** (reproduce from spec lines 134-139):
+    - github-scanner: Code reviewer, scan repos for open PRs > 3 days / failed CI / stale issues > 7 days, tools: `web_fetch`
+    - pm-scanner: Project tracker, check sprint progress / overdue tasks / unassigned items, tools: `web_fetch`
+    - chat-scanner: Signal analyst, scan team channels for project discussions / blockers / sentiment, tools: `message read`
+- **Aggregation**: parent agent collects results, deduplicates, applies mentor risk framework to prioritize
 - **Report format**: structured output with severity levels, findings, recommended actions
-- **Failure handling**: skip unavailable sources with ⚠️ note
+- **Failure handling**: if sub-agent times out or errors, skip that source and note "⚠️ {source} unavailable". Never block entire report for one failed source.
 - **Conditional**: only spawn agents for enabled integrations (check config)
 
 - [ ] **Step 3: Write Scenario 3 — Smart Daily Briefing**
@@ -244,17 +271,16 @@ Explain the 3-tier system:
 
 - [ ] **Step 2: Write 3 complete Mentor Decision Matrices**
 
-Copy from spec — Musk, Inamori, Ma (马云). Each matrix covers 7 decision points:
-check-in questions, chase intensity, risk assessment, project patrol focus, info priority, 1:1 advice, emergency style.
+Reproduce the decision matrix table from spec S5 lines 156-164 (Musk, Inamori, Ma). Each matrix covers 7 decision points: check-in questions, chase intensity, risk assessment, project patrol focus, info priority, 1:1 advice, emergency style.
 
-Additionally, write full check-in question sets (3 questions each) for all 3:
+Additionally, write full check-in question sets (3 questions each). These EXPAND the spec's single-line examples into 3 actionable questions (intentional expansion, not a spec deviation):
 - Musk: "What did you push forward today? Any breakthroughs?" / "What process or blocker can we eliminate?" / "If you had half the time, what would you do?"
 - Inamori: "What did you contribute to the team today?" / "Any difficulties you need help with?" / "What did you learn from today's work?"
 - Ma: "How did you help a teammate or customer today?" / "What change did you embrace?" / "What's your biggest learning?"
 
 - [ ] **Step 3: Write 6 Standard Mentor entries**
 
-Each with: ID, name, 3 check-in questions, core tags. Copy from spec:
+Each with: ID, name, 3 check-in questions, core tags. Reproduce the table from spec S5 lines 168-175:
 dalio, grove, ren, son, jobs, bezos
 
 - [ ] **Step 4: Write 5 Light-touch Mentor entries**
@@ -306,11 +332,24 @@ Document:
 - Mentor fetch: `POST /api/v1/openclaw/command {"command": "list mentors"}` returns full mentor configs
 - When to use: prefer cloud API for mentor configs, team data, and analytics when available
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Write Degradation Strategy and Integration Auth notes**
+
+Include the degradation strategy table from spec S7 lines 281-286:
+- With API Key: full mentor configs from cloud, web dashboard available
+- Without API Key: 3 fully-embedded + 6 with questions + 5 tag-inferred, no dashboard
+- All 7 scenarios: fully functional either way
+- Memory: always OpenClaw `memory`
+
+Include integration auth note from spec S7 line 277:
+- GitHub/Linear/Jira access relies on OpenClaw's configured integrations (MCP servers or OAuth tokens managed by gateway)
+- The skill does NOT store auth tokens — `web_fetch` inherits gateway's authenticated sessions
+- For public repos, no auth needed
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add openclaw-skill/SKILL.md
-git commit -m "feat: add cultural adaptation and cloud API sections"
+git commit -m "feat: add cultural adaptation, cloud API, and degradation strategy"
 ```
 
 ---
@@ -407,6 +446,14 @@ Connect to manageaibrain.com for web dashboard and full mentor configs.
 ## Links
 ```
 
+Also include a migration section (from spec S10 lines 361-367):
+```markdown
+## Migrating from management-brain?
+Boss AI Agent is a new skill, not an upgrade. Your existing management-brain data is untouched.
+To switch: install boss-ai-agent, run onboarding, add your team members.
+Legacy env var `MANAGEMENT_BRAIN_API_KEY` is accepted as fallback.
+```
+
 README should be ~100-150 lines. NO agent instructions — those stay in SKILL.md only.
 
 - [ ] **Step 2: Commit**
@@ -465,7 +512,7 @@ git tag boss-ai-agent-v1.0.0
 | 3 | Scenarios 1-3 | ~180 | `feat: add scenarios 1-3` |
 | 4 | Scenarios 4-7 | ~150 | `feat: add scenarios 4-7` |
 | 5 | Mentor System | ~200 | `feat: add mentor system` |
-| 6 | Cultural Adaptation + Cloud API | ~80 | `feat: add cultural adaptation and cloud API` |
+| 6 | Cultural Adaptation + Cloud API + Degradation | ~100 | `feat: add cultural adaptation, cloud API, degradation` |
 | 7 | Response Formatting + Chinese + Links | ~80 | `feat: add response formatting, Chinese docs` |
 | 8 | README.md | ~120 | `feat: add Boss AI Agent README` |
 | 9 | Publish to ClawHub | 0 | `chore: publish boss-ai-agent@1.0.0` |
