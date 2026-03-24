@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
 version: "1.0.0"
-description: "Boss AI Agent — your AI management middleware. Connects boss to all systems (Telegram/Slack/GitHub/Notion/Email), 14 mentor philosophies, 7 culture packs, 7 automated scenarios. OpenClaw native-first, zero external dependency."
+description: "Boss AI Agent — your AI management middleware. Connects boss to all systems (Telegram/Slack/GitHub/Notion/Email), 14 mentor philosophies, 9 culture packs, 7 automated scenarios. OpenClaw native-first, zero external dependency."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
@@ -23,7 +23,7 @@ Your AI management middleware — connects you to all systems through mentor wis
 
 - **7 automated scenarios**: daily check-in cycle, project health patrol, smart briefing, 1:1 meeting prep, signal scanning, knowledge base, emergency response
 - **14 mentor philosophies**: Musk, Inamori, Jack Ma, Dalio, Grove, Ren Zhengfei, Son, Jobs, Bezos, Buffett, Zhang Yiming, Lei Jun, Cao Dewang, Chu Shijian
-- **7 culture packs**: default, Philippines, Singapore, Indonesia, Sri Lanka, Malaysia, China
+- **9 culture packs**: default, Philippines, Singapore, Indonesia, Sri Lanka, Malaysia, China, USA, India
 - **23+ messaging platforms**: works with any channel connected to OpenClaw
 - **Zero external dependency**: fully functional without any cloud account
 
@@ -99,7 +99,7 @@ Boss AI Agent 是老板的 AI 管理中间件。通过已有的 OpenClaw 频道�
 **核心功能：**
 - 7 大自动化场景（签到、巡检、早报、1:1、信号扫描、知识库、紧急响应）
 - 14 位导师哲学（马斯克、稻盛和夫、马云等）
-- 7 套文化包（适配菲律宾、新加坡、中国等文化差异）
+- 9 套文化包（适配菲律宾、新加坡、中国、美国、印度等文化差异）
 
 安装：`clawhub install boss-ai-agent`
 

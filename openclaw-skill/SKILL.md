@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
 version: "1.0.0"
-description: "Boss AI Agent — your AI management middleware. Connects boss to all systems (Telegram/Slack/GitHub/Notion/Email), 14 mentor philosophies, 7 culture packs, 7 automated scenarios. OpenClaw native-first, zero external dependency."
+description: "Boss AI Agent — your AI management middleware. Connects boss to all systems (Telegram/Slack/GitHub/Notion/Email), 14 mentor philosophies, 9 culture packs, 7 automated scenarios. OpenClaw native-first, zero external dependency."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
@@ -540,7 +540,7 @@ Risk: First principles (Musk), with people-impact consideration (Inamori)
 
 ## Cultural Adaptation
 
-7 culture packs (1 default + 6 regional) control how you communicate with each employee. Culture is set per-employee in the team config, or globally via `config.culture`.
+9 culture packs (1 default + 8 regional) control how you communicate with each employee. Culture is set per-employee in the team config, or globally via `config.culture`.
 
 | Culture | Directness | Hierarchy | Key Rules |
 |---------|-----------|-----------|-----------|
@@ -551,6 +551,8 @@ Risk: First principles (Musk), with people-impact consideration (Inamori)
 | srilanka | Low | High | Respectful tone, private feedback, hierarchical deference |
 | malaysia | Medium | Medium | Multicultural sensitivity, balanced approach, respect religious diversity |
 | china | Medium | High | Face-saving, collective achievement framing, indirect critique |
+| usa | High | Low | Direct feedback, individual achievement, data-driven, equality-focused |
+| india | Medium | High | Respect seniority, relationship-building, indirect disagreement, flexible timelines |
 
 ### Override Rule
 
@@ -570,6 +572,8 @@ Culture overrides mentor strategy when they conflict. Examples:
 | srilanka | Respectful | "Good evening — kindly submit your report when convenient" | Private escalation |
 | malaysia | Balanced, warm | "Just a friendly reminder about today's report" | Private manager note |
 | china | Face-saving, collective | "Team report is almost complete — your input would help us finish strong" | Frame as collective need |
+| usa | Direct, casual | "Hey, your daily report is still pending — can you get it in?" | Direct manager escalation |
+| india | Polite, respectful | "Hi, just a gentle reminder about today's report — thank you for your time" | Private senior note, avoid public pressure |
 
 ---
 
@@ -696,7 +700,7 @@ Boss AI Agent 是老板的 AI 管理中间件。安装后通过你已有的 Open
 - 标准（6）：达利欧、格鲁夫、任正非、孙正义、乔布斯、贝索斯
 - 轻量（5）：巴菲特、张一鸣、雷军、曹德旺、褚时健
 
-**7 套文化包：** 默认、菲律宾、新加坡、印尼、斯里兰卡、马来西亚、中国
+**9 套文化包：** 默认、菲律宾、新加坡、印尼、斯里兰卡、马来西亚、中国、美国、印度
 
 ### 使用方式
 
