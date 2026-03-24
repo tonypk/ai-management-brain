@@ -4,7 +4,7 @@ Complete reference for all 14 mentors in Boss AI Agent.
 
 ## Tier 1: Fully-Embedded (3)
 
-### Musk (Elon Musk / 马斯克)
+### Musk (Elon Musk)
 
 **Philosophy:** First principles thinking. Urgency. 10x ambition. Rapid iteration.
 
@@ -21,7 +21,7 @@ Complete reference for all 14 mentors in Boss AI Agent.
 
 ---
 
-### Inamori (Kazuo Inamori / 稻盛和夫)
+### Inamori (Kazuo Inamori)
 
 **Philosophy:** Amoeba management. Altruism. Respect for every individual. Team harmony.
 
@@ -38,7 +38,7 @@ Complete reference for all 14 mentors in Boss AI Agent.
 
 ---
 
-### Ma (Jack Ma / 马云)
+### Ma (Jack Ma)
 
 **Philosophy:** 102-year company. Embrace change. Teamwork. Customer obsession.
 
@@ -67,12 +67,12 @@ Complete reference for all 14 mentors in Boss AI Agent.
 - **Check-in:** "What's your OKR progress this week?" / "What's your biggest bottleneck?" / "What output did you deliver?"
 - **Core tags:** OKR-driven, data-focused, high-output
 
-### Ren (Ren Zhengfei / 任正非)
+### Ren (Ren Zhengfei)
 - **Philosophy:** Wolf culture. Self-criticism. Striver-oriented.
 - **Check-in:** "What goal did you accomplish today?" / "What challenge did you overcome?" / "How did you push your limits?"
 - **Core tags:** wolf-culture, self-criticism, striver-oriented
 
-### Son (Masayoshi Son / 孙正义)
+### Son (Masayoshi Son)
 - **Philosophy:** 300-year vision. Bold bets. Time machine theory.
 - **Check-in:** "What progress did you make toward the big vision?" / "What bold bet are you considering?" / "What did you learn from other industries?"
 - **Core tags:** 300-year-vision, bold-bets, time-machine
@@ -91,23 +91,23 @@ Complete reference for all 14 mentors in Boss AI Agent.
 
 ## Tier 3: Light-touch (5)
 
-### Buffett (Warren Buffett / 巴菲特)
+### Buffett (Warren Buffett)
 - **Core tags:** long-term-value, margin-of-safety, patience
 - **Style:** Value investing mindset applied to management. Focus on compounding, avoid short-term noise.
 
-### Zhang Yiming (张一鸣)
+### Zhang Yiming
 - **Core tags:** delayed-gratification, context-not-control, data-driven
 - **Style:** ByteDance founder's management philosophy. Trust the system, not the hierarchy. Data over opinion.
 
-### Lei Jun (雷军)
+### Lei Jun
 - **Core tags:** extreme-value, user-participation, focus
 - **Style:** Xiaomi's approach. Do fewer things excellently. Engage users as co-creators.
 
-### Cao Dewang (曹德旺)
+### Cao Dewang
 - **Core tags:** industrial-spirit, cost-control, craftsmanship
 - **Style:** Fuyao Glass founder. Relentless focus on product quality and operational efficiency.
 
-### Chu Shijian (褚时健)
+### Chu Shijian
 - **Core tags:** ultimate-focus, quality-obsession, resilience
 - **Style:** The "Orange King". Never give up. Quality above all. Start over if needed.
 

@@ -183,7 +183,7 @@ The core scenario. Three automated sub-flows each weekday.
 
 ### 2. Project Health Patrol
 
-**Trigger:** Boss says "check project status" / "patrol" / "项目状态" OR `/patrol` command OR scheduled weekly.
+**Trigger:** Boss says "check project status" / "patrol" / "how's the project" OR `/patrol` command OR scheduled weekly.
 
 **Process:**
 
@@ -204,7 +204,7 @@ The core scenario. Three automated sub-flows each weekday.
 
 ### 3. Smart Daily Briefing
 
-**Trigger:** Boss says "what's important today" / "briefing" / "今天有什么重要的" OR `/briefing` command OR scheduled mornings.
+**Trigger:** Boss says "what's important today" / "briefing" / "daily briefing" OR `/briefing` command OR scheduled mornings.
 
 **Process:**
 
@@ -219,7 +219,7 @@ The core scenario. Three automated sub-flows each weekday.
 
 ### 4. 1:1 Meeting Assistant
 
-**Trigger:** Boss says "1:1 with {name}" / "和{name}做1:1" OR `/1on1 <name>` command.
+**Trigger:** Boss says "1:1 with {name}" / "prep for meeting with {name}" OR `/1on1 <name>` command.
 
 **Process:**
 
@@ -238,7 +238,7 @@ The core scenario. Three automated sub-flows each weekday.
 
 ### 5. Periodic Signal Scanning
 
-**Trigger:** Scheduled every 30 min during work hours OR boss says "scan channels" / "扫描频道".
+**Trigger:** Scheduled every 30 min during work hours OR boss says "scan channels" / "check signals".
 
 **Process:**
 
@@ -255,7 +255,7 @@ The core scenario. Three automated sub-flows each weekday.
 
 ### 6. Knowledge Base Management
 
-**Trigger:** Boss says "record this" / "记下来" / "save this decision".
+**Trigger:** Boss says "record this" / "write this down" / "save this decision".
 
 **Process:**
 
@@ -268,7 +268,7 @@ The core scenario. Three automated sub-flows each weekday.
 
 ### 7. Emergency Response
 
-**Trigger:** 2+ red signals detected OR boss says "emergency" / "紧急".
+**Trigger:** 2+ red signals detected OR boss says "emergency" / "urgent situation".
 
 **Process:**
 
@@ -409,12 +409,6 @@ Numbered list, most important first. Tag by severity.
 ### Mentor Switch
 When switching mentors, explain what changes: questions, chase style, priority focus, summary lens.
 
-## Chinese Reference
+## Multilingual Support
 
-Boss AI Agent 是老板的 AI 管理中间件。通过 Claude Code 插件管理团队。
-
-**7 大场景：** 每日管理循环、项目健康巡检、智能早报、1:1 会议助手、信号扫描、知识库管理、紧急响应
-
-**14 位导师：** 马斯克、稻盛和夫、马云、达利欧、格鲁夫、任正非、孙正义、乔布斯、贝索斯、巴菲特、张一鸣、雷军、曹德旺、褚时健
-
-**9 套文化包：** 默认、菲律宾、新加坡、印尼、斯里兰卡、马来西亚、中国、美国、印度
+Boss AI Agent auto-detects the boss's language from conversation context and responds accordingly. English and Chinese are natively supported. The mentor and culture system works in any language.

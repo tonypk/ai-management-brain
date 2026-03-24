@@ -1,0 +1,28 @@
+{
+  "name": "boss-ai-agent",
+  "owner": {
+    "name": "tonypk",
+    "email": "tonypk25@gmail.com"
+  },
+  "metadata": {
+    "description": "Boss AI Agent — AI Management OS for Claude Code/Cowork",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "boss-ai-agent",
+      "source": "./",
+      "description": "AI Management OS — 14 mentor philosophies, 9 culture packs, 7 automated management scenarios. Works with Slack, Telegram, Gmail, GitHub, Linear, Notion.",
+      "author": {
+        "name": "tonypk",
+        "email": "tonypk25@gmail.com"
+      },
+      "homepage": "https://manageaibrain.com",
+      "repository": "https://github.com/tonypk/boss-ai-agent-claude-plugin",
+      "license": "MIT",
+      "keywords": ["management", "ai-agent", "mentor", "team-management", "productivity"],
+      "category": "productivity",
+      "tags": ["management", "hr", "mentor", "check-in", "sentiment", "cowork"]
+    }
+  ]
+}

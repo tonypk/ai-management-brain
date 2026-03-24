@@ -4,8 +4,9 @@ AI Management OS for Claude Code / Claude Cowork. 14 mentor philosophies, 9 cult
 
 ## Install
 
-```bash
-claude plugin install github.com/tonypk/boss-ai-agent-claude-plugin
+```
+/plugin marketplace add tonypk/boss-ai-agent-claude-plugin
+/plugin install boss-ai-agent@boss-ai-agent
 ```
 
 ## Quick Start
@@ -77,16 +78,6 @@ Set `BOSS_AI_AGENT_API_KEY` to connect to [manageaibrain.com](https://manageaibr
 - Cross-team benchmarking
 
 All features work fully without it.
-
-## 中文说明
-
-Boss AI Agent 是 Claude Code/Cowork 的 AI 管理插件。
-
-**7 大场景：** 每日管理循环、项目巡检、智能早报、1:1 助手、信号扫描、知识库、紧急响应
-
-**14 位导师：** 马斯克、稻盛和夫、马云、达利欧、格鲁夫、任正非、孙正义、乔布斯、贝索斯、巴菲特、张一鸣、雷军、曹德旺、褚时健
-
-**9 套文化包：** 默认、菲律宾、新加坡、印尼、斯里兰卡、马来西亚、中国、美国、印度
 
 ## Links
 

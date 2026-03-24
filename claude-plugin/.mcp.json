@@ -2,36 +2,18 @@
   "mcpServers": {
     "slack": {
       "command": "npx",
-      "args": ["-y", "@anthropic/mcp-slack"],
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
       "env": {
         "SLACK_BOT_TOKEN": "",
         "SLACK_TEAM_ID": ""
       },
       "disabled": true
     },
-    "gmail": {
+    "github": {
       "command": "npx",
-      "args": ["-y", "@anthropic/mcp-gmail"],
-      "disabled": true
-    },
-    "google-calendar": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/mcp-google-calendar"],
-      "disabled": true
-    },
-    "linear": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/mcp-linear"],
+      "args": ["-y", "@modelcontextprotocol/server-github"],
       "env": {
-        "LINEAR_API_KEY": ""
-      },
-      "disabled": true
-    },
-    "notion": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/mcp-notion"],
-      "env": {
-        "NOTION_API_KEY": ""
+        "GITHUB_PERSONAL_ACCESS_TOKEN": ""
       },
       "disabled": true
     }
