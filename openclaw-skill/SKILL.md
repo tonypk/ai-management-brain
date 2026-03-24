@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
-version: "1.2.0"
-description: "Boss AI Agent — your AI management middleware. Connects boss to all systems (Telegram/Slack/GitHub/Notion/Email), 14 mentor philosophies, 9 culture packs, 7 automated scenarios. OpenClaw native-first, zero external dependency."
+version: "1.3.0"
+description: "Boss AI Agent — your AI management middleware. Connects boss to all systems (Telegram/Slack/GitHub/Notion/Email), 16 mentor philosophies, 6 AI C-Suite seats, 9 culture packs, 7 automated scenarios. Works with Claude Code, ChatGPT, and Gemini via MCP."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
@@ -471,7 +471,7 @@ The mentor system is the philosophical core of Boss AI Agent. The active mentor 
 2. **Standard (6)** — check-in questions + core trait tags. You have enough to run daily cycles. For full decision matrices, fetch from cloud API.
 3. **Light-touch (5)** — core trait tags only. Infer behavior from tags. For full configs, fetch from cloud API.
 
-If `BOSS_AI_AGENT_API_KEY` is configured, fetch full mentor configs via `POST /api/v1/openclaw/command` with body `{"command": "list mentors"}`. Cloud configs override standard and light-touch tiers with complete decision matrices.
+If `BOSS_AI_AGENT_API_KEY` is configured, fetch full mentor configs via `POST /api/v1/openclaw/command` with body `{"command": "list mentors"}` or `GET /api/v1/seats/mentors`. Cloud configs override standard and light-touch tiers with complete decision matrices.
 
 ### Fully-Embedded Mentors
 
@@ -524,7 +524,7 @@ Use check-in questions directly. For decision matrices beyond what's listed, inf
 | jobs | Steve Jobs | "What did you ship that you're proud of?" / "What can be simpler?" / "How far from 'insanely great'?" | simplicity, excellence-pursuit, reality-distortion |
 | bezos | Jeff Bezos | "What did you do for the customer?" / "What would you do differently on Day 1?" / "What data informed your decision?" | day-1-mentality, customer-obsession, long-term |
 
-### Light-touch Mentors (5)
+### Light-touch Mentors (7)
 
 Tags only. Infer check-in questions and behavior from tags. For full configs, fetch from cloud API.
 
@@ -535,6 +535,8 @@ Tags only. Infer check-in questions and behavior from tags. For full configs, fe
 | leijun | Lei Jun (雷军) | extreme-value, user-participation, focus |
 | caodewang | Cao Dewang (曹德旺) | industrial-spirit, cost-control, craftsmanship |
 | chushijian | Chu Shijian (褚时健) | ultimate-focus, quality-obsession, resilience |
+| meyer | Erin Meyer (艾琳·梅耶尔) | cross-cultural, communication, culture-map, international |
+| trout | Jack Trout (杰克·特劳特) | positioning, branding, strategy, marketing |
 
 ### Mentor Blending
 
@@ -602,7 +604,7 @@ This section is only active when `BOSS_AI_AGENT_API_KEY` (or fallback `MANAGEMEN
 ### What the API Key Grants
 
 The API key connects to manageaibrain.com and grants access to:
-- **Read-only mentor configs** — full decision matrices for all 14 mentors (local skill only has 3 complete)
+- **Read-only mentor configs** — full decision matrices for all 16 mentors (local skill only has 3 complete)
 - **Team analytics** — cross-team benchmarking, historical trends, anomaly detection
 - **Web dashboard** — visual management dashboard at app.manageaibrain.com
 
@@ -626,11 +628,18 @@ GET  {baseUrl}/api/v1/openclaw/status              — Team status, submissions,
 GET  {baseUrl}/api/v1/openclaw/report?period=weekly — Rankings, metrics, trends
 POST {baseUrl}/api/v1/openclaw/command              — Execute commands (switch mentor, list mentors, list employees)
 GET  {baseUrl}/api/v1/openclaw/alerts               — Anomaly alerts from cloud analytics
+GET  {baseUrl}/api/v1/seats/mentors                 — List all mentors with domain expertise
+POST {baseUrl}/api/v1/seats/board/discuss           — AI C-Suite board discussion
+POST {baseUrl}/api/v1/seats/chat                    — Chat with individual C-Suite seat
+GET  {baseUrl}/api/v1/employees/profile/{name}      — Employee profile with sentiment trends
 ```
 
 ### When to Use Cloud API
 
-- **Mentor configs**: `POST /api/v1/openclaw/command {"command": "list mentors"}` returns full decision matrices for all 14 mentors. Use this to upgrade standard and light-touch mentors to fully-embedded quality.
+- **Mentor configs**: `POST /api/v1/openclaw/command {"command": "list mentors"}` returns full decision matrices for all 16 mentors. Use this to upgrade standard and light-touch mentors to fully-embedded quality.
+- **C-Suite board**: `POST /api/v1/seats/board/discuss {"topic": "..."}` convenes a virtual board meeting with 6 AI executives (CEO, CFO, CMO, CTO, CHRO, COO) — use for strategic decisions.
+- **C-Suite chat**: `POST /api/v1/seats/chat {"seat_type": "cfo", "message": "..."}` for domain-specific questions to individual executives.
+- **Employee profile**: `GET /api/v1/employees/profile/{name}` returns sentiment trends, submission rate, consecutive missed days — use for 1:1 prep.
 - **Team analytics**: cloud provides cross-team benchmarking, historical trend analysis, and anomaly detection beyond what local memory can offer.
 - **Dashboard link**: when the boss asks "show me the dashboard", provide `https://app.manageaibrain.com`.
 
@@ -640,13 +649,60 @@ GitHub, Linear, Jira, and other external service access relies on OpenClaw's con
 
 ---
 
+## MCP Server (Multi-Client Support)
+
+AI Management Brain provides a dedicated MCP (Model Context Protocol) server with 9 tools, accessible via two transports:
+
+- **stdio** (Claude Code / OpenClaw): `npx @tonykk/management-brain-mcp`
+- **HTTP** (ChatGPT / Gemini / remote clients): `https://manageaibrain.com/mcp`
+
+### 9 MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `get_team_status` | Today's check-in progress: submitted, pending, reminders sent |
+| `get_report` | Weekly/monthly performance report with rankings and 1:1 suggestions |
+| `get_alerts` | Urgent alerts for employees with consecutive missed check-ins |
+| `switch_mentor` | Change active management mentor philosophy |
+| `list_mentors` | List all 16 mentors with expertise and recommended C-Suite seats |
+| `board_discuss` | Convene AI C-Suite board meeting (CEO/CFO/CMO/CTO/CHRO/COO) |
+| `chat_with_seat` | Direct conversation with one AI C-Suite executive |
+| `list_employees` | List all active employees |
+| `get_employee_profile` | Employee profile with sentiment trend and submission history |
+
+### AI C-Suite Board
+
+The `board_discuss` tool convenes 6 AI-powered C-Suite executives who each analyze a topic from their domain:
+
+| Seat | Domain |
+|------|--------|
+| CEO | Strategy, vision, competitive positioning |
+| CFO | Finance, budgets, ROI analysis |
+| CMO | Marketing, growth, brand strategy |
+| CTO | Technology, architecture, engineering |
+| CHRO | People, culture, talent management |
+| COO | Operations, process, efficiency |
+
+Use for strategic decisions: market expansion, budget allocation, org restructuring, product launches, or any cross-functional question.
+
+### HTTP Transport for ChatGPT
+
+ChatGPT users connect via MCP settings:
+- **URL**: `https://manageaibrain.com/mcp`
+- **Auth**: Bearer token (MCP_HTTP_API_KEY)
+- **Protocol**: MCP Streamable HTTP (stateless)
+
+All 9 tools are available to ChatGPT with identical functionality.
+
+---
+
 ## Degradation Strategy
 
 Boss AI Agent works at full capability regardless of cloud API availability. Here is what changes:
 
 | Capability | With API Key | Without API Key |
 |-----------|-------------|-----------------|
-| Mentor configs | Full decision matrices for all 14 mentors from cloud | 3 fully-embedded + 6 with questions + 5 inferred from tags |
+| Mentor configs | Full decision matrices for all 16 mentors from cloud | 3 fully-embedded + 6 with questions + 7 inferred from tags |
 | Web dashboard | Available at `https://app.manageaibrain.com` | Not available |
 | Cross-team analytics | Cloud-powered benchmarking and trends | Not available |
 | All 7 scenarios | Fully functional | Fully functional |
@@ -728,12 +784,16 @@ Boss AI Agent 是老板的 AI 管理中间件。安装后通过你已有的 Open
 6. 知识库管理 — 记录决策到 Notion/Sheets/本地
 7. 紧急响应 — 自动告警 + 情报收集
 
-**14 位导师哲学：**
+**16 位导师哲学：**
 - 完整内置（3）：马斯克、稻盛和夫、马云
 - 标准（6）：达利欧、格鲁夫、任正非、孙正义、乔布斯、贝索斯
-- 轻量（5）：巴菲特、张一鸣、雷军、曹德旺、褚时健
+- 轻量（7）：巴菲特、张一鸣、雷军、曹德旺、褚时健、梅耶尔、特劳特
+
+**6 位 AI C-Suite 高管：** CEO、CFO、CMO、CTO、CHRO、COO — 通过 `board_discuss` 召开虚拟董事会
 
 **9 套文化包：** 默认、菲律宾、新加坡、印尼、斯里兰卡、马来西亚、中国、美国、印度
+
+**多客户端支持：** Claude Code (stdio) + ChatGPT/Gemini (MCP HTTP)
 
 ### 使用方式
 
@@ -748,8 +808,11 @@ Boss AI Agent 是老板的 AI 管理中间件。安装后通过你已有的 Open
 
 设置 `BOSS_AI_AGENT_API_KEY` 后可连接 manageaibrain.com，获得：
 - Web Dashboard 管理面板
-- 完整导师配置（14位全部完整版）
+- 完整导师配置（16位全部完整版）
+- AI C-Suite 虚拟董事会（6位高管）
 - 跨团队数据分析
+
+ChatGPT/Gemini 用户可通过 MCP HTTP 端点连接：`https://manageaibrain.com/mcp`
 
 不设置 API Key 也完全可用，所有 7 大场景均不受影响。
 
