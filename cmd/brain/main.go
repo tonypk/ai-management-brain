@@ -31,6 +31,7 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/roles"
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
 	"github.com/tonypk/ai-management-brain/internal/seats"
+	"github.com/tonypk/ai-management-brain/internal/service"
 )
 
 // engineForTenant returns the appropriate engine for a tenant (blended or single mentor).
@@ -1472,6 +1473,18 @@ func main() {
 		slog.Info("AI role manager initialized")
 	}
 
+	// Action service (write operations for OpenClaw MCP)
+	actionSvc := service.NewActionService(service.ActionServiceConfig{
+		Queries:    queries,
+		Collector:  collector,
+		Chaser:     chaser,
+		Summarizer: summarizer,
+		Sender:     channelSender,
+		Factory:    engineFactory,
+		ReportDB:   reportDB,
+		Timezone:   loc,
+	})
+
 	// API router (includes REST API + health check)
 	gin.SetMode(gin.ReleaseMode)
 	router := api.NewRouter(api.RouterConfig{
@@ -1500,6 +1513,7 @@ func main() {
 		LarkAdapter:   larkAdapter,
 		Scheduler:     sched,
 		SeatService:   seatSvc,
+		ActionService: actionSvc,
 	})
 
 	// Health check (public, outside /api/v1)

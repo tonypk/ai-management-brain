@@ -94,7 +94,9 @@ Ask: *"Should we expand to Japan?"* → All 6 seats analyze from their perspecti
 
 ## MCP Server
 
-9 tools accessible via MCP for Claude Code, ChatGPT, and Gemini:
+13 tools accessible via MCP for Claude Code, ChatGPT, and Gemini:
+
+### Read Tools
 
 | Tool | Description |
 |------|-------------|
@@ -107,6 +109,15 @@ Ask: *"Should we expand to Japan?"* → All 6 seats analyze from their perspecti
 | `chat_with_seat` | Direct chat with one C-Suite exec |
 | `list_employees` | All active employees |
 | `get_employee_profile` | Employee sentiment and history |
+
+### Write Tools (sends messages)
+
+| Tool | Description |
+|------|-------------|
+| `send_checkin` | Trigger check-in questions for all or one employee |
+| `chase_employee` | Chase reminders for non-submitters |
+| `send_summary` | Generate and send daily summary to boss |
+| `send_message` | Send custom message to an employee |
 
 **ChatGPT/Gemini**: connect via `https://manageaibrain.com/mcp` (MCP HTTP)
 

@@ -35,11 +35,13 @@ Always respond in the boss's language. Auto-detect from conversation context.
 - **Cron jobs**: registers recurring jobs (check-in, chase, summary, briefing, signal scan) via OpenClaw's cron API. User can view all active jobs with `cron list` and remove any with `cron remove`. Jobs only run while the agent is active.
 - **External services** (GitHub, Linear, Jira, Notion): accessed through OpenClaw's configured integrations — the skill does NOT store or manage tokens for these services. If a service is not connected in OpenClaw, the corresponding scenario is skipped.
 - **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill pulls mentor configs and analytics from manageaibrain.com. No local data (messages, files, memory) is sent to the cloud. All 7 scenarios work fully without it.
-- **MCP tools**: all 9 tools are read-only queries to the backend — they retrieve data but do not modify team channels or send messages.
+- **MCP tools**: 9 read-only query tools + 4 write tools that can send messages to employees via Telegram/Slack/Lark/Signal. Write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) actively send messages — use with intent.
 
 ## MCP Tools
 
-All backend operations use 9 MCP tools. Use these directly — no manual API calls needed.
+All backend operations use 13 MCP tools. Use these directly — no manual API calls needed.
+
+### Read Tools (query only)
 
 | Tool | What it does |
 |------|-------------|
@@ -52,6 +54,17 @@ All backend operations use 9 MCP tools. Use these directly — no manual API cal
 | `chat_with_seat` | Direct conversation with one AI C-Suite executive |
 | `list_employees` | List all active employees with roles |
 | `get_employee_profile` | Employee profile with sentiment trend and submission history |
+
+### Write Tools (sends messages to employees)
+
+| Tool | What it does |
+|------|-------------|
+| `send_checkin` | Trigger daily check-in questions for all or a specific employee |
+| `chase_employee` | Send chase reminders to employees who haven't submitted today |
+| `send_summary` | Generate and send today's team daily summary to the boss |
+| `send_message` | Send a custom message to an employee via their preferred channel |
+
+Write tools actively send messages via Telegram/Slack/Lark/Signal. OpenClaw users can also use `message send` for multi-platform messaging.
 
 ## First Run
 
@@ -103,7 +116,7 @@ When the boss first invokes `/boss-ai-agent`:
 | 6 | Knowledge Base | "record this decision" | Save to Notion/Sheets/local files + memory |
 | 7 | Emergency Response | 2+ critical signals detected | Alert boss immediately → gather intel → recommend action |
 
-Use MCP tools (`get_team_status`, `get_report`, `get_alerts`, `get_employee_profile`) to power these scenarios. The mentor and culture settings shape how each scenario communicates.
+Use MCP tools to power these scenarios. Read tools (`get_team_status`, `get_report`, `get_alerts`, `get_employee_profile`) for monitoring. Write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) for proactive outreach. The mentor and culture settings shape how each scenario communicates.
 
 ## Mentor System
 

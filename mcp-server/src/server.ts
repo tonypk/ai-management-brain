@@ -5,6 +5,12 @@ import { getTeamStatus, getReport, getAlerts } from "./tools/team.js";
 import { switchMentor, listMentors } from "./tools/mentor.js";
 import { boardDiscuss, chatWithSeat } from "./tools/csuite.js";
 import { listEmployees, getEmployeeProfile } from "./tools/employee.js";
+import {
+  sendCheckin,
+  chaseEmployee,
+  sendSummary,
+  sendMessage,
+} from "./tools/actions.js";
 
 const NO_KEY_MSG =
   "Please set MANAGEMENT_BRAIN_API_KEY environment variable.";
@@ -23,7 +29,7 @@ export function createServer(): McpServer {
     version: "1.0.0",
   });
 
-  // --- Group 1: Daily Operations ---
+  // --- Group 1: Daily Operations (read) ---
 
   server.tool(
     "get_team_status",
@@ -171,6 +177,83 @@ export function createServer(): McpServer {
       if (!client)
         return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
       return getEmployeeProfile(client, name);
+    },
+  );
+
+  // --- Group 5: Actions (write — sends messages via bot/channels) ---
+
+  server.tool(
+    "send_checkin",
+    "Trigger daily check-in questions for all employees or a specific person. This SENDS messages via Telegram/Slack/Lark to employees, starting a check-in conversation. Use when the boss wants to manually trigger check-ins outside the scheduled time.",
+    {
+      employee_name: z
+        .string()
+        .optional()
+        .describe(
+          "Optional employee name (fuzzy match). If omitted, sends to ALL active employees who haven't submitted today.",
+        ),
+    },
+    async ({ employee_name }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return sendCheckin(client, employee_name);
+    },
+  );
+
+  server.tool(
+    "chase_employee",
+    "Send chase reminders to employees who haven't submitted their daily report. This SENDS reminder messages via their preferred channel. Use when the boss wants to nudge non-responders.",
+    {
+      employee_name: z
+        .string()
+        .optional()
+        .describe(
+          "Optional employee name (fuzzy match). If omitted, chases ALL employees who haven't submitted today.",
+        ),
+    },
+    async ({ employee_name }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return chaseEmployee(client, employee_name);
+    },
+  );
+
+  server.tool(
+    "send_summary",
+    "Generate today's team daily summary and send it to the boss via Telegram. Includes submission rate, key highlights, and blockers shaped by the active mentor's perspective. Use when the boss wants an immediate summary instead of waiting for the scheduled one.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return sendSummary(client);
+    },
+  );
+
+  server.tool(
+    "send_message",
+    "Send a custom message to a specific employee via their preferred messaging channel (Telegram/Slack/Lark/Signal). Use this when the boss wants to communicate directly with a team member through the management system.",
+    {
+      employee_name: z
+        .string()
+        .describe(
+          "Employee name (fuzzy match supported), e.g. 'John' or 'john doe'",
+        ),
+      message: z
+        .string()
+        .min(1)
+        .max(4000)
+        .describe(
+          "The message to send, e.g. 'Hey, can we sync at 3pm?' or 'Great work on the release!'",
+        ),
+    },
+    async ({ employee_name, message }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return sendMessage(client, employee_name, message);
     },
   );
 

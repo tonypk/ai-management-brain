@@ -13,6 +13,7 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/roles"
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
 	"github.com/tonypk/ai-management-brain/internal/seats"
+	"github.com/tonypk/ai-management-brain/internal/service"
 )
 
 // RouterConfig holds dependencies for the API router.
@@ -33,6 +34,7 @@ type RouterConfig struct {
 	LarkAdapter    *channel.LarkAdapter    // nil = Lark disabled
 	Scheduler      *scheduler.Scheduler    // nil = scheduler disabled
 	SeatService    *seats.SeatService      // nil = seats disabled
+	ActionService  *service.ActionService  // nil = action endpoints disabled
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -195,6 +197,15 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		openclaw.POST("/command", handleOpenClawCommand(cfg.Queries))
 		openclaw.GET("/report", handleOpenClawReport(cfg.Queries))
 		openclaw.GET("/alerts", handleOpenClawAlerts(cfg.Queries))
+
+		// Write operations (send messages via bot/channels)
+		if cfg.ActionService != nil {
+			actionHandler := NewOpenClawActionHandler(cfg.ActionService)
+			openclaw.POST("/checkin", actionHandler.HandleCheckin)
+			openclaw.POST("/chase", actionHandler.HandleChase)
+			openclaw.POST("/summary", actionHandler.HandleSummary)
+			openclaw.POST("/message", actionHandler.HandleMessage)
+		}
 	}
 
 	// API Key-accessible endpoints for MCP server

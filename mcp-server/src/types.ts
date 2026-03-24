@@ -113,3 +113,25 @@ export interface EmployeeProfile {
   sentiment_trend: string;
   consecutive_missed: number;
 }
+
+// Action tools (write operations)
+export interface CheckinResult {
+  sent_to: string[];
+  skipped: string[];
+}
+
+export interface ChaseResult {
+  chased: string[];
+  skipped: string[];
+}
+
+export interface SummaryActionResult {
+  summary: string;
+  submission_rate: number;
+  sent_to: string;
+}
+
+export interface MessageResult {
+  sent_to: string;
+  channel: string;
+}
