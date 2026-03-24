@@ -252,3 +252,99 @@ image --path "/tmp/screenshot.png" --prompt "What issues do you see in this UI?"
 ```
 
 **When**: Use to analyze bug screenshots sent by employees, interpret kanban board captures, or review UI screenshots shared during incident reports.
+
+## Scenarios
+
+### 1. Daily Management Cycle
+
+This is the core scenario. It runs three automated sub-flows each weekday: check-in, chase, and summary.
+
+**Check-in Flow** (triggered by `[cron]` at `schedule.checkin`, default `0 9 * * 1-5`):
+
+1. Read config via `[read]` to get the team list, active mentor, and schedule settings.
+2. For each active employee:
+   - `[memory_search]` for the employee's recent history (last 7 days of reports and sentiment trend).
+   - Load the employee's culture code from config.
+   - Generate personalized check-in questions using the active mentor's question set, adapted for the employee's culture.
+   - `[message send]` the questions to the employee via their configured channel.
+3. Skip entirely if `team` is empty (solo founder mode).
+
+**Chase Flow** (triggered by `[cron]` at `schedule.chase`, default `30 17 * * 1-5`):
+
+1. `[message read]` to identify who has replied and who has not.
+2. For each non-responder:
+   - Apply the mentor's chase strategy (e.g., Musk: aggressive after 2h, Inamori: gentle EOD reminder).
+   - Apply cultural override (e.g., Filipino culture: never name publicly, warmth required).
+   - `[message send]` a reminder following the combined mentor and culture strategy.
+3. `[memory]` record chase events for trend tracking.
+4. Skip if `team` is empty.
+
+**Summary Flow** (triggered by `[cron]` at `schedule.summary`, default `0 19 * * 1-5`):
+
+1. Collect all replies received today.
+2. `[memory_search]` for historical trends (last 7 days submission rate, sentiment averages).
+3. Generate a mentor-perspective summary including:
+   - Submission rate (X/Y employees reported).
+   - Key highlights and concerns.
+   - Sentiment overview.
+   - Recommended 1:1s (if someone shows declining patterns).
+4. `[message send]` the summary to the boss.
+5. `[memory]` store the summary for future reference.
+6. Skip if `team` is empty.
+
+---
+
+### 2. Project Health Patrol
+
+**Trigger:** Boss says "check project status" / "项目状态" / "how's the project" OR `[cron]` at `schedule.weeklyReview` (default `0 9 * * 1`, Monday 9 AM).
+
+**Process:**
+
+1. Read config to check which integrations are enabled.
+2. `[sessions_spawn]` parallel sub-agents ONLY for enabled integrations:
+
+Sub-agent prompt template:
+```
+You are a {role} sub-agent for Boss AI Agent.
+Task: {task_description}
+Tools available: {tool_list}
+Output format: JSON with fields: status (ok/warning/critical), findings (array of {title, detail, severity}), summary (1-2 sentences)
+Timeout: 60 seconds
+```
+
+Sub-agent table:
+
+| Sub-agent | Role | Task | Tools | Condition |
+|-----------|------|------|-------|-----------|
+| github-scanner | Code reviewer | Scan configured repos for: open PRs > 3 days, failed CI runs, stale issues > 7 days | `web_fetch` | `integrations.github.enabled` |
+| pm-scanner | Project tracker | Check sprint progress, overdue tasks, unassigned items | `web_fetch` | `integrations.linear.enabled` or Jira configured |
+| chat-scanner | Signal analyst | Scan team channels for project-related discussions, blockers mentioned, sentiment | `message read` | Always (if team exists) |
+
+3. Collect all sub-agent results. If a sub-agent times out or fails, skip it and note "⚠️ {source} unavailable" in the report.
+4. Deduplicate findings across sources.
+5. Apply the active mentor's risk framework to prioritize findings:
+   - Musk: prioritize blockers and delivery delays.
+   - Inamori: prioritize team morale and collaboration issues.
+   - Ma: prioritize customer-facing issues and team alignment.
+6. `[message send]` a structured report to the boss with severity levels (🔴 critical, 🟡 warning, 🟢 info) and recommended actions.
+
+---
+
+### 3. Smart Daily Briefing
+
+**Trigger:** Boss says "what's important today" / "今天有什么重要的" / "daily briefing" OR `[cron]` at `schedule.briefing` (default `0 8 * * 1-5`).
+
+**Process:**
+
+1. `[message read]` — scan unread messages across all connected team channels from the last 12 hours.
+2. `[web_fetch]` — if integrations are enabled, check:
+   - GitHub: new PRs, CI status, issues assigned to boss.
+   - Calendar: today's meetings and events.
+   - Email: high-priority unread emails.
+3. `[web_search]` — optional, only if the boss has previously asked for industry news or if it is Monday (weekly context).
+4. `[memory_search]` — pull recent context: yesterday's summary, ongoing concerns, follow-up items.
+5. Sort all items by the active mentor's priority framework:
+   - Musk: 🔴 blockers and delays first → 🟡 action items → 🟢 FYI.
+   - Inamori: 🔴 people concerns first → 🟡 collaboration needs → 🟢 metrics.
+   - Ma: 🔴 customer impact first → 🟡 team alignment → 🟢 opportunities.
+6. `[message send]` — push a concise, numbered briefing to the boss.
