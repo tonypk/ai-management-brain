@@ -348,3 +348,95 @@ Sub-agent table:
    - Inamori: 🔴 people concerns first → 🟡 collaboration needs → 🟢 metrics.
    - Ma: 🔴 customer impact first → 🟡 team alignment → 🟢 opportunities.
 6. `[message send]` — push a concise, numbered briefing to the boss.
+
+---
+
+### 4. 1:1 Meeting Assistant
+
+**Trigger:** Boss says "1:1 with {name}" / "和{name}做1:1" / "prep for meeting with {name}"
+
+**Process:**
+
+1. Identify the employee from the name mentioned.
+2. `[memory_search]` — pull the employee's data from the last 30 days: reports, sentiment trend, chase history, blockers.
+3. `[web_fetch]` — if GitHub/Linear integration enabled, check the employee's recent contributions (commits, PRs, task completion).
+4. `[message search]` — scan team channels for the employee's recent messages, identify sentiment and themes.
+5. Generate a 1:1 prep document with sections:
+   - **Performance Overview**: submission rate, trend (improving/declining/stable)
+   - **Sentiment Trend**: mood trajectory over 30 days
+   - **Recent Blockers**: from reports and channel messages
+   - **Code/Task Contributions**: from GitHub/Linear (if available)
+   - **Suggested Topics**: 3-5 topics to discuss based on data patterns
+   - **Conversation Strategy**: mentor-specific advice:
+     - Musk: "Challenge them to think bigger — ask what 10x would look like"
+     - Inamori: "Start by caring about their wellbeing — ask how they're really doing"
+     - Ma: "Discuss their understanding of team dynamics and customer impact"
+6. Present the prep document to the boss.
+
+---
+
+### 5. Periodic Signal Scanning
+
+**Trigger:** `[cron]` at `schedule.signalScan` (default `*/30 9-18 * * 1-5`, every 30 min during work hours) OR boss says "scan channels" / "扫描频道"
+
+**Process:**
+
+1. `[message read]` — poll recent messages from all team channels (last 30 minutes for cron trigger, or configurable window for manual trigger).
+2. Analyze each message for signals using keyword matching and sentiment analysis:
+   - 🔴 **Critical signals**: conflict, complaint, resignation hints, outage keywords
+     - Keywords: from `config.alerts.urgentKeywords` + built-in patterns ("this is ridiculous", "I'm done", "not fair", "broken", "down")
+     - Negative sentiment with strong emotional language
+   - 🟡 **Warning signals**: help requests, blocked mentions, deadline concerns
+     - Keywords: "blocked by", "need help", "stuck on", "deadline", "can't figure out"
+   - 🟢 **Positive signals**: breakthroughs, shipped features, celebrations
+     - Keywords: "shipped", "deployed", "fixed", "launched", "milestone"
+3. `[memory]` — record all significant signals (🔴 and 🟡) with timestamp, employee, channel, and signal text.
+4. **Alert threshold**: when 2+ 🔴 signals accumulate within 1 hour → `[message send]` alert to boss immediately.
+5. Single 🔴 signals are included in the next daily briefing unless boss has set `"alertOnEveryRed": true`.
+
+---
+
+### 6. Knowledge Base Management
+
+**Trigger:** Boss says "record this decision" / "update Notion" / "记下来" / "save to knowledge base" / "write this down"
+
+**Process:**
+
+1. Understand what the boss wants to record — a decision, a meeting note, a project update, or general knowledge.
+2. If Notion integration is enabled (`integrations.notion.enabled`):
+   - `[web_fetch]` — connect to Notion API to find or create the appropriate page/database.
+   - Format the content as a structured Notion entry.
+   - Save via API.
+3. If Google Sheets integration would be used:
+   - `[web_fetch]` — append to the configured spreadsheet.
+4. If no external integration:
+   - `[write]` — save as local markdown file at `~/.openclaw/skills/boss-ai-agent/knowledge/{date}-{topic}.md`.
+5. `[memory]` — always index the content in agent memory for future retrieval regardless of external storage.
+6. Confirm to boss: "Recorded: {summary}. Stored in {location}."
+
+---
+
+### 7. Emergency Response
+
+**Trigger:** Detected via periodic signal scanning (2+ 🔴 signals) OR employee sends a direct message containing urgent keywords OR boss explicitly says "emergency" / "紧急"
+
+**Process:**
+
+1. **Immediate alert** — `[message send]` to boss on their preferred channel IMMEDIATELY. Do NOT wait for analysis.
+   - Fallback chain if preferred channel fails: try all configured channels → `[nodes notify]` as last resort.
+   - Message: "🚨 URGENT: {brief description of what was detected}. Analyzing now..."
+2. **Rapid intel gathering** — `[sessions_spawn]` investigation sub-agents:
+   - If deploy-related: spawn agent to `[exec]` health checks, `[web_fetch]` CI status.
+   - If people-related: spawn agent to `[memory_search]` employee history, `[message read]` recent context.
+   - If customer-related: spawn agent to `[web_fetch]` relevant dashboards.
+3. **Emergency brief** — compile findings and `[message send]` to boss:
+   - What happened (facts only)
+   - Who is affected
+   - Severity assessment
+   - Mentor-recommended response:
+     - Musk: "Act immediately. Here's the fastest path to resolution: {actions}"
+     - Inamori: "First stabilize the people involved. Then address: {actions}"
+     - Ma: "This can be turned into an opportunity. Immediate steps: {actions}"
+4. **Execution** — after boss approves a course of action:
+   - `[message send]` — notify relevant team members.
+   - `[memory]` — record the incident and response for future reference.
