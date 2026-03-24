@@ -11,7 +11,7 @@ metadata:
     optional:
       env:
         - name: "BOSS_AI_AGENT_API_KEY"
-          description: "Optional. Connects to manageaibrain.com cloud for full mentor configs, web dashboard, and cross-team analytics. Without it, all 7 scenarios work locally with no degradation. No local data is sent to the cloud."
+          description: "Optional. Makes read-only GET requests to manageaibrain.com for mentor configs and analytics dashboards. API key sent as auth header only — no local data (messages, employee info, config, memory) is ever sent. Without it, all 7 scenarios work locally with no degradation."
         - name: "MANAGEMENT_BRAIN_API_KEY"
           description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility."
     requires:
@@ -37,9 +37,13 @@ Your AI management middleware — connects you to all systems through mentor wis
 
 Boss AI Agent connects to your team through **OpenClaw's existing integrations** (Telegram, Slack, GitHub, etc.). It does NOT store or manage tokens for external services — all service access is inherited from OpenClaw's configured connections. If a service is not connected in OpenClaw, the corresponding feature is simply skipped.
 
-**Data flow**: The optional cloud API (`BOSS_AI_AGENT_API_KEY`) only pulls mentor configs and analytics FROM the cloud. No local data (messages, memory, config) is ever sent to the cloud. All 7 scenarios work fully without it.
+**Data flow**: The optional cloud API (`BOSS_AI_AGENT_API_KEY`) makes read-only GET requests to pull mentor configs and analytics. The API key is sent as an auth header — no local data (messages, check-in responses, employee names, memory, config) is included in any request. Removing the key stops all cloud communication. All 7 scenarios work fully without it.
 
-**Persistent behavior**: The skill registers cron jobs (check-in, chase, summary) via OpenClaw's cron API. You can view all jobs with `cron list` and remove any with `cron remove` at any time.
+**Persistent behavior**: The skill registers up to 5 cron jobs (checkin, chase, summary, briefing, signalScan) via OpenClaw's cron API. Solo founder mode (team=0) only registers 2 (briefing + signalScan). Manage jobs:
+- View: `cron list`
+- Remove one: `cron remove <job-id>`
+- Remove all: `cron remove --skill boss-ai-agent`
+- Uninstall: `clawhub uninstall boss-ai-agent` cleans up all jobs automatically.
 
 ## Install
 

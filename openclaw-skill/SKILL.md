@@ -32,10 +32,44 @@ Always respond in the boss's language. Auto-detect from conversation context.
 ## Permissions & Data
 
 - **Config file**: writes `~/.openclaw/skills/boss-ai-agent/config.json` during first run. User can read, edit, or delete this file at any time.
-- **Cron jobs**: registers recurring jobs (check-in, chase, summary, briefing, signal scan) via OpenClaw's cron API. User can view all active jobs with `cron list` and remove any with `cron remove`. Jobs only run while the agent is active.
+- **Cron jobs**: registers up to 5 recurring jobs via OpenClaw's cron API. See [Cron Job Management](#cron-job-management) for full details, default schedules, and removal commands. Solo founder mode (team=0) only registers 2 jobs. All jobs can be listed (`cron list`), individually removed (`cron remove <id>`), or bulk-removed (`cron remove --skill boss-ai-agent`).
 - **External services** (GitHub, Linear, Jira, Notion): accessed through OpenClaw's configured integrations — the skill does NOT store or manage tokens for these services. If a service is not connected in OpenClaw, the corresponding scenario is skipped.
-- **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill pulls mentor configs and analytics from manageaibrain.com. No local data (messages, files, memory) is sent to the cloud. All 7 scenarios work fully without it.
+- **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill makes read-only GET requests to `manageaibrain.com/api/v1/` to pull mentor YAML configs and aggregated analytics dashboards. The API key is sent as `Authorization: Bearer` header for authentication — no other data (messages, check-in responses, employee names, config.json, memory, chat history) is included in any request payload or query parameter. Removing the key immediately stops all cloud communication. All 7 scenarios work fully without it.
 - **MCP tools**: 9 read-only query tools + 4 write tools that can send messages to employees via Telegram/Slack/Lark/Signal. Write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) actively send messages — use with intent.
+
+## Data Flow
+
+| Direction | What | How |
+|-----------|------|-----|
+| Cloud → Skill | Mentor YAML configs, analytics dashboards | GET with API key auth (optional) |
+| Skill → Cloud | **Nothing** — API key in header only, no request body | Auth header only, no payload |
+| OpenClaw → Skill | Employee messages, GitHub/Jira data | Via OpenClaw's configured integrations |
+| Skill → Employees | Check-in questions, chase reminders, custom messages | Write tools only (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) |
+| Skill → Local disk | `config.json` at first run | Single file, user-editable |
+
+**Never sent outbound**: employee messages, check-in responses, config.json contents, memory/chat history, employee personal data. The skill has no outbound HTTP endpoint other than the optional cloud GET requests described above.
+
+## Cron Job Management
+
+The skill registers up to 5 recurring cron jobs during first run:
+
+| Job | Default Schedule | Solo Mode |
+|-----|-----------------|-----------|
+| checkin | `0 9 * * 1-5` (9am weekdays) | Skipped |
+| chase | `30 17 * * 1-5` (5:30pm weekdays) | Skipped |
+| summary | `0 19 * * 1-5` (7pm weekdays) | Skipped |
+| briefing | `0 8 * * 1-5` (8am weekdays) | Active |
+| signalScan | `*/30 9-18 * * 1-5` (every 30min work hours) | Active |
+
+**View all jobs**: `cron list` — shows job ID, schedule, and next run time.
+
+**Remove one job**: `cron remove <job-id>`
+
+**Remove all skill jobs**: `cron remove --skill boss-ai-agent`
+
+**Uninstall cleanup**: `clawhub uninstall boss-ai-agent` automatically removes all registered cron jobs and deletes `config.json`.
+
+**Schedules are user-editable**: modify `schedule` in `config.json` and re-run `/boss-ai-agent` to update cron registrations. All cron expressions follow standard 5-field format.
 
 ## MCP Tools
 
