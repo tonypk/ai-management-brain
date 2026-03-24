@@ -617,3 +617,109 @@ Boss AI Agent works at full capability regardless of cloud API availability. Her
 | Check-ins, chase, summaries | Fully functional | Fully functional |
 
 **Key point**: no scenario is degraded without an API key. The skill is fully self-contained. Cloud API adds depth (more mentor detail, analytics, dashboard) but never gates core functionality.
+
+---
+
+## Response Formatting
+
+Follow these formatting rules for all outputs:
+
+### Team Status
+Present as a concise summary:
+```
+📊 Team Status (March 24)
+Submitted: 4/6 (67%)
+Pending: John Santos, Maria Chen
+🟡 Alert: John has missed 2 consecutive days
+```
+
+### Rankings
+Use table format with medals:
+```
+🏆 Weekly Performance
+🥇 Alice Wang — 100% submission, sentiment +0.8
+🥈 Bob Lee — 100% submission, sentiment +0.5
+🥉 Carlos Reyes — 80% submission, sentiment +0.3
+```
+
+### Alerts
+Tag by severity:
+- 🔴 **Critical**: requires immediate boss attention (service down, resignation signal, customer complaint)
+- 🟡 **Warning**: monitor closely (consecutive misses, sentiment declining, deadline at risk)
+- 🟢 **Info**: positive signals (shipped feature, good sentiment, milestone reached)
+
+### Briefings
+Numbered list, most important first:
+```
+📋 Morning Briefing (March 24)
+1. 🔴 CI pipeline failed on main — 3 PRs blocked
+2. 🟡 John Santos: 2 consecutive missed check-ins
+3. 🟡 Sprint velocity down 15% vs last week
+4. 🟢 Maria shipped the payment integration
+5. 🟢 Team sentiment trending up (+0.2 this week)
+```
+
+### 1:1 Prep
+Structured document with clear sections (see Scenario 4 for full format).
+
+### Mentor Switch
+When the boss switches mentors, explain what changes:
+```
+🔄 Switching from Musk → Inamori
+
+What changes:
+- Check-in questions: from "What's blocking 10x?" → "Who did you help today?"
+- Chase style: from aggressive (2h deadline) → gentle (warm EOD reminder)
+- Priority focus: from blockers/speed → people/morale
+- Summary lens: from delivery metrics → team wellbeing
+```
+
+---
+
+## 中文说明
+
+Boss AI Agent 是老板的 AI 管理中间件。安装后通过你已有的 OpenClaw 频道（Telegram、Slack、飞书等）管理团队，零外部依赖。
+
+### 核心能力
+
+**7 大自动化场景：**
+1. 每日管理循环 — 签到、追踪、日报
+2. 项目健康巡检 — GitHub/Linear/Jira 自动扫描
+3. 智能早报 — 跨渠道信息汇总
+4. 1:1 会议助手 — 自动准备员工画像
+5. 周期性信号扫描 — 每30分钟扫描异常
+6. 知识库管理 — 记录决策到 Notion/Sheets/本地
+7. 紧急响应 — 自动告警 + 情报收集
+
+**14 位导师哲学：**
+- 完整内置（3）：马斯克、稻盛和夫、马云
+- 标准（6）：达利欧、格鲁夫、任正非、孙正义、乔布斯、贝索斯
+- 轻量（5）：巴菲特、张一鸣、雷军、曹德旺、褚时健
+
+**7 套文化包：** 默认、菲律宾、新加坡、印尼、斯里兰卡、马来西亚、中国
+
+### 使用方式
+
+```
+/boss-ai-agent
+> 你管理几个人？5
+> 团队用什么工具？Telegram 和 GitHub
+> 搞定！马斯克模式已激活。明早9点开始第一次签到。
+```
+
+### 云平台（可选）
+
+设置 `BOSS_AI_AGENT_API_KEY` 后可连接 manageaibrain.com，获得：
+- Web Dashboard 管理面板
+- 完整导师配置（14位全部完整版）
+- 跨团队数据分析
+
+不设置 API Key 也完全可用，所有 7 大场景均不受影响。
+
+---
+
+## Links
+
+- Website: https://manageaibrain.com
+- GitHub: https://github.com/tonypk/ai-management-brain
+- ClawHub: https://clawhub.ai/tonypk/boss-ai-agent
