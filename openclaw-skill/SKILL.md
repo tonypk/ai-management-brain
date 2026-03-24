@@ -1,5 +1,6 @@
 ---
 name: boss-ai-agent
+title: "Boss AI Agent"
 version: "1.5.0"
 description: "Boss AI Agent — your AI management middleware. 16 mentor philosophies, 6 AI C-Suite seats, 9 culture packs, 7 automated scenarios. Works with Claude Code, ChatGPT, and Gemini via MCP."
 user-invocable: true
