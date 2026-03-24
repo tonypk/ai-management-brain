@@ -4,6 +4,9 @@ name_en: Jeff Bezos
 company: Amazon
 philosophy: 客户至上，Day 1心态，长期主义
 version: 1
+domain: general_management
+tags: [general_management, customer, operations, scaling]
+recommended_seats: [ceo, coo]
 
 strategy:
   checkin_questions:

@@ -4,6 +4,9 @@ name_en: Chu Shijian
 company: 红塔集团 · 褚橙
 philosophy: 极致专注，品质至上，逆境重生
 version: 1
+domain: general_management
+tags: [general_management, resilience, craftsmanship, brand]
+recommended_seats: [ceo]
 
 strategy:
   checkin_questions:

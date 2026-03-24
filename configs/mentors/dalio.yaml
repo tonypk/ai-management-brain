@@ -4,6 +4,9 @@ name_en: Ray Dalio
 company: Bridgewater Associates
 philosophy: 极度透明，原则驱动
 version: 1
+domain: general_management
+tags: [general_management, principles, data_driven, transparency]
+recommended_seats: [ceo, cfo]
 
 strategy:
   checkin_questions:

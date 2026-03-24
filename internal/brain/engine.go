@@ -26,6 +26,8 @@ var ValidMentors = map[string]bool{
 	"leijun":      true,
 	"caodewang":   true,
 	"chushijian":  true,
+	"trout":       true,
+	"meyer":       true,
 }
 
 // ValidCultures lists all available culture codes.

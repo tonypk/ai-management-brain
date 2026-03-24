@@ -73,8 +73,11 @@ type MentorConfig struct {
 	NameEn     string   `yaml:"name_en"`
 	Company    string   `yaml:"company"`
 	Philosophy string   `yaml:"philosophy"`
-	Version    int      `yaml:"version"`
-	Strategy   Strategy `yaml:"strategy"`
+	Version          int      `yaml:"version"`
+	Domain           string   `yaml:"domain"`
+	Tags             []string `yaml:"tags"`
+	RecommendedSeats []string `yaml:"recommended_seats"`
+	Strategy         Strategy `yaml:"strategy"`
 }
 
 // GetCheckinQuestions returns the mentor's check-in question list.

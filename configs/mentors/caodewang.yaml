@@ -4,6 +4,9 @@ name_en: Cho Tak Wong
 company: 福耀玻璃 Fuyao Glass
 philosophy: 实业报国，成本控制，品质第一
 version: 1
+domain: general_management
+tags: [general_management, manufacturing, quality, persistence]
+recommended_seats: [ceo, coo]
 
 strategy:
   checkin_questions:

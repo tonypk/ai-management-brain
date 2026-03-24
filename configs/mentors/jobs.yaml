@@ -4,6 +4,9 @@ name_en: Steve Jobs
 company: Apple
 philosophy: Stay hungry, stay foolish. 追求极致简洁
 version: 1
+domain: general_management
+tags: [general_management, product, design, innovation]
+recommended_seats: [ceo, cto]
 
 strategy:
   checkin_questions:

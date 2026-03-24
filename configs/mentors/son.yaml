@@ -4,6 +4,9 @@ name_en: Masayoshi Son
 company: SoftBank Group
 philosophy: 以300年愿景驱动，敢赌未来
 version: 1
+domain: general_management
+tags: [general_management, vision, investment, growth]
+recommended_seats: [ceo]
 
 strategy:
   checkin_questions:

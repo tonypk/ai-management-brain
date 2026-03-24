@@ -4,6 +4,9 @@ name_en: Elon Musk
 company: Tesla · SpaceX · X
 philosophy: 第一性原理，极致紧迫感，10倍思维
 version: 1
+domain: general_management
+tags: [general_management, engineering, innovation, first_principles]
+recommended_seats: [ceo, cto]
 
 strategy:
   checkin_questions:

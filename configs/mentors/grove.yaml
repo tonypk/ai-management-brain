@@ -4,6 +4,9 @@ name_en: Andy Grove
 company: Intel
 philosophy: 只有偏执狂才能生存，高产出管理
 version: 1
+domain: general_management
+tags: [general_management, okr, operations, high_output]
+recommended_seats: [ceo, coo]
 
 strategy:
   checkin_questions:

@@ -4,6 +4,9 @@ name_en: Warren Buffett
 company: Berkshire Hathaway
 philosophy: 长期主义，安全边际，复利思维
 version: 1
+domain: general_management
+tags: [general_management, finance, investment, value]
+recommended_seats: [ceo, cfo]
 
 strategy:
   checkin_questions:

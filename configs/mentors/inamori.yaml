@@ -4,6 +4,9 @@ name_en: Kazuo Inamori
 company: 京瓷 · KDDI
 philosophy: 敬天爱人，自利利他
 version: 1
+domain: general_management
+tags: [general_management, philosophy, culture, amoeba]
+recommended_seats: [ceo]
 
 strategy:
   checkin_questions:

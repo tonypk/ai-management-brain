@@ -4,6 +4,9 @@ name_en: Zhang Yiming
 company: 字节跳动 ByteDance
 philosophy: 延迟满足，始终创业，信息平权
 version: 1
+domain: general_management
+tags: [general_management, algorithm, product, globalization]
+recommended_seats: [ceo, cto]
 
 strategy:
   checkin_questions:

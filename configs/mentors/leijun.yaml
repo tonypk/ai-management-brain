@@ -4,6 +4,9 @@ name_en: Lei Jun
 company: 小米 Xiaomi
 philosophy: 极致性价比，参与感，专注口碑快
 version: 1
+domain: general_management
+tags: [general_management, product, marketing, efficiency]
+recommended_seats: [ceo, cmo]
 
 strategy:
   checkin_questions:

@@ -20,6 +20,23 @@ type BotContext interface {
 	SenderID() int64
 	Text() string
 	Send(msg string) error
+	ChatID() int64
+	ChatType() string  // "private", "group", "supergroup"
+	ChatTitle() string // group name (empty for private chats)
+	Reply(msg string) error
+}
+
+// GroupQuerier defines DB operations for group chat management.
+type GroupQuerier interface {
+	CreateGroupChat(ctx context.Context, tenantID, platform, platformChatID, name, groupType string) (GroupChat, error)
+	GetGroupChatByPlatformID(ctx context.Context, platform, platformChatID string) (GroupChat, error)
+}
+
+// GroupChat holds basic group chat info for bot use.
+type GroupChat struct {
+	ID       string
+	TenantID string
+	Name     string
 }
 
 // CreateTenantParams holds parameters for tenant creation.
@@ -67,8 +84,14 @@ type EmployeeProfile struct {
 // CommandHandler handles bot commands.
 type CommandHandler struct {
 	db             CommandQuerier
+	groupDB        GroupQuerier // nil = group features disabled
 	bossChatID     int64
 	DiagnosticsFn  func() string // set externally to provide diagnostics info
+}
+
+// SetGroupDB injects the group querier for group chat features.
+func (h *CommandHandler) SetGroupDB(gdb GroupQuerier) {
+	h.groupDB = gdb
 }
 
 // NewCommandHandler creates a new CommandHandler. The second and third arguments
@@ -230,7 +253,8 @@ func (h *CommandHandler) HandleAddEmployee(c BotContext) error {
 	return c.Send(msg)
 }
 
-// HandleJoin links a Telegram user to an employee record via invite code.
+// HandleJoin links a Telegram user to an employee record via invite code,
+// OR registers a group chat when called from a group context.
 func (h *CommandHandler) HandleJoin(c BotContext) error {
 	parts := strings.Fields(c.Text())
 	if len(parts) < 2 {
@@ -238,6 +262,41 @@ func (h *CommandHandler) HandleJoin(c BotContext) error {
 	}
 
 	code := parts[1]
+
+	// Group chat registration
+	chatType := c.ChatType()
+	if chatType == "group" || chatType == "supergroup" {
+		if h.groupDB == nil {
+			return c.Send("Group features not available.")
+		}
+		// Look up tenant by invite code to get tenant_id
+		emp, err := h.db.GetEmployeeByInviteCode(context.Background(), code)
+		if err != nil {
+			return c.Send("Invalid invite code.")
+		}
+
+		chatID := fmt.Sprintf("%d", c.ChatID())
+		title := c.ChatTitle()
+		if title == "" {
+			title = "Unnamed Group"
+		}
+
+		// Check if already registered
+		existing, err := h.groupDB.GetGroupChatByPlatformID(context.Background(), "telegram", chatID)
+		if err == nil && existing.ID != "" {
+			return c.Send(fmt.Sprintf("This group '%s' is already registered.", existing.Name))
+		}
+
+		gc, err := h.groupDB.CreateGroupChat(context.Background(), emp.TenantID, "telegram", chatID, title, "general")
+		if err != nil {
+			slog.Error("create group chat", "error", err)
+			return c.Send("Failed to register group. Please try again.")
+		}
+		slog.Info("group chat registered", "group_id", gc.ID, "name", gc.Name, "tenant", gc.TenantID)
+		return c.Send(fmt.Sprintf("Group '%s' registered! The mentor will now be active here.\n\nUse the admin dashboard to change the group type.", title))
+	}
+
+	// Private chat — existing employee join flow
 	emp, err := h.db.GetEmployeeByInviteCode(context.Background(), code)
 	if err != nil {
 		return c.Send("Invalid invite code.")
@@ -270,6 +329,8 @@ var mentorDescriptions = map[string]string{
 	"leijun":      "雷军 (小米) — 极致性价比，参与感，专注口碑快",
 	"caodewang":   "曹德旺 (福耀玻璃) — 实业精神，成本控制，品质第一",
 	"chushijian":  "褚时健 (褚橙) — 极致专注，品质至上，逆境重生",
+	"trout":       "Jack Trout (Trout & Partners) — 定位理论，占据用户心智中的独特位置",
+	"meyer":       "Erin Meyer (INSEAD) — 文化地图，跨文化沟通与领导力",
 }
 
 // HandleMentor switches the active mentor for the boss's team.

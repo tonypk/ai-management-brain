@@ -4,6 +4,9 @@ name_en: Ren Zhengfei
 company: 华为
 philosophy: 狼性文化，自我批判，以奋斗者为本
 version: 1
+domain: general_management
+tags: [general_management, culture, resilience, innovation]
+recommended_seats: [ceo]
 
 strategy:
   checkin_questions:
