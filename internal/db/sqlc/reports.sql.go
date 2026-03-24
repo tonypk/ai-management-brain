@@ -134,6 +134,39 @@ func (q *Queries) GetConsecutiveMissDays(ctx context.Context, employeeID pgtype.
 	return missed_days, err
 }
 
+const getEmployeeRecentReportsWithBlockers = `-- name: GetEmployeeRecentReportsWithBlockers :many
+SELECT report_date, sentiment, blockers FROM reports
+WHERE employee_id = $1
+ORDER BY report_date DESC
+LIMIT 7
+`
+
+type GetEmployeeRecentReportsWithBlockersRow struct {
+	ReportDate pgtype.Date `json:"report_date"`
+	Sentiment  pgtype.Text `json:"sentiment"`
+	Blockers   pgtype.Text `json:"blockers"`
+}
+
+func (q *Queries) GetEmployeeRecentReportsWithBlockers(ctx context.Context, employeeID pgtype.UUID) ([]GetEmployeeRecentReportsWithBlockersRow, error) {
+	rows, err := q.db.Query(ctx, getEmployeeRecentReportsWithBlockers, employeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetEmployeeRecentReportsWithBlockersRow{}
+	for rows.Next() {
+		var i GetEmployeeRecentReportsWithBlockersRow
+		if err := rows.Scan(&i.ReportDate, &i.Sentiment, &i.Blockers); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEmployeeReportStreak = `-- name: GetEmployeeReportStreak :one
 SELECT COUNT(*) as missed_days FROM generate_series(
     CURRENT_DATE - INTERVAL '7 days', CURRENT_DATE - INTERVAL '1 day', '1 day'

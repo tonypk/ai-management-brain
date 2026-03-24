@@ -53,3 +53,9 @@ SELECT id, tenant_id, name, telegram_id, signal_phone, slack_id, lark_id, prefer
 FROM employees
 WHERE tenant_id = $1 AND is_active = true
 ORDER BY name;
+
+-- name: GetEmployeeByNameFuzzy :one
+SELECT * FROM employees
+WHERE tenant_id = $1 AND is_active = true AND name ILIKE '%' || $2 || '%'
+ORDER BY name
+LIMIT 1;

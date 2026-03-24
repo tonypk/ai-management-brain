@@ -158,6 +158,43 @@ func (q *Queries) GetEmployeeByLarkID(ctx context.Context, larkID pgtype.Text) (
 	return i, err
 }
 
+const getEmployeeByNameFuzzy = `-- name: GetEmployeeByNameFuzzy :one
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language FROM employees
+WHERE tenant_id = $1 AND is_active = true AND name ILIKE '%' || $2 || '%'
+ORDER BY name
+LIMIT 1
+`
+
+type GetEmployeeByNameFuzzyParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	Column2  pgtype.Text `json:"column_2"`
+}
+
+func (q *Queries) GetEmployeeByNameFuzzy(ctx context.Context, arg GetEmployeeByNameFuzzyParams) (Employee, error) {
+	row := q.db.QueryRow(ctx, getEmployeeByNameFuzzy, arg.TenantID, arg.Column2)
+	var i Employee
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Name,
+		&i.TelegramID,
+		&i.CultureCode,
+		&i.Role,
+		&i.InviteCode,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.SignalPhone,
+		&i.SlackID,
+		&i.LarkID,
+		&i.PreferredChannel,
+		&i.JobTitle,
+		&i.Responsibilities,
+		&i.Country,
+		&i.Language,
+	)
+	return i, err
+}
+
 const getEmployeeBySignalPhone = `-- name: GetEmployeeBySignalPhone :one
 SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language FROM employees WHERE signal_phone = $1 AND is_active = true
 `

@@ -88,3 +88,9 @@ FROM reports WHERE tenant_id = $1
   AND ($2::date IS NULL OR report_date >= $2)
   AND ($3::date IS NULL OR report_date <= $3)
 GROUP BY channel;
+
+-- name: GetEmployeeRecentReportsWithBlockers :many
+SELECT report_date, sentiment, blockers FROM reports
+WHERE employee_id = $1
+ORDER BY report_date DESC
+LIMIT 7;
