@@ -234,7 +234,7 @@ Stored at `~/.openclaw/skills/boss-ai-agent/config.json`:
   },
   "schedule": {
     "checkin": "0 9 * * 1-5",
-    "chase": "0 30 17 * * 1-5",
+    "chase": "30 17 * * 1-5",
     "summary": "0 19 * * 1-5",
     "weeklyReview": "0 9 * * 1",
     "briefing": "0 8 * * 1-5",
@@ -280,7 +280,7 @@ Stored at `~/.openclaw/skills/boss-ai-agent/config.json`:
 
 | Component | With API Key | Without API Key |
 |-----------|-------------|----------------|
-| Mentor configs | Full configs from `GET /api/v1/mentor` | 3 embedded + 11 inferred from tags |
+| Mentor configs | Full configs from cloud API | 3 fully-embedded + 6 with questions + 5 inferred from tags |
 | Web dashboard | Available at manageaibrain.com | Not available |
 | All 7 scenarios | Fully functional | Fully functional |
 | Memory | OpenClaw `memory` | OpenClaw `memory` |
