@@ -1,7 +1,7 @@
 # Boss AI Agent — Skill Redesign Spec
 
 **Date**: 2026-03-24
-**Status**: Draft
+**Status**: Draft → Reviewed (R1 fixes applied)
 **Scope**: Rewrite SKILL.md + README.md only (no backend changes)
 **Publish to**: ClawHub as `boss-ai-agent`
 
@@ -27,12 +27,12 @@
 | Tool | Boss AI Agent Usage |
 |------|---------------------|
 | `message` | Send check-in questions, chase reminders, collect replies, monitor group signals (sentiment/conflict/help requests) across 23+ platforms |
-| `cron` | Scheduled tasks: daily check-in (9AM), chase (5:30PM), summary (7PM), weekly review (Mon 9AM), daily briefing (8AM) |
+| `cron` | Scheduled tasks: daily check-in (9AM), chase (5:30PM), summary (7PM), weekly review (Mon 9AM), daily briefing (8AM), signal scanning (every 30min during work hours) |
 | `memory_search` / `memory_get` | Persist employee profiles, management decisions, project status, boss preferences |
 | `sessions_spawn` | Dispatch sub-agents for parallel system scanning (GitHub + Notion + Slack simultaneously) |
 | `web_fetch` | Pull GitHub PR/Issue lists, Linear sprint status, Jira board data, Notion pages |
 | `web_search` | Industry trends, competitor intel (when boss asks) |
-| `browser` | Access authenticated dashboards, screenshot project boards, automate approval flows |
+| `browser` | Screenshot project dashboards when boss asks "show me the board" (optional, not used in core scenarios) |
 | `read` / `write` | Read/write local config, export reports, generate markdown summaries |
 | `exec` | Run scripts (deployment status checks, log analysis, database queries) |
 | `nodes` | Push urgent alerts to boss's phone |
@@ -85,15 +85,17 @@ Boss says "I need to do a 1:1 with John"
 → Suggest conversation strategy per mentor framework
 ```
 
-### Scenario 5: Real-time Signal Monitoring
+### Scenario 5: Periodic Signal Scanning
 ```
-[message] continuously monitor team channels
-→ Detect key signals:
-   - 🔴 Conflict/complaint ("this requirement is unreasonable")
-   - 🟡 Help/blocked ("blocked by xxx")
-   - 🟢 Breakthrough/good news ("feature shipped")
-→ [memory] record signals
-→ When threshold reached → [message send] alert boss
+[cron] every 30 minutes during work hours (e.g., "*/30 9-18 * * 1-5")
+→ [message read] poll recent messages from team channels (last 30 min)
+→ Detect key signals via keyword + sentiment analysis:
+   - 🔴 Conflict/complaint ("this requirement is unreasonable", negative sentiment)
+   - 🟡 Help/blocked ("blocked by xxx", "need help")
+   - 🟢 Breakthrough/good news ("feature shipped", "deployed")
+→ [memory] record significant signals with timestamp
+→ When threshold reached (e.g., 2+ red signals in 1 hour) → [message send] alert boss
+→ Fallback: boss can manually trigger "scan team channels" at any time
 ```
 
 ### Scenario 6: Knowledge Base Management
@@ -107,20 +109,47 @@ Boss says "record today's decision" / "update project doc in Notion"
 
 ### Scenario 7: Emergency Response
 ```
-System/employee triggers urgent event (deploy failure, customer complaint, attrition signal)
-→ [nodes notify] push to boss's phone
-→ [sessions_spawn] rapid intel gathering
-→ [message send] emergency brief + mentor-recommended response plan
+Urgent event detected (via signal scanning or employee direct message):
+  deploy failure, customer complaint, attrition signal, etc.
+→ [message send] IMMEDIATELY alert boss on preferred channel (Telegram/Slack/etc.)
+   Fallback chain: preferred channel → all configured channels → [nodes notify] if available
+→ [sessions_spawn] rapid intel gathering (see sub-agent spec below)
+→ [message send] emergency brief + mentor-recommended response plan to boss
 → After boss approves → [message send] execute (notify people, dispatch resources)
 ```
+
+### Sub-Agent Specification (for sessions_spawn)
+
+Used in Scenarios 2, 5, and 7. Each sub-agent receives a focused prompt and returns structured JSON.
+
+**Prompt template**:
+```
+You are a {role} sub-agent for Boss AI Agent.
+Task: {task_description}
+Tools available: {tool_list}
+Output format: JSON with fields: status (ok/warning/critical), findings (array of {title, detail, severity}), summary (1-2 sentences)
+Timeout: 60 seconds
+```
+
+**Scenario 2 sub-agents**:
+| Sub-agent | Role | Task | Tools |
+|-----------|------|------|-------|
+| github-scanner | Code reviewer | Scan repos for: open PRs > 3 days, failed CI, stale issues > 7 days | `web_fetch` |
+| pm-scanner | Project tracker | Check sprint progress, overdue tasks, unassigned items | `web_fetch` |
+| chat-scanner | Signal analyst | Scan team channels for project-related discussions, blockers, sentiment | `message read` |
+
+**Aggregation**: Parent agent collects all sub-agent results, deduplicates findings, applies mentor risk framework to prioritize, generates unified report.
+
+**Failure handling**: If a sub-agent times out or errors, skip that source and note "⚠️ {source} unavailable" in the report. Never block the entire report for one failed source.
 
 ## 5. Mentor System
 
 ### Mentor Architecture
 
-- **3 fully-embedded mentors** in SKILL.md with complete decision matrices: Musk, Inamori, Ma (Jack Ma)
-- **11 light-touch mentors** with brief descriptions + core trait tags — agent infers behavior
-- **Cloud extension**: If `BOSS_AI_AGENT_API_KEY` is configured, fetch full configs from `GET /api/v1/mentor` via manageaibrain.com, overriding the light-touch versions
+- **3 fully-embedded mentors** with complete decision matrices: Musk, Inamori, Ma (Jack Ma)
+- **6 standard mentors** with check-in questions + core trait tags (carried from v2.x): Dalio, Grove, Ren, Son, Jobs, Bezos
+- **5 light-touch mentors** (new additions) with brief descriptions + tags — agent infers behavior: Buffett, Zhang Yiming, Lei Jun, Cao Dewang, Chu Shijian
+- **Cloud extension**: If `BOSS_AI_AGENT_API_KEY` is configured, fetch full configs from `POST /api/v1/openclaw/command` (`{"command": "list mentors"}`) via manageaibrain.com, overriding all light-touch and standard versions with complete decision matrices
 
 ### Mentor Decision Matrix (3 Exemplars)
 
@@ -134,16 +163,21 @@ System/employee triggers urgent event (deploy failure, customer complaint, attri
 | 1:1 advice | "Challenge them to think bigger" | "Care about their wellbeing first" | "Discuss their understanding of team and customers" |
 | Emergency style | Act immediately, fast decisions | Stabilize people first, then fix | Embrace change, turn crisis into opportunity |
 
-### Other 11 Mentors (Light-touch)
+### Standard Mentors (6 — with check-in questions)
+
+| ID | Name | Check-in Questions | Core Tags |
+|----|------|--------------------|-----------|
+| dalio | Ray Dalio | "What decision did you make today? Reasoning?" / "What mistake did you learn from?" / "What principle applies?" | radical-transparency, principles-driven, mistake-analysis |
+| grove | Andy Grove | "What's your OKR progress?" / "Biggest bottleneck?" / "What output did you deliver?" | OKR-driven, data-focused, high-output |
+| ren | Ren Zhengfei (任正非) | "What goal did you accomplish?" / "What challenge did you overcome?" / "How did you push your limits?" | wolf-culture, self-criticism, striver-oriented |
+| son | Masayoshi Son (孙正义) | "Progress toward the big vision?" / "What bold bet are you considering?" / "What did you learn from other industries?" | 300-year-vision, bold-bets, time-machine |
+| jobs | Steve Jobs | "What did you ship that you're proud of?" / "What can be simpler?" / "How far from 'insanely great'?" | simplicity, excellence-pursuit, reality-distortion |
+| bezos | Jeff Bezos | "What did you do for the customer?" / "What would you do differently on Day 1?" / "What data informed your decision?" | day-1-mentality, customer-obsession, long-term |
+
+### Light-touch Mentors (5 — new additions, agent infers behavior from tags)
 
 | ID | Name | Core Tags |
 |----|------|-----------|
-| dalio | Ray Dalio | radical-transparency, principles-driven, mistake-analysis |
-| grove | Andy Grove | OKR-driven, data-focused, high-output |
-| ren | Ren Zhengfei (任正非) | wolf-culture, self-criticism, striver-oriented |
-| son | Masayoshi Son (孙正义) | 300-year-vision, bold-bets, time-machine |
-| jobs | Steve Jobs | simplicity, excellence-pursuit, reality-distortion |
-| bezos | Jeff Bezos | day-1-mentality, customer-obsession, long-term |
 | buffett | Warren Buffett | long-term-value, margin-of-safety, patience |
 | zhangyiming | Zhang Yiming (张一鸣) | delayed-gratification, context-not-control, data-driven |
 | leijun | Lei Jun (雷军) | extreme-value, user-participation, focus |
@@ -161,6 +195,7 @@ System/employee triggers urgent event (deploy failure, customer complaint, attri
 
 | Culture | Directness | Hierarchy | Key Rules |
 |---------|-----------|-----------|-----------|
+| default | High | Low | Neutral/Western-default, direct communication, merit-based feedback |
 | philippines | Low | High | Never name in group, warmth required, acknowledge effort |
 | singapore | High | Medium | Direct but polite, efficiency-focused |
 | indonesia | Low | High | Relationship-first, group harmony |
@@ -199,10 +234,11 @@ Stored at `~/.openclaw/skills/boss-ai-agent/config.json`:
   },
   "schedule": {
     "checkin": "0 9 * * 1-5",
-    "chase": "0 17 30 * * 1-5",
+    "chase": "0 30 17 * * 1-5",
     "summary": "0 19 * * 1-5",
     "weeklyReview": "0 9 * * 1",
-    "briefing": "0 8 * * 1-5"
+    "briefing": "0 8 * * 1-5",
+    "signalScan": "*/30 9-18 * * 1-5"
   },
   "alerts": {
     "consecutiveMisses": 3,
@@ -220,6 +256,25 @@ Stored at `~/.openclaw/skills/boss-ai-agent/config.json`:
 | Management decisions | `decision:{date}` | Decisions made + outcomes |
 | Project status | `project:{name}` | Milestones, risk records |
 | Boss preferences | `boss:pref` | Communication style, focus areas |
+
+### Configuration Schema
+
+| Field | Required | Default | Notes |
+|-------|----------|---------|-------|
+| `mentor` | No | `"musk"` | Any valid mentor ID |
+| `mentorBlend` | No | `null` | Optional secondary mentor |
+| `culture` | No | `"default"` | Team-level default culture |
+| `timezone` | Yes | — | IANA timezone string |
+| `team` | No | `[]` | Empty = solo founder mode |
+| `integrations` | No | all disabled | Each integration has `enabled: boolean` |
+| `schedule` | No | defaults above | Standard 5-field cron expressions |
+| `alerts` | No | defaults above | Threshold configuration |
+
+**Empty team guard**: If `team` is empty, skip daily check-in/chase/summary cron jobs. Daily briefing and project patrol still function for solo founders. Prompt boss to add team members.
+
+**Env var fallback**: If `BOSS_AI_AGENT_API_KEY` is not set, check for legacy `MANAGEMENT_BRAIN_API_KEY` and use it as fallback.
+
+**Integration auth**: GitHub/Linear/Jira access relies on OpenClaw's configured integrations (MCP servers or OAuth tokens managed by the OpenClaw gateway). The skill does NOT store auth tokens — it uses `web_fetch` which inherits the gateway's authenticated sessions. For public repos, no auth needed.
 
 ### Degradation Strategy
 
@@ -291,7 +346,7 @@ YAML frontmatter (name, version, description, metadata.openclaw)
 ## Links
 ```
 
-Estimated length: ~600-800 lines of markdown.
+Estimated length: ~800-1200 lines of markdown (3 full decision matrices + 6 mentor questions + 7 scenarios + tool reference).
 
 README.md: Updated with user-facing install/usage guide only, no agent instruction details.
 
@@ -303,7 +358,21 @@ README.md: Updated with user-facing install/usage guide only, no agent instructi
 - **Config path**: `~/.openclaw/skills/boss-ai-agent/config.json`
 - Old `management-brain` skill remains on ClawHub (not deleted)
 
-## 10. Out of Scope
+## 10. Migration from management-brain
+
+- `boss-ai-agent` is a **new skill**, not an upgrade of `management-brain`
+- Old `management-brain` remains on ClawHub, users can keep using it
+- No automatic data migration — different storage model (OpenClaw `memory` vs Notion/Sheets/local JSON)
+- Users who want to switch: install `boss-ai-agent`, re-run onboarding, add team members
+- Legacy env var `MANAGEMENT_BRAIN_API_KEY` is accepted as fallback for `BOSS_AI_AGENT_API_KEY`
+
+## 11. Versioning Strategy
+
+- Follow semver: Major = breaking config changes, Minor = new scenarios/mentors, Patch = wording fixes
+- Publish via `clawhub publish openclaw-skill --slug boss-ai-agent --version X.Y.Z`
+- SKILL.md `version` field in frontmatter must match the published version
+
+## 12. Out of Scope
 
 - Backend API changes (no Go code changes)
 - New API endpoints
