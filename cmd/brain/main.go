@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/report"
 	"github.com/tonypk/ai-management-brain/internal/roles"
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
+	"github.com/tonypk/ai-management-brain/internal/seats"
 )
 
 // engineForTenant returns the appropriate engine for a tenant (blended or single mentor).
@@ -166,6 +168,86 @@ func formatPgUUID(u pgtype.UUID) string {
 	}
 	b := u.Bytes
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// groupDBAdapter adapts sqlc.Queries to bot.GroupQuerier.
+type groupDBAdapter struct {
+	q *sqlc.Queries
+}
+
+func (a *groupDBAdapter) CreateGroupChat(ctx context.Context, tenantID, platform, platformChatID, name, groupType string) (bot.GroupChat, error) {
+	tid, err := parseUUIDForChat(tenantID)
+	if err != nil {
+		return bot.GroupChat{}, fmt.Errorf("parse tenant ID: %w", err)
+	}
+	gc, err := a.q.CreateGroupChat(ctx, sqlc.CreateGroupChatParams{
+		TenantID:       tid,
+		Platform:       platform,
+		PlatformChatID: platformChatID,
+		Name:           name,
+		GroupType:      groupType,
+	})
+	if err != nil {
+		return bot.GroupChat{}, err
+	}
+	return bot.GroupChat{
+		ID:       formatPgUUID(gc.ID),
+		TenantID: formatPgUUID(gc.TenantID),
+		Name:     gc.Name,
+	}, nil
+}
+
+func (a *groupDBAdapter) GetGroupChatByPlatformID(ctx context.Context, platform, platformChatID string) (bot.GroupChat, error) {
+	gc, err := a.q.GetGroupChatByPlatformID(ctx, sqlc.GetGroupChatByPlatformIDParams{
+		Platform:       platform,
+		PlatformChatID: platformChatID,
+	})
+	if err != nil {
+		return bot.GroupChat{}, err
+	}
+	return bot.GroupChat{
+		ID:       formatPgUUID(gc.ID),
+		TenantID: formatPgUUID(gc.TenantID),
+		Name:     gc.Name,
+	}, nil
+}
+
+// seatServiceAdapter bridges seats.SeatService to bot.SeatServicer.
+type seatServiceAdapter struct {
+	svc *seats.SeatService
+}
+
+func (a *seatServiceAdapter) SetActiveSeat(ctx context.Context, tenantID string, telegramUserID int64, seatType string) error {
+	return a.svc.SetActiveSeat(ctx, tenantID, telegramUserID, seatType)
+}
+
+func (a *seatServiceAdapter) GetActiveSeat(ctx context.Context, tenantID string, telegramUserID int64) string {
+	return a.svc.GetActiveSeat(ctx, tenantID, telegramUserID)
+}
+
+func (a *seatServiceAdapter) ClearActiveSeat(ctx context.Context, tenantID string, telegramUserID int64) error {
+	return a.svc.ClearActiveSeat(ctx, tenantID, telegramUserID)
+}
+
+func (a *seatServiceAdapter) Chat(ctx context.Context, tenantID, seatType, cultureCode, userMessage string) (string, error) {
+	return a.svc.Chat(ctx, tenantID, seatType, cultureCode, userMessage)
+}
+
+func (a *seatServiceAdapter) BoardDiscuss(ctx context.Context, tenantID, cultureCode, topic string) ([]bot.SeatBoardResponse, string, error) {
+	responses, synthesis, err := a.svc.BoardDiscuss(ctx, tenantID, cultureCode, topic)
+	if err != nil {
+		return nil, "", err
+	}
+	result := make([]bot.SeatBoardResponse, len(responses))
+	for i, r := range responses {
+		result[i] = bot.SeatBoardResponse{
+			SeatType:  r.SeatType,
+			Title:     r.Title,
+			PersonaID: r.PersonaID,
+			Content:   r.Content,
+		}
+	}
+	return result, synthesis, nil
 }
 
 // runMigrations applies database migrations idempotently.
@@ -404,7 +486,27 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS responsibilities TEXT NOT NULL DE
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS country         TEXT NOT NULL DEFAULT '';
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS language        TEXT NOT NULL DEFAULT '';
 `
-	_, err := pool.Exec(ctx, migration008)
+	if _, err := pool.Exec(ctx, migration008); err != nil {
+		return err
+	}
+
+	const migration009 = `
+-- 000009: group chats
+CREATE TABLE IF NOT EXISTS group_chats (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    platform VARCHAR(20) NOT NULL DEFAULT 'telegram',
+    platform_chat_id VARCHAR(100) NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    group_type VARCHAR(50) NOT NULL DEFAULT 'general',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(platform, platform_chat_id)
+);
+CREATE INDEX IF NOT EXISTS idx_group_chats_tenant ON group_chats(tenant_id) WHERE is_active = true;
+`
+	_, err := pool.Exec(ctx, migration009)
 	return err
 }
 
@@ -548,6 +650,24 @@ func main() {
 		slog.Info("memory engine disabled (no ANTHROPIC_API_KEY)")
 	}
 
+	// Seat service (C-Suite)
+	var seatSvc *seats.SeatService
+	if cfg.AnthropicKey != "" {
+		seatLLM, err := brain.NewAnthropicClient(cfg.AnthropicKey)
+		if err != nil {
+			slog.Error("failed to create seat LLM client", "error", err)
+			os.Exit(1)
+		}
+		seatSvc = seats.NewSeatService(seats.SeatServiceConfig{
+			DB:            queries,
+			EngineFactory: engineFactory,
+			Memory:        memEngine,
+			LLM:           seatLLM,
+			Redis:         redisClient,
+		})
+		slog.Info("seat service initialized (C-Suite)")
+	}
+
 	// Create report collector with default questions (overridden per-remind)
 	defaultEngine, _ := engineFactory.ForTenant("inamori", "default")
 	collector := report.NewCollector(redisClient, defaultEngine.GetCheckinQuestions())
@@ -635,6 +755,10 @@ func main() {
 
 	// Create command handler and register commands
 	cmdHandler := bot.NewCommandHandler(botDB, nil, nil, cfg.BossTelegramID)
+	cmdHandler.SetGroupDB(&groupDBAdapter{q: queries})
+	if seatSvc != nil {
+		cmdHandler.SetSeatService(&seatServiceAdapter{svc: seatSvc})
+	}
 
 	// Wire diagnostics to show scheduler info + current mentor
 	startTime := time.Now()
@@ -685,15 +809,108 @@ func main() {
 
 	tgBot.RegisterCommands(cmdHandler)
 
-	// Register text handler for report collection conversation + mentor chat
-	tgBot.RegisterTextHandler(func(senderID int64, text string, sendReply func(string) error) error {
+	// Register raw text handler for report collection, mentor chat, and group @mentions
+	tgBot.RegisterRawTextHandler(func(c tele.Context) error {
 		ctx := context.Background()
+		senderID := c.Sender().ID
+		text := c.Text()
+		sendReply := func(msg string) error { return c.Send(msg) }
+
+		// === GROUP CHAT HANDLING ===
+		chatType := string(c.Chat().Type)
+		if chatType == "group" || chatType == "supergroup" {
+			// Only respond to @mentions
+			botUsername := "@" + c.Bot().Me.Username
+			if !strings.Contains(text, botUsername) {
+				return nil // ignore non-mention messages
+			}
+
+			// Strip the @mention from the text
+			cleanText := strings.ReplaceAll(text, botUsername, "")
+			cleanText = strings.TrimSpace(cleanText)
+			if cleanText == "" {
+				return c.Reply("有什么我可以帮你的吗？")
+			}
+
+			chatID := fmt.Sprintf("%d", c.Chat().ID)
+			gc, err := queries.GetGroupChatByPlatformID(ctx, sqlc.GetGroupChatByPlatformIDParams{
+				Platform:       "telegram",
+				PlatformChatID: chatID,
+			})
+			if err != nil {
+				slog.Debug("group message from unregistered group", "chat_id", chatID)
+				return nil
+			}
+			if !gc.IsActive {
+				return nil
+			}
+
+			// Load mentor engine
+			tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID)
+			if err != nil {
+				slog.Error("group chat: get tenant", "error", err)
+				return nil
+			}
+
+			engine, err := engineForTenant(engineFactory, tenant, "default")
+			if err != nil {
+				slog.Error("group chat: load engine", "error", err)
+				return nil
+			}
+
+			// Get latest summary for team context
+			summaryText := ""
+			if summary, err := queries.GetLatestSummary(ctx, gc.TenantID); err == nil {
+				summaryText = summary.Content
+			}
+
+			// Build group reply prompt
+			systemPrompt := brain.BuildGroupReplyPrompt(
+				engine.MentorName(),
+				gc.GroupType,
+				summaryText,
+				cleanText,
+			)
+
+			if chatService == nil || chatService.LLM() == nil {
+				return c.Reply(brain.AIDisabledMessage())
+			}
+
+			// Use LLM single-turn Chat
+			response, err := chatService.LLM().Chat(ctx, systemPrompt, cleanText)
+			if err != nil {
+				slog.Error("group reply LLM failed", "error", err, "group", gc.Name)
+				return nil
+			}
+
+			return c.Reply(response)
+		}
+
+		// === PRIVATE CHAT HANDLING ===
 
 		// Check if sender is the boss FIRST (boss may not be in employees table)
 		if senderID == cfg.BossTelegramID {
 			if chatService == nil {
 				return sendReply(brain.AIDisabledMessage())
 			}
+
+			// C-Suite seat routing: if boss has an active seat via /talk, route to seat chat
+			if seatSvc != nil {
+				tenant, err := botDB.GetTenantByBossChatID(ctx, senderID)
+				if err == nil {
+					activeSeat := seatSvc.GetActiveSeat(ctx, tenant.ID, senderID)
+					if activeSeat != "" {
+						tgAdapter.Bot().Notify(tele.ChatID(senderID), tele.Typing)
+						reply, seatErr := seatSvc.Chat(ctx, tenant.ID, activeSeat, "default", text)
+						if seatErr != nil {
+							slog.Error("seat chat failed", "seat", activeSeat, "error", seatErr)
+							return sendReply("Seat chat failed. Use /talk off to return to default mode.")
+						}
+						return sendReply(reply)
+					}
+				}
+			}
+
 			tgAdapter.Bot().Notify(tele.ChatID(senderID), tele.Typing)
 			tenant, err := botDB.GetTenantByBossChatID(ctx, senderID)
 			if err != nil {
@@ -1096,6 +1313,117 @@ func main() {
 		)
 	}
 
+	// Group mentor autonomous posting job
+	if chatService != nil && chatService.LLM() != nil {
+		if err := sched.AddJob("group_mentor", "0 10 * * *", func(ctx context.Context) error {
+			slog.Info("group_mentor job: running autonomous posting decisions")
+			tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID)
+			if err != nil {
+				return fmt.Errorf("get tenant: %w", err)
+			}
+
+			var tenantUUID pgtype.UUID
+			if err := tenantUUID.Scan(tenant.ID); err != nil {
+				return fmt.Errorf("parse tenant UUID: %w", err)
+			}
+
+			groups, err := queries.ListActiveGroupChatsByTenant(ctx, tenantUUID)
+			if err != nil {
+				return fmt.Errorf("list active groups: %w", err)
+			}
+			if len(groups) == 0 {
+				slog.Info("group_mentor job: no active groups")
+				return nil
+			}
+
+			engine, err := engineForTenant(engineFactory, tenant, "default")
+			if err != nil {
+				return fmt.Errorf("load engine: %w", err)
+			}
+
+			// Collect team data
+			today := time.Now().In(loc)
+			weekday := today.Weekday().String()
+			todayDate := pgtype.Date{Time: today.Truncate(24 * time.Hour), Valid: true}
+
+			submissionRate := "N/A"
+			emps, _ := queries.ListActiveEmployees(ctx, tenantUUID)
+			if len(emps) > 0 {
+				submitted, _ := queries.CountReportsByTenantDate(ctx, sqlc.CountReportsByTenantDateParams{
+					TenantID:   tenantUUID,
+					ReportDate: todayDate,
+				})
+				pct := float64(submitted) / float64(len(emps)) * 100
+				submissionRate = fmt.Sprintf("%.0f%% (%d/%d)", pct, submitted, len(emps))
+			}
+
+			summaryText := ""
+			if summary, err := queries.GetLatestSummary(ctx, tenantUUID); err == nil {
+				summaryText = summary.Content
+				if len(summaryText) > 500 {
+					summaryText = summaryText[:500] + "..."
+				}
+			}
+
+			llmClient := chatService.LLM()
+
+			for _, gc := range groups {
+				groupID := formatPgUUID(gc.ID)
+
+				// Anti-spam: check Redis for last post time
+				antiSpamKey := fmt.Sprintf("group:last_post:%s", groupID)
+				if _, err := redisClient.Get(ctx, antiSpamKey); err == nil {
+					slog.Debug("group_mentor: skipping (posted recently)", "group", gc.Name)
+					continue
+				}
+
+				// Build decision prompt
+				prompt := brain.BuildGroupDecisionPrompt(
+					engine.MentorName(),
+					gc.GroupType,
+					brain.GroupTeamData{
+						SubmissionRate: submissionRate,
+						LatestSummary:  summaryText,
+						Weekday:        weekday,
+					},
+				)
+
+				response, err := llmClient.Chat(ctx, prompt, "Decide whether to post.")
+				if err != nil {
+					slog.Error("group_mentor: LLM decision failed", "group", gc.Name, "error", err)
+					continue
+				}
+
+				if brain.IsSkipDecision(response) {
+					slog.Debug("group_mentor: AI decided SKIP", "group", gc.Name)
+					continue
+				}
+
+				// Send message to group
+				chatID, _ := strconv.ParseInt(gc.PlatformChatID, 10, 64)
+				if chatID == 0 {
+					slog.Error("group_mentor: invalid chat ID", "platform_chat_id", gc.PlatformChatID)
+					continue
+				}
+
+				if err := tgBot.SendMessage(chatID, response); err != nil {
+					slog.Error("group_mentor: send failed", "group", gc.Name, "error", err)
+					continue
+				}
+
+				// Set anti-spam key (24h TTL)
+				_ = redisClient.Set(ctx, antiSpamKey, "1", 24*time.Hour)
+				slog.Info("group_mentor: posted to group", "group", gc.Name, "message_len", len(response))
+			}
+
+			return nil
+		}); err != nil {
+			slog.Error("failed to register group_mentor job", "error", err)
+		} else {
+			slog.Info("group_mentor job registered", "schedule", "daily 10:00")
+		}
+	}
+
 	// Create AI Role Manager (requires LLM + scheduler)
 	var roleManager *roles.Manager
 	if cfg.AnthropicKey != "" {
@@ -1151,6 +1479,7 @@ func main() {
 		SlackAdapter:  slackAdapter,
 		LarkAdapter:   larkAdapter,
 		Scheduler:     sched,
+		SeatService:   seatSvc,
 	})
 
 	// Health check (public, outside /api/v1)
