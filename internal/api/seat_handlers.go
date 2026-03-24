@@ -268,6 +268,63 @@ func handleBoardDiscuss(seatSvc *seats.SeatService) gin.HandlerFunc {
 	}
 }
 
+// handleSeatChat lets the MCP server chat with a specific C-Suite seat.
+func handleSeatChat(seatSvc *seats.SeatService, q *sqlc.Queries) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			SeatType string `json:"seat_type" binding:"required"`
+			Message  string `json:"message" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "seat_type and message are required"})
+			return
+		}
+
+		tenantID := TenantFromContext(c)
+		tenantUUID, err := parseUUID(tenantID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
+
+		// Look up seat for metadata (title, persona_id)
+		seat, err := q.GetSeatByType(c.Request.Context(), sqlc.GetSeatByTypeParams{
+			TenantID: tenantUUID,
+			SeatType: req.SeatType,
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Unknown seat type"})
+			return
+		}
+
+		if !seat.IsActive.Bool {
+			c.JSON(http.StatusOK, gin.H{"data": gin.H{
+				"message": "The " + seat.Title + " seat is currently inactive.",
+			}})
+			return
+		}
+
+		response, err := seatSvc.Chat(c.Request.Context(), tenantID, req.SeatType, "default", req.Message)
+		if err != nil {
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "limited") {
+				c.JSON(http.StatusTooManyRequests, gin.H{"error": errMsg})
+				return
+			}
+			slog.Error("seat chat error", "error", errMsg, "seat_type", req.SeatType)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"seat_type":  req.SeatType,
+			"title":      seat.Title,
+			"persona_id": seat.PersonaID,
+			"response":   response,
+		}})
+	}
+}
+
 // handleListMentorsWithDomain returns all mentors with domain and recommendation metadata.
 func handleListMentorsWithDomain() gin.HandlerFunc {
 	return func(c *gin.Context) {
