@@ -103,6 +103,17 @@ func (s *ChatService) SetMemoryEngine(me *memory.MemoryEngine) {
 	s.memoryEngine = me
 }
 
+// LLM returns the underlying LLM client for single-turn calls.
+func (s *ChatService) LLM() LLMClient {
+	if s.llm == nil {
+		return nil
+	}
+	if lc, ok := s.llm.(LLMClient); ok {
+		return lc
+	}
+	return nil
+}
+
 // AIDisabledMessage returns the user-facing message when AI is not configured.
 func AIDisabledMessage() string { return aiDisabledMessage }
 
