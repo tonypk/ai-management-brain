@@ -355,6 +355,63 @@ export async function getMemoryStats() {
   return request<{ data: MemoryStats }>("/admin/memories/stats");
 }
 
+// Admin - Group Chats
+export async function listGroups() {
+  return request<{ data: GroupChat[] }>("/admin/groups");
+}
+
+export async function updateGroup(
+  id: string,
+  data: { name: string; group_type: string; is_active: boolean },
+) {
+  return request<{ data: GroupChat }>(`/admin/groups/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteGroup(id: string) {
+  return request<{ data: { deleted: boolean } }>(`/admin/groups/${id}`, {
+    method: "DELETE",
+  });
+}
+
+// Seats (C-Suite)
+export async function listSeats() {
+  return request<{ data: Seat[] }>("/seats");
+}
+
+export async function createSeat(data: { seat_type: string; persona_id: string; title?: string; scope?: string }) {
+  return request<{ data: Seat }>("/seats", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateSeat(id: string, data: { title: string; persona_id: string; scope: string }) {
+  return request<{ data: Seat }>(`/seats/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteSeat(id: string) {
+  return request<{ data: { deleted: boolean } }>(`/seats/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function boardDiscuss(topic: string) {
+  return request<{ data: BoardDiscussResult }>("/board/discuss", {
+    method: "POST",
+    body: JSON.stringify({ topic }),
+  });
+}
+
+export async function listMentorsWithDomain() {
+  return request<{ data: MentorWithDomain[] }>("/mentors");
+}
+
 // Types
 export interface DashboardStats {
   employee_count: number;
@@ -617,4 +674,50 @@ export interface MemoryItem {
 
 export interface MemoryStats {
   total: number;
+}
+
+export interface GroupChat {
+  id: string;
+  platform: string;
+  platform_chat_id: string;
+  name: string;
+  group_type: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Seat {
+  id: string;
+  seat_type: string;
+  title: string;
+  persona_id: string;
+  scope: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BoardResponse {
+  seat_type: string;
+  title: string;
+  persona_id: string;
+  content: string;
+}
+
+export interface BoardDiscussResult {
+  topic: string;
+  responses: BoardResponse[];
+  synthesis: string;
+}
+
+export interface MentorWithDomain {
+  id: string;
+  name: string;
+  name_en: string;
+  company: string;
+  philosophy: string;
+  domain: string;
+  tags: string[];
+  recommended_seats: string[];
 }

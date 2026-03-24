@@ -49,6 +49,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: "/seats",
+    name: "Seats",
+    component: () => import("../views/SeatsView.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
     path: "/admin/channels",
     name: "AdminChannels",
     component: () => import("../views/admin/ChannelsView.vue"),
@@ -76,6 +82,12 @@ const routes = [
     path: "/admin/memory",
     name: "AdminMemory",
     component: () => import("../views/admin/MemoryView.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/admin/groups",
+    name: "AdminGroups",
+    component: () => import("../views/admin/GroupChatsView.vue"),
     meta: { requiresAuth: true },
   },
 ];
