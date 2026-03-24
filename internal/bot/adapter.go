@@ -142,6 +142,87 @@ func (a *DBAdapter) UpdateEmployeeCulture(ctx context.Context, employeeID, cultu
 	})
 }
 
+// --- Seats ---
+
+func (a *DBAdapter) GetSeatByTenantAndType(ctx context.Context, tenantID string, seatType string) (SeatInfo, error) {
+	uid, err := parseUUID(tenantID)
+	if err != nil {
+		return SeatInfo{}, err
+	}
+	s, err := a.q.GetSeatByType(ctx, sqlc.GetSeatByTypeParams{
+		TenantID: uid,
+		SeatType: seatType,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return SeatInfo{}, ErrNotFound
+		}
+		return SeatInfo{}, err
+	}
+	return sqlcSeatToBot(s), nil
+}
+
+func (a *DBAdapter) ListSeatsByTenantID(ctx context.Context, tenantID string) ([]SeatInfo, error) {
+	uid, err := parseUUID(tenantID)
+	if err != nil {
+		return nil, err
+	}
+	seats, err := a.q.ListSeatsByTenant(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]SeatInfo, len(seats))
+	for i, s := range seats {
+		result[i] = sqlcSeatToBot(s)
+	}
+	return result, nil
+}
+
+func (a *DBAdapter) UpsertSeat(ctx context.Context, tenantID, seatType, title, personaID, scope string) error {
+	uid, err := parseUUID(tenantID)
+	if err != nil {
+		return err
+	}
+	// Try to get existing seat first
+	existing, err := a.q.GetSeatByType(ctx, sqlc.GetSeatByTypeParams{
+		TenantID: uid,
+		SeatType: seatType,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Create new seat
+		_, err = a.q.CreateSeat(ctx, sqlc.CreateSeatParams{
+			TenantID:  uid,
+			SeatType:  seatType,
+			Title:     title,
+			PersonaID: personaID,
+			Scope:     scope,
+		})
+		return err
+	}
+	// Update existing seat
+	_, err = a.q.UpdateSeat(ctx, sqlc.UpdateSeatParams{
+		ID:        existing.ID,
+		Title:     title,
+		PersonaID: personaID,
+		Scope:     scope,
+	})
+	return err
+}
+
+func sqlcSeatToBot(s sqlc.Seat) SeatInfo {
+	return SeatInfo{
+		ID:        formatUUID(s.ID),
+		SeatType:  s.SeatType,
+		Title:     s.Title,
+		PersonaID: s.PersonaID,
+		Scope:     s.Scope,
+		IsActive:  s.IsActive.Bool,
+	}
+}
+
 // --- Profile ---
 
 func (a *DBAdapter) GetEmployeeProfile(ctx context.Context, employeeID string) (*EmployeeProfile, error) {

@@ -54,10 +54,16 @@ type teleBotContext struct {
 	c tele.Context
 }
 
-func (t *teleBotContext) SenderID() int64 { return t.c.Sender().ID }
-func (t *teleBotContext) Text() string    { return t.c.Text() }
+func (t *teleBotContext) SenderID() int64  { return t.c.Sender().ID }
+func (t *teleBotContext) Text() string     { return t.c.Text() }
+func (t *teleBotContext) ChatID() int64    { return t.c.Chat().ID }
+func (t *teleBotContext) ChatType() string { return string(t.c.Chat().Type) }
+func (t *teleBotContext) ChatTitle() string { return t.c.Chat().Title }
 func (t *teleBotContext) Send(msg string) error {
 	return t.c.Send(msg)
+}
+func (t *teleBotContext) Reply(msg string) error {
+	return t.c.Reply(msg)
 }
 
 // RegisterCommands registers command handlers with the telebot.
@@ -78,9 +84,13 @@ func (b *Bot) RegisterCommands(h *CommandHandler) {
 	b.bot.Handle("/blend", wrap(h.HandleBlend))
 	b.bot.Handle("/profile", wrap(h.HandleProfile))
 	b.bot.Handle("/diagnostics", wrap(h.HandleDiagnostics))
+	b.bot.Handle("/talk", wrap(h.HandleTalk))
+	b.bot.Handle("/board", wrap(h.HandleBoard))
+	b.bot.Handle("/team", wrap(h.HandleTeam))
+	b.bot.Handle("/assign", wrap(h.HandleAssign))
 
 	slog.Info("bot commands registered",
-		"commands", []string{"/start", "/help", "/status", "/addemployee", "/join", "/mentor", "/blend", "/culture", "/profile", "/diagnostics"},
+		"commands", []string{"/start", "/help", "/status", "/addemployee", "/join", "/mentor", "/blend", "/culture", "/profile", "/diagnostics", "/talk", "/board", "/team", "/assign"},
 	)
 }
 
@@ -96,6 +106,18 @@ func (b *Bot) RegisterTextHandler(h TextHandlerFunc) {
 		})
 	})
 	slog.Info("text message handler registered")
+}
+
+// RawTextHandlerFunc receives the full telebot context for advanced handling.
+type RawTextHandlerFunc func(c tele.Context) error
+
+// RegisterRawTextHandler registers a raw telebot handler for text messages.
+// Use this instead of RegisterTextHandler when group chat detection is needed.
+func (b *Bot) RegisterRawTextHandler(h RawTextHandlerFunc) {
+	b.bot.Handle(tele.OnText, func(c tele.Context) error {
+		return h(c)
+	})
+	slog.Info("raw text message handler registered")
 }
 
 // Start begins polling for messages. This blocks until Stop is called.

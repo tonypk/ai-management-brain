@@ -16,9 +16,16 @@ type mockBotContext struct {
 	sent     []string
 }
 
-func (m *mockBotContext) SenderID() int64 { return m.senderID }
-func (m *mockBotContext) Text() string    { return m.text }
+func (m *mockBotContext) SenderID() int64  { return m.senderID }
+func (m *mockBotContext) Text() string     { return m.text }
+func (m *mockBotContext) ChatID() int64    { return 0 }
+func (m *mockBotContext) ChatType() string { return "private" }
+func (m *mockBotContext) ChatTitle() string { return "" }
 func (m *mockBotContext) Send(msg string) error {
+	m.sent = append(m.sent, msg)
+	return nil
+}
+func (m *mockBotContext) Reply(msg string) error {
 	m.sent = append(m.sent, msg)
 	return nil
 }
@@ -102,6 +109,18 @@ func (m *mockCommandDB) GetEmployeeProfile(_ context.Context, _ string) (*bot.Em
 		CurrentStreak:   3,
 		SentimentTrend:  "positive",
 	}, nil
+}
+
+func (m *mockCommandDB) GetSeatByTenantAndType(_ context.Context, _ string, _ string) (bot.SeatInfo, error) {
+	return bot.SeatInfo{}, bot.ErrNotFound
+}
+
+func (m *mockCommandDB) ListSeatsByTenantID(_ context.Context, _ string) ([]bot.SeatInfo, error) {
+	return nil, nil
+}
+
+func (m *mockCommandDB) UpsertSeat(_ context.Context, _, _, _, _, _ string) error {
+	return nil
 }
 
 // --- Tests ---
