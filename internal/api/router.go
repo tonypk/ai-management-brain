@@ -197,6 +197,19 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		openclaw.GET("/alerts", handleOpenClawAlerts(cfg.Queries))
 	}
 
+	// API Key-accessible endpoints for MCP server
+	mcpAPI := v1.Group("")
+	mcpAPI.Use(APIKeyMiddleware(cfg.Queries))
+	mcpAPI.Use(AuthMiddleware(cfg.JWTSecret))
+	{
+		if cfg.SeatService != nil {
+			mcpAPI.POST("/seats/chat", handleSeatChat(cfg.SeatService, cfg.Queries))
+			mcpAPI.POST("/seats/board/discuss", handleBoardDiscuss(cfg.SeatService))
+		}
+		mcpAPI.GET("/seats/mentors", handleListMentorsWithDomain())
+		mcpAPI.GET("/employees/profile/:name", handleEmployeeProfile(cfg.Queries))
+	}
+
 	// Webhook endpoints (signature-verified, no JWT)
 	webhookVerifier := NewWebhookVerifier()
 	billingHandler := NewBillingHandler(cfg.Billing, webhookVerifier)
