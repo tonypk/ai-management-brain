@@ -99,6 +99,10 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   if (to.meta.requiresAuth && !isAuthenticated()) {
+    // Unauthenticated users hitting Dashboard (root) go to Landing page
+    if (to.name === "Dashboard") {
+      return { name: "Landing" };
+    }
     return { name: "Login" };
   }
 });
