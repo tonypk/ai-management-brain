@@ -79,6 +79,18 @@ type Employee struct {
 	Language         string             `json:"language"`
 }
 
+type GroupChat struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	Platform       string             `json:"platform"`
+	PlatformChatID string             `json:"platform_chat_id"`
+	Name           string             `json:"name"`
+	GroupType      string             `json:"group_type"`
+	IsActive       bool               `json:"is_active"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Memory struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
@@ -125,6 +137,18 @@ type Report struct {
 	Sentiment   pgtype.Text        `json:"sentiment"`
 	SubmittedAt pgtype.Timestamptz `json:"submitted_at"`
 	Channel     string             `json:"channel"`
+}
+
+type Seat struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	SeatType  string             `json:"seat_type"`
+	Title     string             `json:"title"`
+	PersonaID string             `json:"persona_id"`
+	Scope     string             `json:"scope"`
+	IsActive  pgtype.Bool        `json:"is_active"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Summary struct {
