@@ -48,6 +48,15 @@ jobs:
         run: |
           scp -i ~/.ssh/deploy_key -r configs ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USER }}/ai-management-brain/configs
 
+      - name: Deploy MCP server source
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "mkdir -p /home/${{ secrets.SERVER_USER }}/ai-management-brain/mcp-server/src"
+          scp -i ~/.ssh/deploy_key mcp-server/package.json mcp-server/package-lock.json mcp-server/tsconfig.json mcp-server/Dockerfile \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USER }}/ai-management-brain/mcp-server/
+          scp -i ~/.ssh/deploy_key -r mcp-server/src \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USER }}/ai-management-brain/mcp-server/
+
       - name: Deploy infra files
         run: |
           scp -i ~/.ssh/deploy_key docker-compose.prod.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USER }}/ai-management-brain/docker-compose.prod.yml

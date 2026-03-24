@@ -1,5 +1,5 @@
 {
-  "name": "@tonypk/management-brain-mcp",
+  "name": "@tonykk/management-brain-mcp",
   "version": "1.0.0",
   "description": "MCP server for AI Management Brain — 9 tools for team management, C-Suite discussions, and employee insights",
   "type": "module",
@@ -13,6 +13,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
+    "start:http": "TRANSPORT=http node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "npm run build"
@@ -29,6 +30,8 @@
     "@modelcontextprotocol/sdk": "^1.12.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
