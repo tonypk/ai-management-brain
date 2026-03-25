@@ -85,3 +85,40 @@ export interface AlertRule {
   action: string
   message: string
 }
+
+export interface AIRole {
+  id: string
+  role_id: string
+  title: string
+  mentor_id: string
+  is_active: boolean
+  pending_count: number
+  created_at: string
+}
+
+export type SuggestionStatus = 'pending' | 'approved' | 'rejected'
+
+export interface AISuggestion {
+  id: string
+  role_id: string
+  role_title: string
+  capability: string
+  title: string
+  content: string
+  status: SuggestionStatus
+  created_at: string
+  reviewed_at: string | null
+}
+
+export interface SetupOrgRequest {
+  industry: string
+  company_stage: string
+  business_model: string
+  team_size: number
+  org_structure: string
+  current_projects: string
+  pain_points: string[]
+  comm_tools: string[]
+  culture_prefs: string
+  goal_framework: string
+}

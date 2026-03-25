@@ -6,8 +6,17 @@ export type { MentorConfig, BlendConfig, MentorInfo, MentorWithDomain } from './
 export type {
   WizardSession, WizardAnswer, OrgProfile, OrgPlan, ManagementPlan,
   OrgDesign, OrgUnit, SupportRole, KpiItem, MeetingItem, AlertRule,
+  AIRole, AISuggestion, SuggestionStatus, SetupOrgRequest,
 } from './organization'
 export type { ChannelStatus, ChannelConfig, MemoryItem, MemoryStats, GroupChat, SchedulerJob } from './admin'
 export type { Alert, CheckinStatus, SubmittedEmployee, PendingEmployee } from './alert'
 export type { Seat, BoardResponse, BoardDiscussResult } from './seat'
 export type { Tenant, BillingStatus } from './settings'
+export type { RiskLevel, AtRiskEmployee, TalkingPoint, CoachingMessage } from './coaching'
+export type {
+  BoardRecord, BoardRecordsStorage,
+  GoalStatus, GoalCycle, KeyResult, Objective, GoalsStorage,
+} from './planning'
+export type {
+  InsightRecord, DigestPeriod, DigestRecord, InsightsStorage, DigestsStorage,
+} from './insights'
