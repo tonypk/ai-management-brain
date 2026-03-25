@@ -15,7 +15,7 @@ export type { Tenant, BillingStatus } from './settings'
 export type { RiskLevel, AtRiskEmployee, TalkingPoint, CoachingMessage } from './coaching'
 export type {
   BoardRecord, BoardRecordsStorage,
-  GoalStatus, GoalCycle, KeyResult, Objective, GoalsStorage,
+  GoalStatus, GoalCycle, KeyResult, Objective, GoalSnapshot, GoalsStorage,
 } from './planning'
 export type {
   InsightRecord, DigestPeriod, DigestRecord, InsightsStorage, DigestsStorage,
