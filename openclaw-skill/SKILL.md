@@ -39,13 +39,32 @@ If MCP becomes available mid-session (user connects it), announce the mode upgra
 
 ## Permissions & Data
 
-- **Config file**: writes `~/.openclaw/skills/boss-ai-agent/config.json` during first run. User can read, edit, or delete this file at any time.
-- **Cron jobs**: registers up to 5 recurring jobs via OpenClaw's cron API. See [Cron Job Management](#cron-job-management) for full details, default schedules, and removal commands. Solo founder mode (team=0) only registers 2 jobs. All jobs can be listed (`cron list`), individually removed (`cron remove <id>`), or bulk-removed (`cron remove --skill boss-ai-agent`).
-- **External services** (GitHub, Linear, Jira, Notion): accessed through OpenClaw's configured integrations — the skill does NOT store or manage tokens for these services. If a service is not connected in OpenClaw, the corresponding scenario is skipped.
-- **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill additionally makes read-only GET requests to `manageaibrain.com/api/v1/` for extended mentor YAML configs and aggregated analytics dashboards. The API key is sent as `Authorization: Bearer` header — no local files, memory, or chat history are included. This is separate from the MCP connection which is always active.
-- **MCP tools**: All 13 MCP tools are hosted on `manageaibrain.com/mcp`. When the skill invokes a tool, the tool parameters (e.g. employee name, discussion topic, report period) are sent to the cloud server for processing. 9 tools are read-only queries; 4 write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) actively send messages to employees via Telegram/Slack/Lark/Signal — use with intent.
+### Advisor Mode (no cloud)
+
+- **Config file**: writes `~/.openclaw/skills/boss-ai-agent/config.json` during first run (mentor preference and culture setting). User can read, edit, or delete this file at any time.
+- **No network access**: Advisor Mode makes zero HTTP requests. All responses come from the embedded mentor frameworks in this skill file.
+- **No cron jobs**: Advisor Mode does not register any persistent behavior.
+
+### Team Operations Mode (MCP connected)
+
+All Advisor Mode permissions, plus:
+
+- **MCP tools**: All 13 MCP tools are hosted on `manageaibrain.com/mcp`. Tool parameters (e.g. employee name, discussion topic, report period) are sent to the cloud server for processing. 9 tools are read-only queries; 4 write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) actively send messages to employees via Telegram/Slack/Lark/Signal — use with intent.
+- **Cron jobs**: registers up to 5 recurring jobs via OpenClaw's cron API. Solo founder mode (team=0) only registers 2 jobs. See [Cron Job Management](#cron-job-management) for details.
+- **External services** (GitHub, Linear, Jira, Notion): accessed through OpenClaw's configured integrations — the skill does NOT store or manage tokens for these services.
+- **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill additionally makes read-only GET requests to `manageaibrain.com/api/v1/` for extended mentor configs and analytics dashboards.
 
 ## Data Flow
+
+### Advisor Mode
+
+| Direction | What | How |
+|-----------|------|-----|
+| Skill → Local disk | `config.json` (mentor preference, culture) | Single file, user-editable |
+
+No network communication. All mentor knowledge is embedded in this skill file.
+
+### Team Operations Mode
 
 | Direction | What | How |
 |-----------|------|-----|
@@ -53,15 +72,14 @@ If MCP becomes available mid-session (user connects it), announce the mode upgra
 | MCP Server → Skill | Query results (team status, reports, alerts, profiles) | MCP protocol response |
 | MCP Server → Employees | Check-in questions, chase reminders, summaries, messages | Write tools trigger delivery via Telegram/Slack/Lark/Signal |
 | Cloud API → Skill | Mentor YAML configs, analytics dashboards | GET with API key auth (optional) |
-| Skill → Cloud API | API key in auth header only — no request body | Auth header only, no payload |
 | OpenClaw → Skill | Employee messages, GitHub/Jira data | Via OpenClaw's configured integrations |
-| Skill → Local disk | `config.json` at first run | Single file, user-editable |
+| Skill → Local disk | `config.json` with full team settings | Single file, user-editable |
 
-**What goes to the cloud**: MCP tool parameters (employee names, discussion topics, message content) are processed on `manageaibrain.com`. The server stores team data (check-ins, reports, employee profiles) in its PostgreSQL database. Write tools deliver messages to employees via connected messaging platforms.
+**What goes to the cloud**: MCP tool parameters (employee names, discussion topics, message content) are processed on `manageaibrain.com`. The server stores team data in PostgreSQL.
 
-**What stays local**: `config.json`, chat history, memory, and any files on your machine. The optional Cloud API key only pulls data — it never sends local files or conversation history.
+**What stays local**: `config.json`, chat history, memory, and any files on your machine.
 
-**Important — persistent behavior**: This skill registers up to 5 cron jobs that run autonomously (check-ins, chases, summaries, briefings, signal scans). Combined with 4 write tools that can send messages to employees, misconfiguration could result in unintended messages being sent. Review cron schedules in `config.json` before activating. Use `cron list` to audit active jobs and `cron remove` to disable any unwanted job.
+**Important — persistent behavior** (Team Operations Mode only): This mode registers up to 5 cron jobs that run autonomously. Combined with 4 write tools that can send messages to employees, misconfiguration could result in unintended messages. Review cron schedules in `config.json` before activating. Use `cron list` to audit and `cron remove` to disable.
 
 ## Cron Job Management
 
