@@ -131,6 +131,20 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			org.POST("/suggestions/:id/reject", handleRejectSuggestion(cfg.Queries))
 		}
 
+		// Goals/OKR
+		goals := protected.Group("/goals")
+		goals.Use(RequireRole("boss"))
+		{
+			goals.GET("", handleListGoals(cfg.Queries))
+			goals.POST("", handleCreateGoal(cfg.Queries))
+			goals.PUT("/:id", handleUpdateGoal(cfg.Queries))
+			goals.DELETE("/:id", handleDeleteGoal(cfg.Queries))
+			goals.POST("/:id/key-results", handleCreateKeyResult(cfg.Queries))
+			goals.PUT("/:id/key-results/:kr_id", handleUpdateKeyResult(cfg.Queries))
+			goals.DELETE("/:id/key-results/:kr_id", handleDeleteKeyResult(cfg.Queries))
+			goals.GET("/:id/snapshots", handleListSnapshots(cfg.Queries))
+		}
+
 		// Memory routes (optional — requires memory engine)
 		if cfg.MemoryStore != nil {
 			memories := protected.Group("/memories")
