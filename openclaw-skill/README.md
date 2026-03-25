@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "2.5.0"
+version: "2.6.0"
 description: "Boss AI Agent — your AI management middleware. 16 mentor philosophies, 6 AI C-Suite seats, 9 culture packs, 7 automated scenarios, real-time dashboard with ECharts analytics. Works with Claude Code, ChatGPT, and Gemini via MCP."
 user-invocable: true
 emoji: "🤖"
@@ -11,7 +11,7 @@ metadata:
     optional:
       env:
         - name: "BOSS_AI_AGENT_API_KEY"
-          description: "Optional. Makes read-only GET requests to manageaibrain.com/api/v1/ for mentor configs and analytics dashboards. API key sent as auth header only — no local files, memory, or chat history are sent. Without it, all 7 scenarios work locally with no degradation."
+          description: "Optional. Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics dashboards. This is separate from the MCP connection (which is always active). API key sent as auth header only."
         - name: "MANAGEMENT_BRAIN_API_KEY"
           description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility."
     requires:
@@ -31,15 +31,15 @@ Your AI management middleware — connects you to all systems through mentor wis
 - **9 culture packs**: default, Philippines, Singapore, Indonesia, Sri Lanka, Malaysia, China, USA, India
 - **Multi-client MCP**: works with Claude Code (stdio), ChatGPT (HTTP), and Gemini (HTTP)
 - **23+ messaging platforms**: works with any channel connected to OpenClaw
-- **Zero external dependency**: fully functional without any cloud account
+- **Cloud-powered MCP**: all 13 tools are processed on `manageaibrain.com/mcp` — requires internet connection
 
 ## How It Works
 
 Boss AI Agent connects to your team through **OpenClaw's existing integrations** (Telegram, Slack, GitHub, etc.). It does NOT store or manage tokens for external services — all service access is inherited from OpenClaw's configured connections. If a service is not connected in OpenClaw, the corresponding feature is simply skipped.
 
-**Data flow**: All 13 MCP tools are hosted on `manageaibrain.com/mcp`. Tool parameters (employee names, discussion topics, message content) are sent to the cloud server for processing. The server stores team data (check-ins, reports, employee profiles) in PostgreSQL. Write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) deliver messages to employees via Telegram/Slack/Lark/Signal. Local files (`config.json`, chat history, memory) are never sent. The optional cloud API key (`BOSS_AI_AGENT_API_KEY`) adds read-only access to mentor configs and analytics dashboards — removing the key stops that communication. All 7 scenarios work fully without it.
+**Data flow**: All 13 MCP tools are hosted on `manageaibrain.com/mcp`. Tool parameters (employee names, discussion topics, message content) are sent to the cloud server for processing. The server stores team data (check-ins, reports, employee profiles) in PostgreSQL. Write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) deliver messages to employees via Telegram/Slack/Lark/Signal. Local files (`config.json`, chat history, memory) are never sent to the server. The optional `BOSS_AI_AGENT_API_KEY` adds read-only access to mentor configs and analytics dashboards — this is separate from the MCP connection which is always active when the skill is installed.
 
-**Persistent behavior**: The skill registers up to 5 cron jobs (checkin, chase, summary, briefing, signalScan) via OpenClaw's cron API. Solo founder mode (team=0) only registers 2 (briefing + signalScan). Manage jobs:
+**Persistent behavior** (important): The skill registers up to 5 cron jobs that run autonomously — including jobs that send messages to employees. Solo founder mode (team=0) only registers 2 (briefing + signalScan). Review schedules in `config.json` before activating. Manage jobs:
 - View: `cron list`
 - Remove one: `cron remove <job-id>`
 - Remove all: `cron remove --skill boss-ai-agent`
@@ -148,20 +148,19 @@ Professional management dashboard at [manageaibrain.com](https://manageaibrain.c
 - **Report Browser** — date-navigable daily summaries with Q&A expand
 - **Settings** — tenant, channels, scheduler, API keys, billing (5 tabs)
 
-## Cloud Platform (Optional)
+## Cloud Architecture
 
-Connect to manageaibrain.com for additional features:
+The skill requires `manageaibrain.com` for MCP tool processing (team queries, message delivery). All tool parameters are processed on the server.
 
-- Web dashboard with ECharts analytics
-- Full mentor configs for all 16 mentors
-- AI C-Suite virtual board discussions
-- Cross-team benchmarking
+**Optional Cloud API** (`BOSS_AI_AGENT_API_KEY`): Adds read-only access to extended mentor configs and analytics dashboards via separate REST endpoints. This is independent of the MCP connection.
 
-Set `BOSS_AI_AGENT_API_KEY` to enable. All 7 scenarios work without it.
+**What requires the cloud**: All 13 MCP tools (queries + write operations), web dashboard, AI C-Suite discussions.
+
+**What works offline**: Skill instructions (mentor philosophy, scenario logic, config.json) are embedded in the skill and work without any server connection — but MCP tools will be unavailable.
 
 ## 中文说明
 
-Boss AI Agent 是老板的 AI 管理中间件。通过 OpenClaw 连接已有的沟通工具（Telegram/Slack/飞书等），零外部依赖即可管理团队。
+Boss AI Agent 是老板的 AI 管理中间件。通过 OpenClaw 连接已有的沟通工具（Telegram/Slack/飞书等），13 个 MCP 工具托管在 `manageaibrain.com/mcp` 云端处理。
 
 **核心功能：**
 - 7 大自动化场景 — 签到、巡检、早报、1:1、信号扫描、知识库、紧急响应
@@ -171,7 +170,7 @@ Boss AI Agent 是老板的 AI 管理中间件。通过 OpenClaw 连接已有的�
 - 多客户端 — Claude Code (stdio) + ChatGPT/Gemini (MCP HTTP)
 - 全新管理台 (v2.0) — NaiveUI + ECharts 仪表盘，健康仪表、提交趋势、情绪热力图、预警中心
 
-**数据安全：** 所有场景无需云端即可运行。可选的 API Key 仅从云端拉取导师配置和分析数据，不会上传任何本地数据（消息、文件、记忆）。外部服务（GitHub/Jira/Notion）的访问通过 OpenClaw 已有的集成，本技能不存储或管理任何外部服务令牌。
+**数据说明：** MCP 工具参数（员工姓名、讨论话题、消息内容）发送至 `manageaibrain.com` 云端处理。服务器在 PostgreSQL 中存储团队数据。本地文件（config.json、聊天记录、记忆）不会上传。可选的 API Key 提供额外的导师配置和分析数据访问。外部服务（GitHub/Jira/Notion）的访问通过 OpenClaw 已有的集成，本技能不存储或管理任何外部服务令牌。
 
 安装：`clawhub install boss-ai-agent`
 

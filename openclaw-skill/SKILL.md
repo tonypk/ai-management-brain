@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "2.5.0"
+version: "2.6.0"
 description: "Boss AI Agent — your AI management middleware. 16 mentor philosophies, 6 AI C-Suite seats, 9 culture packs, 7 automated scenarios, real-time dashboard with ECharts analytics. Works with Claude Code, ChatGPT, and Gemini via MCP."
 user-invocable: true
 emoji: "🤖"
@@ -11,7 +11,7 @@ metadata:
     optional:
       env:
         - name: "BOSS_AI_AGENT_API_KEY"
-          description: "Optional. Makes read-only GET requests to manageaibrain.com/api/v1/ for mentor configs and analytics dashboards. API key sent as auth header only — no local files, memory, or chat history are sent. Without it, all 7 scenarios work locally with no degradation."
+          description: "Optional. Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics dashboards. This is separate from the MCP connection (which is always active). API key sent as auth header only."
         - name: "MANAGEMENT_BRAIN_API_KEY"
           description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility."
     requires:
@@ -34,7 +34,7 @@ Always respond in the boss's language. Auto-detect from conversation context.
 - **Config file**: writes `~/.openclaw/skills/boss-ai-agent/config.json` during first run. User can read, edit, or delete this file at any time.
 - **Cron jobs**: registers up to 5 recurring jobs via OpenClaw's cron API. See [Cron Job Management](#cron-job-management) for full details, default schedules, and removal commands. Solo founder mode (team=0) only registers 2 jobs. All jobs can be listed (`cron list`), individually removed (`cron remove <id>`), or bulk-removed (`cron remove --skill boss-ai-agent`).
 - **External services** (GitHub, Linear, Jira, Notion): accessed through OpenClaw's configured integrations — the skill does NOT store or manage tokens for these services. If a service is not connected in OpenClaw, the corresponding scenario is skipped.
-- **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill makes read-only GET requests to `manageaibrain.com/api/v1/` to pull mentor YAML configs and aggregated analytics dashboards. The API key is sent as `Authorization: Bearer` header — no local files, memory, or chat history are included. Removing the key stops all cloud communication. All 7 scenarios work fully without it.
+- **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill additionally makes read-only GET requests to `manageaibrain.com/api/v1/` for extended mentor YAML configs and aggregated analytics dashboards. The API key is sent as `Authorization: Bearer` header — no local files, memory, or chat history are included. This is separate from the MCP connection which is always active.
 - **MCP tools**: All 13 MCP tools are hosted on `manageaibrain.com/mcp`. When the skill invokes a tool, the tool parameters (e.g. employee name, discussion topic, report period) are sent to the cloud server for processing. 9 tools are read-only queries; 4 write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) actively send messages to employees via Telegram/Slack/Lark/Signal — use with intent.
 
 ## Data Flow
@@ -49,9 +49,11 @@ Always respond in the boss's language. Auto-detect from conversation context.
 | OpenClaw → Skill | Employee messages, GitHub/Jira data | Via OpenClaw's configured integrations |
 | Skill → Local disk | `config.json` at first run | Single file, user-editable |
 
-**What goes to the cloud**: MCP tool parameters (employee names, discussion topics, message content) are processed on `manageaibrain.com`. The server stores team data (check-ins, reports, employee profiles) in its PostgreSQL database.
+**What goes to the cloud**: MCP tool parameters (employee names, discussion topics, message content) are processed on `manageaibrain.com`. The server stores team data (check-ins, reports, employee profiles) in its PostgreSQL database. Write tools deliver messages to employees via connected messaging platforms.
 
 **What stays local**: `config.json`, chat history, memory, and any files on your machine. The optional Cloud API key only pulls data — it never sends local files or conversation history.
+
+**Important — persistent behavior**: This skill registers up to 5 cron jobs that run autonomously (check-ins, chases, summaries, briefings, signal scans). Combined with 4 write tools that can send messages to employees, misconfiguration could result in unintended messages being sent. Review cron schedules in `config.json` before activating. Use `cron list` to audit active jobs and `cron remove` to disable any unwanted job.
 
 ## Cron Job Management
 
