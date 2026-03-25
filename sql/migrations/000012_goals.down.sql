@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS goal_snapshots;
+DROP TABLE IF EXISTS key_results;
+DROP TABLE IF EXISTS goals;
