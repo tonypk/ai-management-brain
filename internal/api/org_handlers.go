@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
@@ -26,6 +27,19 @@ type wizardAnswerRequest struct {
 
 type updatePlanRequest struct {
 	Feedback string `json:"feedback" binding:"required"`
+}
+
+type setupOrgRequest struct {
+	Industry        string   `json:"industry" binding:"required"`
+	CompanyStage    string   `json:"company_stage" binding:"required"`
+	BusinessModel   string   `json:"business_model"`
+	TeamSize        int      `json:"team_size" binding:"required,min=1,max=100000"`
+	OrgStructure    string   `json:"org_structure" binding:"required"`
+	CurrentProjects string   `json:"current_projects"`
+	PainPoints      []string `json:"pain_points" binding:"required,min=1"`
+	CommTools       []string `json:"comm_tools" binding:"required,min=1"`
+	CulturePrefs    string   `json:"culture_prefs"`
+	GoalFramework   string   `json:"goal_framework"`
 }
 
 // --- Handlers ---
@@ -238,6 +252,113 @@ func handleActivatePlan(queries *sqlc.Queries, roleManager *roles.Manager) gin.H
 			"data": gin.H{
 				"status":          "active",
 				"roles_activated": rolesActivated,
+			},
+		})
+	}
+}
+
+// handleSetupOrg creates a new organization plan from structured form data.
+// Uses OrgEngine.GeneratePlan() to produce a ManagementPlan via AI.
+func handleSetupOrg(queries *sqlc.Queries, engine *brain.OrgEngine) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if engine == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI features not available"})
+			return
+		}
+
+		var req setupOrgRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
+			return
+		}
+
+		tenantID, err := parseUUID(TenantFromContext(c))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
+
+		// Load tenant to get mentor_id
+		tenant, err := queries.GetTenant(c.Request.Context(), tenantID)
+		if err != nil {
+			slog.Error("get tenant", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			return
+		}
+
+		mentor, err := brain.LoadMentor(tenant.MentorID)
+		if err != nil {
+			slog.Error("load mentor", "mentor_id", tenant.MentorID, "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load mentor"})
+			return
+		}
+
+		profile := brain.CompanyProfile{
+			Industry:        req.Industry,
+			Size:            req.TeamSize,
+			Stage:           req.CompanyStage,
+			BusinessModel:   req.BusinessModel,
+			PainPoints:      req.PainPoints,
+			OrgStructure:    req.OrgStructure,
+			CurrentProjects: req.CurrentProjects,
+			CommTools:       req.CommTools,
+			CulturePrefs:    req.CulturePrefs,
+			GoalFramework:   req.GoalFramework,
+		}
+
+		// Optional: match industry template for richer context
+		industry := brain.MatchIndustry(req.Industry)
+
+		plan, err := engine.GeneratePlan(c.Request.Context(), mentor, profile, industry)
+		if err != nil {
+			slog.Error("generate plan", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate plan"})
+			return
+		}
+
+		planJSON, err := json.Marshal(plan)
+		if err != nil {
+			slog.Error("marshal plan", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			return
+		}
+
+		// Persist form metadata as JSON for JSONB columns
+		currentProjectsJSON, _ := json.Marshal(req.CurrentProjects)
+		teamStructureJSON, _ := json.Marshal(req.OrgStructure)
+		culturePrefsJSON, _ := json.Marshal(req.CulturePrefs)
+
+		org, err := queries.UpsertOrganization(c.Request.Context(), sqlc.UpsertOrganizationParams{
+			TenantID:             tenantID,
+			Industry:             pgtype.Text{String: req.Industry, Valid: true},
+			Size:                 pgtype.Int4{Int32: int32(req.TeamSize), Valid: true},
+			Stage:                pgtype.Text{String: req.CompanyStage, Valid: true},
+			BusinessModel:        pgtype.Text{String: req.BusinessModel, Valid: req.BusinessModel != ""},
+			MentorID:             tenant.MentorID,
+			ManagementPlan:       planJSON,
+			ManagementPainPoints: req.PainPoints,
+			CurrentProjects:      currentProjectsJSON,
+			TargetFramework:      pgtype.Text{String: req.GoalFramework, Valid: req.GoalFramework != ""},
+			TeamStructure:        teamStructureJSON,
+			CommunicationTools:   req.CommTools,
+			CulturePreferences:   culturePrefsJSON,
+		})
+		if err != nil {
+			slog.Error("upsert organization", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"data": gin.H{
+				"id":           formatUUID(org.ID),
+				"industry":     org.Industry,
+				"size":         org.Size,
+				"stage":        org.Stage,
+				"mentor_id":    org.MentorID,
+				"plan":         plan,
+				"plan_version": org.PlanVersion,
+				"status":       org.Status,
 			},
 		})
 	}
