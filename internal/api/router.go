@@ -119,6 +119,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		{
 			org.POST("/wizard/start", handleStartWizard(cfg.Queries, cfg.OrgWizard))
 			org.POST("/wizard/answer", handleWizardAnswer(cfg.Queries, cfg.OrgWizard))
+			org.POST("/setup", handleSetupOrg(cfg.Queries, cfg.OrgEngine))
 			org.GET("/plan", handleGetPlan(cfg.Queries))
 			org.PUT("/plan", handleUpdatePlan(cfg.Queries, cfg.OrgEngine))
 			org.POST("/plan/activate", handleActivatePlan(cfg.Queries, cfg.RoleManager))
