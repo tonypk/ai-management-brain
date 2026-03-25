@@ -1,8 +1,8 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "1.6.0"
-description: "Boss AI Agent — your AI management middleware. 16 mentor philosophies, 6 AI C-Suite seats, 9 culture packs, 7 automated scenarios. Works with Claude Code, ChatGPT, and Gemini via MCP."
+version: "2.4.0"
+description: "Boss AI Agent — your AI management middleware. 16 mentor philosophies, 6 AI C-Suite seats, 9 culture packs, 7 automated scenarios, real-time dashboard with ECharts analytics. Works with Claude Code, ChatGPT, and Gemini via MCP."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
@@ -135,11 +135,36 @@ Ask: *"Should we expand to Japan?"* → All 6 seats analyze from their perspecti
 6. **Knowledge Base Management** — records decisions and notes to Notion, Google Sheets, or local files
 7. **Emergency Response** — detects critical signals, alerts boss immediately, gathers rapid intel
 
+## Web Dashboard (v2.0)
+
+Professional management dashboard at manageaibrain.com built with NaiveUI + ECharts:
+
+- **Health Gauge** — real-time team health score (red/yellow/green)
+- **Check-in Status Panel** — live submitted/pending/missed with chase counts
+- **Submission Trend Chart** — 7-day bar+line dual-axis (count + rate%)
+- **Sentiment Heatmap** — employee x date heatmap colored by sentiment
+- **Alert Center** — active alerts with severity badges (warning/critical)
+- **Employee Activity Table** — sortable/filterable 7-day activity with missed highlight
+- **Report Browser** — date-navigable daily reports with AI summaries
+- **Settings** — tenant, channels, scheduler, API keys, billing (5 tabs)
+
+## Web Dashboard (v2.0)
+
+Professional management dashboard at [manageaibrain.com](https://manageaibrain.com), built with NaiveUI + ECharts:
+
+- **Health Gauge** — real-time team health score (red/yellow/green)
+- **Check-in Status Panel** — live submitted/pending/missed with chase count
+- **Submission Trend Chart** — 7-day bar+line dual-axis (count + rate%)
+- **Sentiment Heatmap** — employee × sentiment color matrix
+- **Alert Center** — active alerts with severity badges + alert rules
+- **Report Browser** — date-navigable daily summaries with Q&A expand
+- **Settings** — tenant, channels, scheduler, API keys, billing (5 tabs)
+
 ## Cloud Platform (Optional)
 
 Connect to manageaibrain.com for additional features:
 
-- Web dashboard and analytics
+- Web dashboard with ECharts analytics
 - Full mentor configs for all 16 mentors
 - AI C-Suite virtual board discussions
 - Cross-team benchmarking
@@ -156,6 +181,7 @@ Boss AI Agent 是老板的 AI 管理中间件。通过 OpenClaw 连接已有的�
 - 6 位 AI C-Suite 高管 — CEO/CFO/CMO/CTO/CHRO/COO 虚拟董事会
 - 9 套文化包 — 适配菲律宾、新加坡、中国、美国、印度等文化差异
 - 多客户端 — Claude Code (stdio) + ChatGPT/Gemini (MCP HTTP)
+- 全新管理台 (v2.0) — NaiveUI + ECharts 仪表盘，健康仪表、提交趋势、情绪热力图、预警中心
 
 **数据安全：** 所有场景无需云端即可运行。可选的 API Key 仅从云端拉取导师配置和分析数据，不会上传任何本地数据（消息、文件、记忆）。外部服务（GitHub/Jira/Notion）的访问通过 OpenClaw 已有的集成，本技能不存储或管理任何外部服务令牌。
 

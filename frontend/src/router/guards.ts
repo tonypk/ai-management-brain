@@ -7,7 +7,11 @@ export function authGuard(
   next: NavigationGuardNext,
 ): void {
   if (to.meta.requiresAuth && !hasToken()) {
-    next({ name: 'Login', query: { redirect: to.fullPath } })
+    if (to.path === '/') {
+      next({ name: 'Landing' })
+    } else {
+      next({ name: 'Login', query: { redirect: to.fullPath } })
+    }
   } else {
     next()
   }
