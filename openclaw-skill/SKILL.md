@@ -81,7 +81,7 @@ No network communication. All mentor knowledge is embedded in this skill file.
 
 **Important — persistent behavior** (Team Operations Mode only): This mode registers up to 5 cron jobs that run autonomously. Combined with 4 write tools that can send messages to employees, misconfiguration could result in unintended messages. Review cron schedules in `config.json` before activating. Use `cron list` to audit and `cron remove` to disable.
 
-## Cron Job Management
+### Cron Job Management
 
 The skill registers up to 5 recurring cron jobs during first run:
 
@@ -103,9 +103,9 @@ The skill registers up to 5 recurring cron jobs during first run:
 
 **Schedules are user-editable**: modify `schedule` in `config.json` and re-run `/boss-ai-agent` to update cron registrations. All cron expressions follow standard 5-field format.
 
-## MCP Tools
+### MCP Tools
 
-All backend operations use 13 MCP tools. Use these directly — no manual API calls needed.
+All backend operations use 13 MCP tools (Team Operations Mode only). Use these directly — no manual API calls needed.
 
 ### Read Tools (query only)
 
@@ -264,7 +264,11 @@ Apply the relevant culture pack rules (directness, hierarchy, key rules) to gene
 
 User: "Switch to Inamori" → update `config.json` mentor field and apply new framework immediately. No MCP tool needed.
 
-## 7 Scenarios
+## Team Operations Mode
+
+In Team Operations Mode (MCP tools detected), you have access to all Advisor Mode capabilities PLUS 13 MCP tools, 5 cron jobs, and persistent data storage. The sections below (Cron Job Management, MCP Tools, Scenarios) only apply in this mode.
+
+### 7 Automated Scenarios
 
 | # | Scenario | Trigger | What happens |
 |---|----------|---------|-------------|
@@ -323,7 +327,9 @@ Use MCP tools to power these scenarios. Read tools (`get_team_status`, `get_repo
 | meyer | Erin Meyer (艾琳·梅耶尔) | cross-cultural, communication, culture-map |
 | trout | Jack Trout (杰克·特劳特) | positioning, branding, strategy, marketing |
 
-Use `list_mentors` for full configs. Use `switch_mentor` to change.
+**Advisor Mode**: Say "switch to [mentor]" to change — updates `config.json` directly.
+
+**Team Operations Mode**: Use `list_mentors` for full configs. Use `switch_mentor` to change (persists on server, affects cron behavior).
 
 ### Mentor Blending
 
@@ -349,7 +355,7 @@ When `config.mentorBlend` is set (e.g. `{"secondary": "inamori", "weight": 70}`)
 
 ## AI C-Suite Board
 
-Use `board_discuss` to convene 6 AI executives on any strategic topic:
+6 AI executives for strategic analysis:
 
 | Seat | Domain |
 |------|--------|
@@ -360,11 +366,13 @@ Use `board_discuss` to convene 6 AI executives on any strategic topic:
 | CHRO | People, culture, talent management |
 | COO | Operations, process, efficiency |
 
-Use `chat_with_seat` for direct questions to individual executives.
+**Advisor Mode**: Simulate all 6 perspectives in conversation (stateless, no history across sessions). Synthesize based on active mentor's priorities.
+
+**Team Operations Mode**: Use `board_discuss` for persistent discussion history stored on server, enriched with actual team data. Use `chat_with_seat` for direct questions to individual executives.
 
 ## Links
 
 - Website: https://manageaibrain.com
-- MCP Server: `https://manageaibrain.com/mcp` — cloud-hosted MCP endpoint where all 13 tools are processed. Claude Code connects via stdio; ChatGPT/Gemini connect via MCP HTTP to this URL.
+- MCP Server (Team Operations Mode): `https://manageaibrain.com/mcp` — cloud-hosted MCP endpoint where all 13 tools are processed. Claude Code connects via stdio; ChatGPT/Gemini connect via MCP HTTP to this URL.
 - GitHub: https://github.com/tonypk/ai-management-brain
 - ClawHub: https://clawhub.ai/tonypk/boss-ai-agent
