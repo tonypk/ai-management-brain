@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -300,13 +301,18 @@ func (a *DBAdapter) GetEmployeeByTelegramID(ctx context.Context, telegramID int6
 // --- helpers ---
 
 func sqlcTenantToBot(t sqlc.Tenant) *Tenant {
+	var onboardingAt *time.Time
+	if t.OnboardingCompletedAt.Valid {
+		onboardingAt = &t.OnboardingCompletedAt.Time
+	}
 	return &Tenant{
-		ID:          formatUUID(t.ID),
-		Name:        t.Name,
-		BossChatID:  t.BossChatID,
-		MentorID:    t.MentorID,
-		MentorBlend: t.MentorBlend,
-		Timezone:    t.Timezone,
+		ID:                    formatUUID(t.ID),
+		Name:                  t.Name,
+		BossChatID:            t.BossChatID,
+		MentorID:              t.MentorID,
+		MentorBlend:           t.MentorBlend,
+		Timezone:              t.Timezone,
+		OnboardingCompletedAt: onboardingAt,
 	}
 }
 

@@ -28,6 +28,11 @@ type BotContext interface {
 	Reply(msg string) error
 }
 
+// OnboardingHandler defines the onboarding service interface for bot routing.
+type OnboardingHandler interface {
+	HandleMessage(ctx context.Context, tenantID string, channelType, userID, text string) (string, error)
+}
+
 // GroupQuerier defines DB operations for group chat management.
 type GroupQuerier interface {
 	CreateGroupChat(ctx context.Context, tenantID, platform, platformChatID, name, groupType string) (GroupChat, error)
@@ -89,8 +94,9 @@ type EmployeeProfile struct {
 // CommandHandler handles bot commands.
 type CommandHandler struct {
 	db             CommandQuerier
-	groupDB        GroupQuerier    // nil = group features disabled
-	seatSvc        SeatServicer   // nil = C-Suite features disabled
+	groupDB        GroupQuerier      // nil = group features disabled
+	seatSvc        SeatServicer     // nil = C-Suite features disabled
+	onboarding     OnboardingHandler // nil = onboarding routing disabled
 	bossChatID     int64
 	DiagnosticsFn  func() string // set externally to provide diagnostics info
 }
@@ -105,6 +111,11 @@ func (h *CommandHandler) SetSeatService(svc SeatServicer) {
 	h.seatSvc = svc
 }
 
+// SetOnboardingService injects the onboarding service for chat-native onboarding.
+func (h *CommandHandler) SetOnboardingService(svc OnboardingHandler) {
+	h.onboarding = svc
+}
+
 // NewCommandHandler creates a new CommandHandler. The second and third arguments
 // are reserved for future dependencies (e.g. brain engine, claude client) and
 // are ignored for now.
@@ -113,6 +124,7 @@ func NewCommandHandler(db CommandQuerier, _ interface{}, _ interface{}, bossChat
 }
 
 // HandleStart initialises the boss's team. If no tenant exists it is created automatically.
+// If onboarding is enabled and not yet completed, delegates to the onboarding service.
 func (h *CommandHandler) HandleStart(c BotContext) error {
 	if c.SenderID() != h.bossChatID {
 		return c.Send("Please contact your manager for access. Use /join <code> if you have an invite code.")
@@ -136,6 +148,19 @@ func (h *CommandHandler) HandleStart(c BotContext) error {
 		slog.Info("tenant auto-created", "tenant_id", tenant.ID)
 	}
 
+	// If onboarding service is set and onboarding not complete, delegate
+	if h.onboarding != nil && tenant.OnboardingCompletedAt == nil {
+		resp, err := h.onboarding.HandleMessage(
+			context.Background(), tenant.ID,
+			"telegram", strconv.FormatInt(c.SenderID(), 10), "/start")
+		if err != nil {
+			slog.Error("onboarding HandleMessage failed", "error", err)
+			return c.Send("Something went wrong starting onboarding. Please try again.")
+		}
+		return c.Send(resp)
+	}
+
+	// Original welcome for already-onboarded tenants
 	return c.Send(fmt.Sprintf(
 		"Welcome to AI Management Brain!\n\nYour team '%s' is set up.\n\nUse:\n/addemployee name | job | resp | country | lang — Add team member\n/status — View team status\n/mentor <id> — Switch mentor\n/help — Show all commands",
 		tenant.Name,

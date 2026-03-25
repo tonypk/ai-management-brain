@@ -27,6 +27,7 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
 	"github.com/tonypk/ai-management-brain/internal/events"
 	"github.com/tonypk/ai-management-brain/internal/memory"
+	"github.com/tonypk/ai-management-brain/internal/onboarding"
 	"github.com/tonypk/ai-management-brain/internal/report"
 	"github.com/tonypk/ai-management-brain/internal/roles"
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
@@ -249,6 +250,19 @@ func (a *seatServiceAdapter) BoardDiscuss(ctx context.Context, tenantID, culture
 		}
 	}
 	return result, synthesis, nil
+}
+
+// onboardingAdapter bridges onboarding.Service (pgtype.UUID) to bot.OnboardingHandler (string IDs).
+type onboardingAdapter struct {
+	svc *onboarding.Service
+}
+
+func (a *onboardingAdapter) HandleMessage(ctx context.Context, tenantID string, channelType, userID, text string) (string, error) {
+	uid, err := parseUUIDForChat(tenantID)
+	if err != nil {
+		return "", fmt.Errorf("parse tenant ID: %w", err)
+	}
+	return a.svc.HandleMessage(ctx, uid, channelType, userID, text)
 }
 
 // runMigrations applies database migrations idempotently.
@@ -667,6 +681,7 @@ func main() {
 	var orgWizard *brain.OrgWizard
 	var orgEngine *brain.OrgEngine
 	var chatService *brain.ChatService
+	var onboardingSvc *onboarding.Service
 	if cfg.AnthropicKey != "" {
 		llmClient, err := brain.NewAnthropicClient(cfg.AnthropicKey)
 		if err != nil {
@@ -740,6 +755,17 @@ func main() {
 			Redis:         redisClient,
 		})
 		slog.Info("seat service initialized (C-Suite)")
+	}
+
+	// Onboarding service (requires LLM)
+	if cfg.AnthropicKey != "" {
+		onboardLLM, err := brain.NewAnthropicClient(cfg.AnthropicKey)
+		if err != nil {
+			slog.Error("failed to create onboarding LLM client", "error", err)
+			os.Exit(1)
+		}
+		onboardingSvc = onboarding.NewService(queries, rdb, onboardLLM, onboardLLM, onboardLLM, onboardLLM)
+		slog.Info("onboarding service initialized")
 	}
 
 	// Create report collector with default questions (overridden per-remind)
@@ -832,6 +858,9 @@ func main() {
 	cmdHandler.SetGroupDB(&groupDBAdapter{q: queries})
 	if seatSvc != nil {
 		cmdHandler.SetSeatService(&seatServiceAdapter{svc: seatSvc})
+	}
+	if onboardingSvc != nil {
+		cmdHandler.SetOnboardingService(&onboardingAdapter{svc: onboardingSvc})
 	}
 
 	// Wire diagnostics to show scheduler info + current mentor
@@ -966,6 +995,24 @@ func main() {
 		if senderID == cfg.BossTelegramID {
 			if chatService == nil {
 				return sendReply(brain.AIDisabledMessage())
+			}
+
+			// Onboarding intercept: if not complete, route all messages through onboarding
+			if onboardingSvc != nil {
+				tenant, err := botDB.GetTenantByBossChatID(ctx, senderID)
+				if err == nil && tenant.OnboardingCompletedAt == nil {
+					tgAdapter.Bot().Notify(tele.ChatID(senderID), tele.Typing)
+					uid, pErr := parseUUIDForChat(tenant.ID)
+					if pErr == nil {
+						resp, oErr := onboardingSvc.HandleMessage(ctx, uid, "telegram",
+							strconv.FormatInt(senderID, 10), text)
+						if oErr != nil {
+							slog.Error("onboarding message failed", "error", oErr)
+							return sendReply("Something went wrong. Please try again.")
+						}
+						return sendReply(resp)
+					}
+				}
 			}
 
 			// C-Suite seat routing: if boss has an active seat via /talk, route to seat chat
