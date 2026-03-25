@@ -1288,6 +1288,11 @@ func main() {
 				return fmt.Errorf("get tenant: %w", err)
 			}
 
+			if tenant.OnboardingCompletedAt == nil {
+				slog.Debug("skipping scheduler job for tenant still in onboarding", "tenant_id", tenant.ID)
+				return nil
+			}
+
 			// Get mentor's questions (supports blending)
 			engine, err := engineForTenant(engineFactory, tenant, "default")
 			if err != nil {
@@ -1323,6 +1328,12 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("get tenant: %w", err)
 			}
+
+			if tenant.OnboardingCompletedAt == nil {
+				slog.Debug("skipping scheduler job for tenant still in onboarding", "tenant_id", tenant.ID)
+				return nil
+			}
+
 			today := time.Now().In(loc).Format("2006-01-02")
 			return chaser.ChaseAll(ctx, tenant.ID, today, tenant.MentorID)
 		},
@@ -1332,6 +1343,12 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("get tenant: %w", err)
 			}
+
+			if tenant.OnboardingCompletedAt == nil {
+				slog.Debug("skipping scheduler job for tenant still in onboarding", "tenant_id", tenant.ID)
+				return nil
+			}
+
 			engine, err := engineForTenant(engineFactory, tenant, "default")
 			if err != nil {
 				return fmt.Errorf("load engine for summary: %w", err)
