@@ -24,7 +24,7 @@ Boss AI Agent's capabilities are built on the four pillars of management (Plan â
 | **Organizing** | Org structure design, roles & responsibilities, SOPs, process design | AI designs org tree during onboarding; `org_units` tracks structure; mentor suggests reorgs |
 | **Leading** | Team execution, communication, motivation, culture management | Mentor persona drives all interactions; culture packs adapt per-employee; check-ins motivate |
 | **Controlling** | Data monitoring, deviation correction, retrospectives | Signal scanning, risk alerts, weekly/monthly reports, sentiment tracking |
-| **People Mgmt** | Hiring, training, performance, incentives | Employee profiles, 1:1 prep, performance reports, Maslow/dual-factor awareness in mentor prompts |
+| **People Mgmt** | Hiring, training, performance, incentives | Employee profiles, 1:1 prep, performance reports; motivation theory is embedded in each mentor's persona (e.g., Musk: mission-driven intrinsic motivation; Inamori: altruism + belonging; Dalio: growth through radical transparency) |
 | **Decision Making** | Data-driven decisions, risk assessment, rapid decisions | C-Suite board discussions, data-backed recommendations, structured decision frameworks |
 | **Communication** | Upward (boss), downward (employees), cross-team | Multi-channel messaging, group management, mentor mediates communication |
 | **Strategy** | Positioning, business model, competitive advantage | Onboarding collects strategic context; C-Suite board analyzes strategy; industry insights |
