@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/tonypk/ai-management-brain/internal/brain"
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
@@ -31,198 +30,19 @@ type updatePlanRequest struct {
 
 // --- Handlers ---
 
-// handleStartWizard begins a new wizard conversation.
+// handleStartWizard is deprecated. Use the onboarding flow via Telegram/Slack/Lark instead.
+// Kept as a stub to preserve API routes until frontend migration.
 func handleStartWizard(queries *sqlc.Queries, wizard *brain.OrgWizard) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if wizard == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI features not available"})
-			return
-		}
-
-		var req startWizardRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "mentor_id is required"})
-			return
-		}
-
-		if !brain.ValidMentors[req.MentorID] {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid mentor_id"})
-			return
-		}
-
-		tenantID, err := parseUUID(TenantFromContext(c))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
-			return
-		}
-
-		mentor, err := brain.LoadMentor(req.MentorID)
-		if err != nil {
-			slog.Error("load mentor", "mentor_id", req.MentorID, "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load mentor"})
-			return
-		}
-
-		// Start wizard conversation
-		resp, err := wizard.Start(c.Request.Context(), mentor)
-		if err != nil {
-			slog.Error("wizard start", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start wizard"})
-			return
-		}
-
-		// Save wizard session
-		conversation := []brain.WizardMessage{
-			{Role: "mentor", Content: resp.MentorMessage},
-		}
-		convJSON, _ := json.Marshal(conversation)
-		profileJSON, _ := json.Marshal(map[string]interface{}{})
-
-		// Delete any existing sessions for this tenant
-		_ = queries.DeleteWizardSessions(c.Request.Context(), tenantID)
-
-		session, err := queries.CreateWizardSession(c.Request.Context(), sqlc.CreateWizardSessionParams{
-			TenantID:       tenantID,
-			MentorID:       req.MentorID,
-			CurrentStep:    "collecting",
-			Conversation:   convJSON,
-			CompanyProfile: profileJSON,
-		})
-		if err != nil {
-			slog.Error("create wizard session", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save session"})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"data": gin.H{
-				"session_id": formatUUID(session.ID),
-				"mentor_id":  req.MentorID,
-				"message":    resp.MentorMessage,
-				"is_complete": false,
-			},
-		})
+		c.JSON(http.StatusGone, gin.H{"error": "wizard API is deprecated, use the onboarding flow via bot channels"})
 	}
 }
 
-// handleWizardAnswer processes a user's answer in the wizard flow.
+// handleWizardAnswer is deprecated. Use the onboarding flow via Telegram/Slack/Lark instead.
+// Kept as a stub to preserve API routes until frontend migration.
 func handleWizardAnswer(queries *sqlc.Queries, wizard *brain.OrgWizard) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if wizard == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI features not available"})
-			return
-		}
-
-		var req wizardAnswerRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "answer is required"})
-			return
-		}
-
-		tenantID, err := parseUUID(TenantFromContext(c))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
-			return
-		}
-
-		// Get latest wizard session
-		session, err := queries.GetLatestWizardSession(c.Request.Context(), tenantID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				c.JSON(http.StatusNotFound, gin.H{"error": "no active wizard session, start one first"})
-				return
-			}
-			slog.Error("get wizard session", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-			return
-		}
-
-		// Load mentor
-		mentor, err := brain.LoadMentor(session.MentorID)
-		if err != nil {
-			slog.Error("load mentor", "mentor_id", session.MentorID, "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load mentor"})
-			return
-		}
-
-		// Restore conversation history
-		var history []brain.WizardMessage
-		if err := json.Unmarshal(session.Conversation, &history); err != nil {
-			slog.Error("unmarshal conversation", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-			return
-		}
-
-		// Try to match industry from conversation context
-		industry := matchIndustryFromHistory(history, req.Answer)
-
-		// Process the answer
-		resp, err := wizard.ProcessAnswer(c.Request.Context(), mentor, history, req.Answer, industry)
-		if err != nil {
-			slog.Error("wizard process answer", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process answer"})
-			return
-		}
-
-		// Update conversation history
-		history = append(history, brain.WizardMessage{Role: "user", Content: req.Answer})
-		history = append(history, brain.WizardMessage{Role: "mentor", Content: resp.MentorMessage})
-		convJSON, _ := json.Marshal(history)
-
-		profileJSON := session.CompanyProfile
-		step := "collecting"
-		if resp.IsComplete && resp.Profile != nil {
-			profileJSON, _ = json.Marshal(resp.Profile)
-			step = "complete"
-		}
-
-		// Update session
-		if err := queries.UpdateWizardSession(c.Request.Context(), sqlc.UpdateWizardSessionParams{
-			ID:             session.ID,
-			CurrentStep:    step,
-			Conversation:   convJSON,
-			CompanyProfile: profileJSON,
-		}); err != nil {
-			slog.Error("update wizard session", "error", err)
-		}
-
-		// If plan is generated, save organization
-		if resp.IsComplete && resp.Plan != nil && resp.Profile != nil {
-			planJSON, _ := json.Marshal(resp.Plan)
-
-			// Delete existing org for this tenant (if any) then create new
-			_ = queries.DeleteOrganization(c.Request.Context(), tenantID)
-
-			_, err := queries.CreateOrganization(c.Request.Context(), sqlc.CreateOrganizationParams{
-				TenantID:       tenantID,
-				Industry:       resp.Profile.Industry,
-				Size:           int32(resp.Profile.Size),
-				Stage:          resp.Profile.Stage,
-				BusinessModel:  pgtype.Text{String: resp.Profile.BusinessModel, Valid: resp.Profile.BusinessModel != ""},
-				Region:         pgtype.Text{String: resp.Profile.Region, Valid: resp.Profile.Region != ""},
-				MentorID:       session.MentorID,
-				ManagementPlan: planJSON,
-				Status:         "draft",
-			})
-			if err != nil {
-				slog.Error("create organization", "error", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save organization"})
-				return
-			}
-		}
-
-		result := gin.H{
-			"message":     resp.MentorMessage,
-			"is_complete": resp.IsComplete,
-		}
-		if resp.Plan != nil {
-			result["plan"] = resp.Plan
-		}
-		if resp.Profile != nil {
-			result["profile"] = resp.Profile
-		}
-
-		c.JSON(http.StatusOK, gin.H{"data": result})
+		c.JSON(http.StatusGone, gin.H{"error": "wizard API is deprecated, use the onboarding flow via bot channels"})
 	}
 }
 

@@ -77,6 +77,7 @@ type Employee struct {
 	Responsibilities string             `json:"responsibilities"`
 	Country          string             `json:"country"`
 	Language         string             `json:"language"`
+	OrgUnitID        pgtype.UUID        `json:"org_unit_id"`
 }
 
 type GroupChat struct {
@@ -111,20 +112,54 @@ type Memory struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type OnboardingSession struct {
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	Status        string             `json:"status"`
+	ConfirmStep   int32              `json:"confirm_step"`
+	CollectedData []byte             `json:"collected_data"`
+	ProposedPlan  []byte             `json:"proposed_plan"`
+	MessageCount  int32              `json:"message_count"`
+	ChannelType   string             `json:"channel_type"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type OrgUnit struct {
+	ID               pgtype.UUID        `json:"id"`
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	ParentID         pgtype.UUID        `json:"parent_id"`
+	Name             string             `json:"name"`
+	UnitType         string             `json:"unit_type"`
+	HeadRole         pgtype.Text        `json:"head_role"`
+	HeadEmployeeID   pgtype.UUID        `json:"head_employee_id"`
+	Responsibilities pgtype.Text        `json:"responsibilities"`
+	SortOrder        int32              `json:"sort_order"`
+	IsActive         bool               `json:"is_active"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Organization struct {
-	ID             pgtype.UUID        `json:"id"`
-	TenantID       pgtype.UUID        `json:"tenant_id"`
-	Industry       string             `json:"industry"`
-	Size           int32              `json:"size"`
-	Stage          string             `json:"stage"`
-	BusinessModel  pgtype.Text        `json:"business_model"`
-	Region         pgtype.Text        `json:"region"`
-	MentorID       string             `json:"mentor_id"`
-	ManagementPlan []byte             `json:"management_plan"`
-	PlanVersion    int32              `json:"plan_version"`
-	Status         string             `json:"status"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	Industry             pgtype.Text        `json:"industry"`
+	Size                 pgtype.Int4        `json:"size"`
+	Stage                pgtype.Text        `json:"stage"`
+	BusinessModel        pgtype.Text        `json:"business_model"`
+	Region               pgtype.Text        `json:"region"`
+	MentorID             string             `json:"mentor_id"`
+	ManagementPlan       []byte             `json:"management_plan"`
+	PlanVersion          int32              `json:"plan_version"`
+	Status               string             `json:"status"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	ManagementPainPoints []string           `json:"management_pain_points"`
+	CurrentProjects      []byte             `json:"current_projects"`
+	TargetFramework      pgtype.Text        `json:"target_framework"`
+	TeamStructure        []byte             `json:"team_structure"`
+	CommunicationTools   []string           `json:"communication_tools"`
+	CulturePreferences   []byte             `json:"culture_preferences"`
 }
 
 type Report struct {
@@ -163,23 +198,26 @@ type Summary struct {
 }
 
 type Tenant struct {
-	ID                 pgtype.UUID        `json:"id"`
-	Name               string             `json:"name"`
-	Timezone           string             `json:"timezone"`
-	AnthropicKey       pgtype.Text        `json:"anthropic_key"`
-	MentorID           string             `json:"mentor_id"`
-	MentorBlend        []byte             `json:"mentor_blend"`
-	BotToken           pgtype.Text        `json:"bot_token"`
-	BossChatID         int64              `json:"boss_chat_id"`
-	Config             []byte             `json:"config"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	Plan               string             `json:"plan"`
-	SlackBotToken      pgtype.Text        `json:"slack_bot_token"`
-	SlackSigningSecret pgtype.Text        `json:"slack_signing_secret"`
-	LarkAppID          pgtype.Text        `json:"lark_app_id"`
-	LarkAppSecret      pgtype.Text        `json:"lark_app_secret"`
-	SignalPhone        pgtype.Text        `json:"signal_phone"`
-	EnabledChannels    []string           `json:"enabled_channels"`
+	ID                    pgtype.UUID        `json:"id"`
+	Name                  string             `json:"name"`
+	Timezone              string             `json:"timezone"`
+	AnthropicKey          pgtype.Text        `json:"anthropic_key"`
+	MentorID              string             `json:"mentor_id"`
+	MentorBlend           []byte             `json:"mentor_blend"`
+	BotToken              pgtype.Text        `json:"bot_token"`
+	BossChatID            int64              `json:"boss_chat_id"`
+	Config                []byte             `json:"config"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	Plan                  string             `json:"plan"`
+	SlackBotToken         pgtype.Text        `json:"slack_bot_token"`
+	SlackSigningSecret    pgtype.Text        `json:"slack_signing_secret"`
+	LarkAppID             pgtype.Text        `json:"lark_app_id"`
+	LarkAppSecret         pgtype.Text        `json:"lark_app_secret"`
+	SignalPhone           pgtype.Text        `json:"signal_phone"`
+	EnabledChannels       []string           `json:"enabled_channels"`
+	OnboardingCompletedAt pgtype.Timestamptz `json:"onboarding_completed_at"`
+	BossSlackID           pgtype.Text        `json:"boss_slack_id"`
+	BossLarkID            pgtype.Text        `json:"boss_lark_id"`
 }
 
 type User struct {
@@ -190,15 +228,4 @@ type User struct {
 	Role         string             `json:"role"`
 	IsActive     bool               `json:"is_active"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-}
-
-type WizardSession struct {
-	ID             pgtype.UUID        `json:"id"`
-	TenantID       pgtype.UUID        `json:"tenant_id"`
-	MentorID       string             `json:"mentor_id"`
-	CurrentStep    string             `json:"current_step"`
-	Conversation   []byte             `json:"conversation"`
-	CompanyProfile []byte             `json:"company_profile"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }

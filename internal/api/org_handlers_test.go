@@ -13,7 +13,7 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-func TestHandleStartWizard_NilWizard(t *testing.T) {
+func TestHandleStartWizard_Deprecated(t *testing.T) {
 	r := gin.New()
 	r.POST("/org/wizard/start", func(c *gin.Context) {
 		c.Set("user_id", "test-user")
@@ -28,33 +28,12 @@ func TestHandleStartWizard_NilWizard(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected 503, got %d", w.Code)
+	if w.Code != http.StatusGone {
+		t.Errorf("expected 410, got %d", w.Code)
 	}
 }
 
-func TestHandleStartWizard_MissingMentorID(t *testing.T) {
-	r := gin.New()
-	r.POST("/org/wizard/start", func(c *gin.Context) {
-		c.Set("user_id", "test-user")
-		c.Set("tenant_id", "00000000-0000-0000-0000-000000000001")
-		c.Set("role", "boss")
-		c.Next()
-	}, handleStartWizard(nil, nil))
-
-	w := httptest.NewRecorder()
-	body := strings.NewReader(`{}`)
-	req, _ := http.NewRequest("POST", "/org/wizard/start", body)
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	// nil wizard check comes before validation, so 503
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected 503, got %d", w.Code)
-	}
-}
-
-func TestHandleWizardAnswer_NilWizard(t *testing.T) {
+func TestHandleWizardAnswer_Deprecated(t *testing.T) {
 	r := gin.New()
 	r.POST("/org/wizard/answer", func(c *gin.Context) {
 		c.Set("user_id", "test-user")
@@ -69,8 +48,8 @@ func TestHandleWizardAnswer_NilWizard(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected 503, got %d", w.Code)
+	if w.Code != http.StatusGone {
+		t.Errorf("expected 410, got %d", w.Code)
 	}
 }
 

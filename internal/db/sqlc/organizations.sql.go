@@ -13,14 +13,14 @@ import (
 
 const createOrganization = `-- name: CreateOrganization :one
 INSERT INTO organizations (tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, plan_version, status, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, plan_version, status, created_at, updated_at, management_pain_points, current_projects, target_framework, team_structure, communication_tools, culture_preferences
 `
 
 type CreateOrganizationParams struct {
 	TenantID       pgtype.UUID `json:"tenant_id"`
-	Industry       string      `json:"industry"`
-	Size           int32       `json:"size"`
-	Stage          string      `json:"stage"`
+	Industry       pgtype.Text `json:"industry"`
+	Size           pgtype.Int4 `json:"size"`
+	Stage          pgtype.Text `json:"stage"`
 	BusinessModel  pgtype.Text `json:"business_model"`
 	Region         pgtype.Text `json:"region"`
 	MentorID       string      `json:"mentor_id"`
@@ -55,6 +55,12 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ManagementPainPoints,
+		&i.CurrentProjects,
+		&i.TargetFramework,
+		&i.TeamStructure,
+		&i.CommunicationTools,
+		&i.CulturePreferences,
 	)
 	return i, err
 }
@@ -69,7 +75,7 @@ func (q *Queries) DeleteOrganization(ctx context.Context, tenantID pgtype.UUID) 
 }
 
 const getOrganizationByTenant = `-- name: GetOrganizationByTenant :one
-SELECT id, tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, plan_version, status, created_at, updated_at FROM organizations WHERE tenant_id = $1
+SELECT id, tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, plan_version, status, created_at, updated_at, management_pain_points, current_projects, target_framework, team_structure, communication_tools, culture_preferences FROM organizations WHERE tenant_id = $1
 `
 
 func (q *Queries) GetOrganizationByTenant(ctx context.Context, tenantID pgtype.UUID) (Organization, error) {
@@ -89,6 +95,12 @@ func (q *Queries) GetOrganizationByTenant(ctx context.Context, tenantID pgtype.U
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ManagementPainPoints,
+		&i.CurrentProjects,
+		&i.TargetFramework,
+		&i.TeamStructure,
+		&i.CommunicationTools,
+		&i.CulturePreferences,
 	)
 	return i, err
 }
