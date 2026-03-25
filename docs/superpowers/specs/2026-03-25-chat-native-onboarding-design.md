@@ -24,17 +24,26 @@ Phase 1 (this spec): Onboarding flow only. Group mentor enhancements are designe
 
 ### Trigger
 
-Boss sends first message (or `/start`) to the bot via any channel (Telegram/Lark/Slack). If the tenant has no completed onboarding (`onboarding_sessions.status != 'active'`), the bot enters guided dialogue mode.
+Boss sends first message (or `/start`) to the bot via any channel (Telegram/Lark/Slack). If the tenant has no completed onboarding (`onboarding_sessions.status != 'active'` or no session exists), the bot enters guided dialogue mode.
+
+### `/start` Interception
+
+The current `HandleStart` in `internal/bot/commands.go` auto-creates a tenant and returns a fixed welcome message. This must be changed:
+
+1. `CommandHandler` receives `OnboardingService` as an injected dependency
+2. `HandleStart` still auto-creates the tenant (needed for FK references), but instead of returning a welcome message, it calls `OnboardingService.HandleMessage(ctx, tenantID, channelType, userID, "/start")` to begin the onboarding dialogue
+3. The auto-created tenant gets `onboarding_completed_at = NULL` to indicate onboarding is pending
+4. All subsequent boss messages are routed to `OnboardingService` until onboarding completes
 
 ### State Machine
 
 ```
-idle → onboarding → configuring → confirming → active
+(no session) → onboarding → configuring → confirming → active
 ```
 
 | State | Description |
 |-------|-------------|
-| `idle` | Not started |
+| (no session) | No `onboarding_sessions` row — first `/start` creates one |
 | `onboarding` | AI-guided dialogue collecting information (multi-turn) |
 | `configuring` | Collection complete, AI generating management plan |
 | `confirming` | Presenting plan to boss step by step (3 steps) |
@@ -42,19 +51,30 @@ idle → onboarding → configuring → confirming → active
 
 ### Dialogue Storage
 
-| Store | Key | TTL | Purpose |
-|-------|-----|-----|---------|
+| Store | Key/Table | TTL | Purpose |
+|-------|-----------|-----|---------|
 | Redis | `onboarding:chat:{tenantID}` | 7 days | Conversation history (LLM context) |
-| Redis | `onboarding:extracted:{tenantID}` | 7 days | Extracted structured info cache |
+| PostgreSQL | `onboarding_sessions.collected_data` | Permanent | Extracted structured info (source of truth) |
 | PostgreSQL | `onboarding_sessions` | Permanent | Session state, collected data, proposed plan |
 
 7-day TTL allows the boss to complete onboarding across multiple sessions.
+
+**Redis cache miss handling**: If `onboarding:chat:{tenantID}` expires (boss returns after 7+ days), the system rebuilds a summary context from `onboarding_sessions.collected_data` and continues. The boss does not need to start over — AI acknowledges the gap: "Welcome back! Based on our previous conversation, here's what I know so far: [summary]. Let me continue from where we left off."
 
 ### Turn Limits
 
 - AI proactively wraps up around turn 15
 - Hard cap at 20 turns — forces transition to summary
 - `onboarding_sessions.message_count` tracks progress
+- **Incomplete required fields at turn 20**: AI summarizes what it has, explicitly lists missing fields, and asks the boss to fill them in directly (e.g., "I still need to know your industry. Could you tell me?"). The system stays in `onboarding` state with a 5-turn grace period.
+
+### Concurrency Control
+
+A Redis processing lock prevents concurrent LLM calls from racing:
+- Key: `onboarding:lock:{tenantID}`, TTL: 60s
+- Before processing, acquire lock with `SET NX EX 60`
+- If lock exists, reply: "I'm still thinking about your last message, one moment..."
+- Release lock in a deferred call (`defer redis.Del(ctx, lockKey)`) so it executes regardless of panics or early returns
 
 ### LLM System Prompt Design
 
@@ -62,7 +82,7 @@ AI plays a "management consultant" role. The prompt includes:
 
 - Role definition: experienced management consultant conducting an initial assessment
 - Collection targets with required/optional flags (see table below)
-- Already-collected information (injected dynamically each turn)
+- Already-collected information (injected dynamically each turn from `onboarding_sessions.collected_data`)
 - Missing required items (so AI knows what to steer toward)
 - Instructions to be conversational, not interrogative — follow up on interesting points, ask one thing at a time
 
@@ -82,7 +102,7 @@ AI plays a "management consultant" role. The prompt includes:
 
 ### Information Extraction
 
-After each dialogue turn, a lightweight LLM call (Haiku-class) extracts newly revealed structured information and updates `onboarding_sessions.collected_data`. This is separate from the main dialogue LLM call to keep extraction reliable and cost-efficient.
+After each dialogue turn, a lightweight LLM call (Haiku-class) extracts newly revealed structured information and updates `onboarding_sessions.collected_data` in PostgreSQL (source of truth). Redis `onboarding:extracted:{tenantID}` is removed — the database is the single source.
 
 When all required fields are covered, the main dialogue LLM is prompted to wrap up: "I think I have a good picture now. Let me put together a management plan for you."
 
@@ -93,6 +113,63 @@ When all required fields are covered, the main dialogue LLM is prompted to wrap 
 ### Plan Generation
 
 When collection completes, AI transitions to `configuring` state. A single LLM call with all collected context generates a complete management plan as structured JSON, stored in `onboarding_sessions.proposed_plan`.
+
+**Plan validation**: The LLM output is unmarshaled into a typed `ProposedPlan` Go struct and validated before storage. If the JSON is malformed, the system retries up to 2 times with clarifying instructions. If all retries fail, the system tells the boss: "I'm having trouble putting together the plan. Let me try again." and resets to `configuring` state.
+
+```go
+type ProposedPlan struct {
+    Mentor      MentorPlan      `json:"mentor"`
+    Board       []SeatPlan      `json:"board"`
+    Policies    PolicyPlan      `json:"policies"`
+    Schedule    SchedulePlan    `json:"schedule"`
+    Reasoning   string          `json:"reasoning"`
+}
+
+type MentorPlan struct {
+    PrimaryID   string  `json:"primary_id"`
+    SecondaryID string  `json:"secondary_id,omitempty"`
+    BlendWeight float64 `json:"blend_weight,omitempty"`
+    Reasoning   string  `json:"reasoning"`
+}
+
+type SeatPlan struct {
+    SeatType  string `json:"seat_type"`
+    PersonaID string `json:"persona_id"`
+    Reasoning string `json:"reasoning"`
+}
+
+type PolicyPlan struct {
+    Framework        string   `json:"framework"`        // okr/kpi/scrum/mbo/bsc
+    CheckinQuestions []string `json:"checkin_questions"`
+    TrackingFocus    []string `json:"tracking_focus"`
+    RiskRules        RiskRules `json:"risk_rules"`
+    Cadence          Cadence   `json:"cadence"`
+    Reasoning        string   `json:"reasoning"`
+}
+
+type RiskRules struct {
+    ConsecutiveMisses      int     `json:"consecutive_misses"`       // alert after N missed check-ins
+    SentimentDropThreshold float64 `json:"sentiment_drop_threshold"` // alert on sentiment drop > threshold
+    UrgentKeywords         []string `json:"urgent_keywords"`         // keywords triggering immediate alert
+}
+
+type Cadence struct {
+    DailyActions   []string `json:"daily_actions"`    // e.g., ["checkin", "chase", "summary"]
+    WeeklyActions  []string `json:"weekly_actions"`   // e.g., ["review", "1on1_prep"]
+    WeeklyDay      string   `json:"weekly_day"`       // e.g., "friday"
+    MonthlyActions []string `json:"monthly_actions"`  // e.g., ["performance_review", "okr_check"]
+    MonthlyDay     int      `json:"monthly_day"`      // e.g., 1 (1st of month)
+}
+
+type SchedulePlan struct {
+    Checkin    string `json:"checkin"`     // cron expression, e.g., "0 9 * * 1-5"
+    Chase      string `json:"chase"`       // cron expression
+    Summary    string `json:"summary"`     // cron expression
+    Briefing   string `json:"briefing"`    // cron expression
+    SignalScan string `json:"signal_scan"` // cron expression
+    Timezone   string `json:"timezone"`    // e.g., "Asia/Manila"
+}
+```
 
 ### Three Confirmation Steps
 
@@ -126,11 +203,17 @@ Boss can: confirm or modify each item
 
 ### Data Writes Per Step
 
-| Step | Database writes |
-|------|----------------|
-| Step 1 confirmed | `tenants.mentor_id`, `tenants.mentor_blend`, `seats` table |
-| Step 2 confirmed | `organizations.management_plan` (JSONB) |
-| Step 3 confirmed | Register scheduler jobs, set `onboarding_sessions.status = 'active'`, set `tenants.onboarding_completed_at` |
+All writes within a step use a single database transaction.
+
+| Step | Database writes (single transaction) |
+|------|--------------------------------------|
+| Step 1 confirmed | `tenants.mentor_id`, `tenants.mentor_blend`, `seats` table, `onboarding_sessions.confirm_step = 1` |
+| Step 2 confirmed | `organizations.management_plan` (JSONB — full policy plan), `onboarding_sessions.confirm_step = 2` |
+| Step 3 confirmed | `tenants.onboarding_completed_at = now()`, `onboarding_sessions.status = 'active'`, `onboarding_sessions.confirm_step = 3` |
+
+**Scheduler registration (Step 3)**: The existing scheduler jobs (remind, chase, summary, etc.) already run globally at startup via gocron. They read per-tenant config from the database at execution time. No dynamic per-tenant job registration is needed. Step 3 writes the tenant's schedule config to `organizations.management_plan.schedule`, and the existing jobs pick it up on their next run. This is consistent with the current architecture.
+
+**Scheduler guard**: All scheduler callbacks must skip tenants with `onboarding_completed_at = NULL` to avoid sending check-ins to tenants still in onboarding (no employees yet, mentor not confirmed). Add an early return check: `if tenant.OnboardingCompletedAt == nil { return }`.
 
 ### Post-Onboarding Modifications
 
@@ -138,9 +221,18 @@ Boss can modify settings anytime via chat:
 
 - "I want to switch mentors" → single-item modification flow
 - "Change check-in time to 10am" → update schedule
-- "Re-do onboarding" → reset `onboarding_sessions.status` to `idle`
+- "Re-do onboarding" → reset: clear `onboarding_sessions` (status, collected_data, proposed_plan, message_count, confirm_step all reset), delete Redis chat history, keep tenant and organizations rows intact
 
 No need to re-run full onboarding. AI recognizes intent and walks through the specific change.
+
+### Relationship with OrgWizard
+
+The existing `OrgWizard` (API-only, used via frontend dashboard) is a separate entry point that also writes to `organizations.management_plan`. After this change:
+
+- **OrgWizard**: remains available via API/dashboard for users who prefer the web interface
+- **OnboardingService**: the chat-native path that achieves the same result via dialogue
+- Both write to the same `organizations.management_plan` field — last write wins
+- `wizard_sessions` table is deprecated and dropped in migration 000011 (see Migration Plan below). OrgWizard will use `onboarding_sessions` going forward, or be refactored separately if needed.
 
 ---
 
@@ -148,7 +240,7 @@ No need to re-run full onboarding. AI recognizes intent and walks through the sp
 
 ### Existing Table Extensions
 
-**`organizations` table** (add fields):
+**`organizations` table** (add fields, all nullable to support incremental collection):
 
 | New Field | Type | Description |
 |-----------|------|-------------|
@@ -158,62 +250,119 @@ No need to re-run full onboarding. AI recognizes intent and walks through the sp
 | `team_structure` | JSONB | Team structure (departments, role distribution) |
 | `communication_tools` | TEXT[] | Communication tools in use |
 | `culture_preferences` | JSONB | Culture preferences (country distribution, comm style) |
-| `onboarding_status` | VARCHAR(20) | idle/onboarding/configuring/confirming/active |
+
+Note: `onboarding_status` is NOT added to `organizations`. The `onboarding_sessions` table is the sole source of truth for onboarding state.
+
+Note: Existing `organizations` fields (`industry`, `size`, `stage`) have `NOT NULL` constraints. Migration 000011 relaxes them to nullable with `ALTER COLUMN ... DROP NOT NULL` so the `organizations` row can be created at tenant creation time with empty values, then populated during onboarding.
 
 **`tenants` table** (add fields):
 
 | New Field | Type | Description |
 |-----------|------|-------------|
 | `onboarding_completed_at` | TIMESTAMPTZ | When onboarding completed, NULL = not done |
-| `boss_slack_id` | VARCHAR(50) | Boss's Slack user ID |
-| `boss_lark_id` | VARCHAR(50) | Boss's Lark user ID |
+| `boss_slack_id` | TEXT | Boss's Slack user ID |
+| `boss_lark_id` | TEXT | Boss's Lark user ID |
+
+Note: Using `TEXT` instead of `VARCHAR(50)` for Slack/Lark IDs — Lark open IDs (`ou_xxx`) can exceed 50 chars in some regions. No performance difference in PostgreSQL.
 
 ### New Table: `onboarding_sessions`
+
+Replaces the deprecated `wizard_sessions` table.
 
 ```sql
 CREATE TABLE onboarding_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL UNIQUE REFERENCES tenants(id),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
     status VARCHAR(20) NOT NULL DEFAULT 'onboarding',
     confirm_step INT NOT NULL DEFAULT 0,
     collected_data JSONB NOT NULL DEFAULT '{}',
     proposed_plan JSONB NOT NULL DEFAULT '{}',
     message_count INT NOT NULL DEFAULT 0,
+    channel_type VARCHAR(20) NOT NULL DEFAULT 'telegram',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX idx_onboarding_sessions_tenant
+    ON onboarding_sessions(tenant_id);
 ```
 
 - `status`: onboarding / configuring / confirming / active
-- `confirm_step`: 0 = not started, 1 = mentor confirming, 2 = policies confirming, 3 = plan confirming
-- `collected_data`: structured info extracted from dialogue (updated in real-time)
-- `proposed_plan`: AI-generated management plan (pending confirmation)
+- `confirm_step`: 0 = not started, 1 = mentor confirmed, 2 = policies confirmed, 3 = plan confirmed
+- `collected_data`: structured info extracted from dialogue (updated in real-time, source of truth)
+- `proposed_plan`: AI-generated management plan (pending confirmation), typed as `ProposedPlan`
 - `message_count`: dialogue turn counter
-- `UNIQUE(tenant_id)`: one active onboarding per tenant
+- `channel_type`: which channel the onboarding was initiated on (updated on each message if boss switches channels)
+- `UNIQUE(tenant_id)`: one active onboarding per tenant (explicit index, following codebase convention)
 
 ### Redis Keys
 
 | Key | Purpose | TTL |
 |-----|---------|-----|
 | `onboarding:chat:{tenantID}` | Dialogue history (LLM context) | 7 days |
-| `onboarding:extracted:{tenantID}` | Extracted structured info cache | 7 days |
+| `onboarding:lock:{tenantID}` | Per-turn processing lock | 60s |
 
 ---
 
 ## 4. Dialogue Routing & Multi-Channel Unification
 
+### Boss Identity Resolution
+
+Current: only `tenants.boss_chat_id` (Telegram ID), checked in `main.go` with `if senderID == cfg.BossTelegramID`.
+
+After: a new `ResolveBoss` function handles all channels:
+
+```go
+// internal/channel/boss_resolve.go (new file — separate from outbound resolve.go)
+func ResolveBoss(ctx context.Context, db *sqlc.Queries, channelType channel.Type, userID string) (*sqlc.Tenant, error)
+```
+
+| Channel | Query |
+|---------|-------|
+| Telegram | `GetTenantByBossChatID(telegramID int64)` (existing) |
+| Slack | `GetTenantByBossSlackID(slackID string)` (new) |
+| Lark | `GetTenantByBossLarkID(larkID string)` (new) |
+
 ### Unified Routing Logic
 
+**Telegram** (`main.go` raw text handler — modified):
+
 ```
-Message arrives (any channel)
-  → IdentityResolver: identify sender (boss / employee / unknown)
-  → If boss:
-      → Check onboarding_sessions.status
-      → idle / onboarding / configuring / confirming → route to OnboardingService
-      → active → existing routing (seat chat / mentor chat)
-  → If employee:
-      → existing routing (check-in / mentor chat)
+Message arrives
+  → if senderID == bossChatID:
+      → tenant = GetTenantByBossChatID(senderID)
+      → session = GetOnboardingSession(tenant.ID)
+      → if session == nil OR session.Status != 'active':
+          → response = OnboardingService.HandleMessage(ctx, tenant.ID, "telegram", senderID, text)
+          → c.Send(response)
+          → return
+      → (existing routing: seat chat / mentor chat)
+  → (existing employee routing)
 ```
+
+**Non-Telegram** (`internal/channel/message_handler.go` — modified):
+
+```go
+func (h *UnifiedHandler) HandleMessage(ctx context.Context, msg Message) error {
+    // 1. Try boss resolution FIRST
+    tenant, err := channel.ResolveBoss(ctx, h.db, msg.ChannelType, msg.UserID)
+    if err == nil && tenant != nil {
+        session, _ := h.db.GetOnboardingSession(ctx, tenant.ID)
+        if session == nil || session.Status != "active" {
+            response, _ := h.onboarding.HandleMessage(ctx, tenant.ID, msg.ChannelType, msg.UserID, msg.Text)
+            return h.router.Send(ctx, msg.ChannelType, msg.UserID, response)
+        }
+        // boss with completed onboarding — route to existing boss handlers
+        return h.handleBossMessage(ctx, tenant, msg)
+    }
+
+    // 2. Fall through to employee resolution (existing logic)
+    emp, err := h.resolveEmployee(ctx, msg.ChannelType, msg.UserID)
+    ...
+}
+```
+
+Key change: `UnifiedHandler` gets `OnboardingService` injected, and boss resolution is attempted BEFORE employee resolution. This ensures Slack/Lark boss messages are never silently dropped.
 
 ### OnboardingService (New Module)
 
@@ -222,7 +371,7 @@ internal/onboarding/
   service.go      -- Main logic: receive message → check state → dispatch
   prompt.go       -- System prompt construction (consultant role + targets + collected info)
   extractor.go    -- Extract structured info from dialogue (lightweight LLM call)
-  planner.go      -- Generate management plan from collected info
+  planner.go      -- Generate management plan from collected info, validate ProposedPlan struct
   confirmer.go    -- Manage 3-step confirmation flow
 ```
 
@@ -234,27 +383,22 @@ type OnboardingService struct {
     redis     *redis.Client
     llm       LLMClient
     engine    *brain.EngineFactory
-    scheduler *scheduler.Scheduler
+    mentors   *brain.MentorLoader
 }
 
 // HandleMessage processes a boss message during onboarding.
+// channelType and userID are passed for context but not used for sending.
 // Returns response text — caller sends via the appropriate channel.
-func (s *OnboardingService) HandleMessage(ctx context.Context, tenantID uuid.UUID, text string) (string, error)
+func (s *OnboardingService) HandleMessage(
+    ctx context.Context,
+    tenantID uuid.UUID,
+    channelType string,
+    userID string,
+    text string,
+) (string, error)
 ```
 
-OnboardingService returns text only. The caller (channel adapter) is responsible for sending via the correct channel. This keeps all onboarding logic channel-agnostic.
-
-### Boss Identity Expansion
-
-Current: only `tenants.boss_chat_id` (Telegram ID).
-
-After: IdentityResolver checks by channel type:
-
-| Channel | Field |
-|---------|-------|
-| Telegram | `boss_chat_id` |
-| Slack | `boss_slack_id` |
-| Lark | `boss_lark_id` |
+OnboardingService returns text only. The caller (channel adapter or main.go) is responsible for sending via the correct channel. This keeps all onboarding logic channel-agnostic.
 
 ---
 
@@ -290,7 +434,7 @@ After: IdentityResolver checks by channel type:
 
 ### Group Type Expansion
 
-Extend `group_chats.group_type`:
+The existing `group_chats.group_type VARCHAR(50)` already supports free-text values. No schema change needed — this is application-level semantics:
 
 | Type | Description | Mentor behavior difference |
 |------|-------------|---------------------------|
@@ -302,13 +446,83 @@ Boss specifies group type during onboarding or later setup.
 
 ---
 
-## Migration Plan
+## 6. Migration Plan
 
-### New Migration: `000011_onboarding.up.sql`
+### Migration: `000011_onboarding.up.sql`
 
-1. Create `onboarding_sessions` table
-2. Add fields to `organizations`: `management_pain_points`, `current_projects`, `target_framework`, `team_structure`, `communication_tools`, `culture_preferences`, `onboarding_status`
-3. Add fields to `tenants`: `onboarding_completed_at`, `boss_slack_id`, `boss_lark_id`
+```sql
+-- 1. Drop deprecated wizard_sessions table
+DROP TABLE IF EXISTS wizard_sessions;
+
+-- 2. Create onboarding_sessions table
+CREATE TABLE onboarding_sessions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID NOT NULL REFERENCES tenants(id),
+    status          VARCHAR(20) NOT NULL DEFAULT 'onboarding',
+    confirm_step    INT NOT NULL DEFAULT 0,
+    collected_data  JSONB NOT NULL DEFAULT '{}',
+    proposed_plan   JSONB NOT NULL DEFAULT '{}',
+    message_count   INT NOT NULL DEFAULT 0,
+    channel_type    VARCHAR(20) NOT NULL DEFAULT 'telegram',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX idx_onboarding_sessions_tenant ON onboarding_sessions(tenant_id);
+
+-- 3. Extend organizations table (all new fields nullable)
+ALTER TABLE organizations ALTER COLUMN industry DROP NOT NULL;
+ALTER TABLE organizations ALTER COLUMN size DROP NOT NULL;
+ALTER TABLE organizations ALTER COLUMN stage DROP NOT NULL;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS management_pain_points TEXT[];
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS current_projects JSONB;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS target_framework VARCHAR(50);
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS team_structure JSONB;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS communication_tools TEXT[];
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS culture_preferences JSONB;
+
+-- 4. Extend tenants table
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS boss_slack_id TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS boss_lark_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_tenants_boss_slack ON tenants(boss_slack_id) WHERE boss_slack_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tenants_boss_lark ON tenants(boss_lark_id) WHERE boss_lark_id IS NOT NULL;
+```
+
+### Migration: `000011_onboarding.down.sql`
+
+```sql
+-- Note: wizard_sessions data is not recoverable after drop.
+-- Recreate empty table for rollback compatibility.
+CREATE TABLE IF NOT EXISTS wizard_sessions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID NOT NULL REFERENCES tenants(id),
+    mentor_id       TEXT NOT NULL,
+    current_step    TEXT NOT NULL DEFAULT 'start',
+    conversation    JSONB NOT NULL DEFAULT '[]',
+    company_profile JSONB NOT NULL DEFAULT '{}',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+DROP TABLE IF EXISTS onboarding_sessions;
+
+ALTER TABLE organizations DROP COLUMN IF EXISTS management_pain_points;
+ALTER TABLE organizations DROP COLUMN IF EXISTS current_projects;
+ALTER TABLE organizations DROP COLUMN IF EXISTS target_framework;
+ALTER TABLE organizations DROP COLUMN IF EXISTS team_structure;
+ALTER TABLE organizations DROP COLUMN IF EXISTS communication_tools;
+ALTER TABLE organizations DROP COLUMN IF EXISTS culture_preferences;
+-- Note: NOT NULL constraints on industry/size/stage are not restored
+-- to avoid breaking existing rows that may have NULL values.
+
+ALTER TABLE tenants DROP COLUMN IF EXISTS onboarding_completed_at;
+ALTER TABLE tenants DROP COLUMN IF EXISTS boss_slack_id;
+ALTER TABLE tenants DROP COLUMN IF EXISTS boss_lark_id;
+```
+
+### Inline Migration Update
+
+Migration 000011 must also be added to the `runMigrations()` function in `cmd/brain/main.go` (the codebase runs migrations from both file-based and inline sources).
 
 ### New sqlc Queries
 
@@ -328,12 +542,12 @@ Boss specifies group type during onboarding or later setup.
 | `internal/onboarding/service.go` | New — OnboardingService main logic |
 | `internal/onboarding/prompt.go` | New — system prompt construction |
 | `internal/onboarding/extractor.go` | New — structured info extraction |
-| `internal/onboarding/planner.go` | New — management plan generation |
+| `internal/onboarding/planner.go` | New — management plan generation + ProposedPlan validation |
 | `internal/onboarding/confirmer.go` | New — 3-step confirmation flow |
-| `sql/migrations/000011_onboarding.up.sql` | New — schema changes |
+| `sql/migrations/000011_onboarding.up.sql` | New — schema changes (drop wizard_sessions, create onboarding_sessions, extend organizations/tenants) |
 | `sql/migrations/000011_onboarding.down.sql` | New — rollback |
 | `sql/queries/onboarding.sql` | New — sqlc queries |
-| `internal/bot/middleware.go` | Modify — expand IdentityResolver for multi-channel boss |
-| `cmd/brain/main.go` | Modify — add onboarding routing before existing routes |
-| `internal/channel/message_handler.go` | Modify — add onboarding routing for non-Telegram channels |
-| `internal/config/config.go` | Modify — no new env vars needed (uses existing DB/Redis/LLM) |
+| `internal/channel/boss_resolve.go` | New — `ResolveBoss(ctx, db, channelType, userID)` for inbound boss identity resolution |
+| `internal/channel/message_handler.go` | Modify — add boss resolution + onboarding routing before employee resolution |
+| `internal/bot/commands.go` | Modify — `HandleStart` delegates to OnboardingService |
+| `cmd/brain/main.go` | Modify — inject OnboardingService, add onboarding routing in raw text handler, add migration 011 to runMigrations() |
