@@ -7,6 +7,7 @@ import EmptyState from '@/components/shared/EmptyState.vue'
 import GoalOverviewStats from '@/components/goals/GoalOverviewStats.vue'
 import GoalCycleSelector from '@/components/goals/GoalCycleSelector.vue'
 import GoalProgressChart from '@/components/goals/GoalProgressChart.vue'
+import GoalDeviationChart from '@/components/goals/GoalDeviationChart.vue'
 import ObjectiveCard from '@/components/goals/ObjectiveCard.vue'
 import ObjectiveFormModal from '@/components/goals/ObjectiveFormModal.vue'
 import { usePlanningStore } from '@/stores/planning'
@@ -79,6 +80,11 @@ async function handleObjectiveSubmit(data: { title: string; description: string;
       <NCard v-if="filteredObjectives.length > 0" :bordered="false" size="small" style="margin-bottom: 20px">
         <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px">Progress Overview</div>
         <GoalProgressChart :objectives="filteredObjectives" />
+      </NCard>
+
+      <NCard v-if="filteredObjectives.length > 0" :bordered="false" size="small" style="margin-bottom: 20px">
+        <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px">Deviation Tracking</div>
+        <GoalDeviationChart :objectives="filteredObjectives" />
       </NCard>
 
       <EmptyState v-if="!store.goalsLoading && filteredObjectives.length === 0" description="No objectives for this cycle" />
