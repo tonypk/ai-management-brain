@@ -1,110 +1,56 @@
-import { createRouter, createWebHashHistory } from "vue-router";
-import { isAuthenticated } from "../composables/api";
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { authGuard } from './guards'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
-    path: "/landing",
-    name: "Landing",
-    component: () => import("../views/LandingView.vue"),
+    path: '/landing',
+    name: 'Landing',
+    component: () => import('@/views/LandingView.vue'),
+    meta: { layout: 'landing' },
   },
   {
-    path: "/login",
-    name: "Login",
-    component: () => import("../views/LoginView.vue"),
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/LoginView.vue'),
+    meta: { layout: 'auth' },
   },
   {
-    path: "/",
-    name: "Dashboard",
-    component: () => import("../views/DashboardView.vue"),
-    meta: { requiresAuth: true },
+    path: '/',
+    meta: { requiresAuth: true, layout: 'app' },
+    children: [
+      {
+        path: '',
+        name: 'Dashboard',
+        component: () => import('@/views/DashboardView.vue'),
+      },
+      {
+        path: 'alerts',
+        name: 'Alerts',
+        component: () => import('@/views/AlertsView.vue'),
+      },
+      {
+        path: 'reports',
+        name: 'Reports',
+        component: () => import('@/views/ReportsView.vue'),
+      },
+      {
+        path: 'settings',
+        name: 'Settings',
+        component: () => import('@/views/SettingsView.vue'),
+      },
+    ],
   },
   {
-    path: "/employees",
-    name: "Employees",
-    component: () => import("../views/EmployeesView.vue"),
-    meta: { requiresAuth: true },
+    path: '/:pathMatch(.*)*',
+    redirect: '/',
   },
-  {
-    path: "/reports",
-    name: "Reports",
-    component: () => import("../views/ReportsView.vue"),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: "/mentor",
-    name: "Mentor",
-    component: () => import("../views/MentorView.vue"),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: "/organization",
-    name: "Organization",
-    component: () => import("../views/OrganizationView.vue"),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: "/ai-roles",
-    name: "AIRoles",
-    component: () => import("../views/AIRolesView.vue"),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: "/seats",
-    name: "Seats",
-    component: () => import("../views/SeatsView.vue"),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: "/admin/channels",
-    name: "AdminChannels",
-    component: () => import("../views/admin/ChannelsView.vue"),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: "/admin/team-channels",
-    name: "AdminTeamChannels",
-    component: () => import("../views/admin/TeamChannelsView.vue"),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: "/admin/reports",
-    name: "AdminReports",
-    component: () => import("../views/admin/ReportsView.vue"),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: "/admin/mentor-scheduler",
-    name: "AdminMentorScheduler",
-    component: () => import("../views/admin/MentorSchedulerView.vue"),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: "/admin/memory",
-    name: "AdminMemory",
-    component: () => import("../views/admin/MemoryView.vue"),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: "/admin/groups",
-    name: "AdminGroups",
-    component: () => import("../views/admin/GroupChatsView.vue"),
-    meta: { requiresAuth: true },
-  },
-];
+]
 
 const router = createRouter({
-  history: createWebHashHistory(),
+  history: createWebHistory(),
   routes,
-});
+})
 
-router.beforeEach((to) => {
-  if (to.meta.requiresAuth && !isAuthenticated()) {
-    // Unauthenticated users hitting Dashboard (root) go to Landing page
-    if (to.name === "Dashboard") {
-      return { name: "Landing" };
-    }
-    return { name: "Login" };
-  }
-});
+router.beforeEach(authGuard)
 
-export default router;
+export default router

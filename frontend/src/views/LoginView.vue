@@ -1,80 +1,145 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { login, register } from '../composables/api'
+import { ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { NCard, NForm, NFormItem, NInput, NButton, NTabs, NTabPane, NAlert, NDivider } from 'naive-ui'
+import { useAuthStore } from '@/stores/auth'
+import { getGoogleClientId } from '@/api/auth'
 
 const router = useRouter()
-const isRegister = ref(false)
+const route = useRoute()
+const authStore = useAuthStore()
+
+const mode = ref<'login' | 'register'>('login')
 const email = ref('')
 const password = ref('')
 const tenantName = ref('')
 const error = ref('')
 const loading = ref(false)
+const googleClientId = ref('')
 
-async function handleSubmit() {
+onMounted(async () => {
+  if (authStore.isAuthenticated) {
+    router.push('/')
+    return
+  }
+  try {
+    googleClientId.value = await getGoogleClientId()
+    if (googleClientId.value) {
+      loadGoogleScript()
+    }
+  } catch {
+    // Google OAuth not configured, skip
+  }
+})
+
+function loadGoogleScript(): void {
+  if (document.getElementById('google-gsi')) return
+  const script = document.createElement('script')
+  script.id = 'google-gsi'
+  script.src = 'https://accounts.google.com/gsi/client'
+  script.async = true
+  script.defer = true
+  script.onload = initGoogle
+  document.head.appendChild(script)
+}
+
+function initGoogle(): void {
+  const w = window as unknown as Record<string, unknown>
+  const google = w.google as { accounts?: { id?: { initialize: (c: unknown) => void; renderButton: (e: HTMLElement, c: unknown) => void } } } | undefined
+  if (!google?.accounts?.id) return
+  google.accounts.id.initialize({
+    client_id: googleClientId.value,
+    callback: handleGoogleCallback,
+  })
+  const el = document.getElementById('google-btn')
+  if (el) {
+    google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', width: 370 })
+  }
+}
+
+async function handleGoogleCallback(response: { credential: string }): Promise<void> {
   error.value = ''
   loading.value = true
   try {
-    if (isRegister.value) {
-      await register(email.value, password.value, tenantName.value)
-    } else {
-      await login(email.value, password.value)
-    }
-    router.push('/')
-  } catch (e: any) {
-    error.value = e.message
+    await authStore.googleLogin(response.credential)
+    navigateAfterAuth()
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : 'Google login failed'
   } finally {
     loading.value = false
   }
 }
+
+async function handleSubmit(): Promise<void> {
+  error.value = ''
+  loading.value = true
+  try {
+    if (mode.value === 'login') {
+      await authStore.login(email.value, password.value)
+    } else {
+      await authStore.register(email.value, password.value, tenantName.value)
+    }
+    navigateAfterAuth()
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : 'Authentication failed'
+  } finally {
+    loading.value = false
+  }
+}
+
+function navigateAfterAuth(): void {
+  const redirect = route.query.redirect as string
+  router.push(redirect || '/')
+}
 </script>
 
 <template>
-  <div class="login-page">
-    <div class="login-card">
-      <h1>AI Management Brain</h1>
-      <p class="subtitle">{{ isRegister ? 'Create your team' : 'Sign in to your dashboard' }}</p>
-
-      <form @submit.prevent="handleSubmit">
-        <div class="field">
-          <label>Email</label>
-          <input v-model="email" type="email" placeholder="you@company.com" required />
-        </div>
-        <div class="field">
-          <label>Password</label>
-          <input v-model="password" type="password" placeholder="Min 8 characters" required minlength="8" />
-        </div>
-        <div v-if="isRegister" class="field">
-          <label>Team Name</label>
-          <input v-model="tenantName" type="text" placeholder="Your team or company" required />
-        </div>
-
-        <p v-if="error" class="error-msg">{{ error }}</p>
-
-        <button type="submit" class="btn btn-primary submit-btn" :disabled="loading">
-          {{ loading ? 'Please wait...' : (isRegister ? 'Create Account' : 'Sign In') }}
-        </button>
-      </form>
-
-      <p class="toggle">
-        {{ isRegister ? 'Already have an account?' : "Don't have an account?" }}
-        <a href="#" @click.prevent="isRegister = !isRegister; error = ''">
-          {{ isRegister ? 'Sign in' : 'Create one' }}
-        </a>
-      </p>
+  <NCard style="border-radius: 12px">
+    <div style="text-align: center; margin-bottom: 24px">
+      <h1 style="font-size: 24px; font-weight: 700; color: #1a1a2e">AI Management Brain</h1>
+      <p style="color: #888; font-size: 14px">Your AI-powered management OS</p>
     </div>
-  </div>
-</template>
 
-<style scoped>
-.login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
-.login-card { background: #fff; border-radius: 16px; padding: 2.5rem; width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-.login-card h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
-.subtitle { color: #888; margin-bottom: 2rem; font-size: 0.9rem; }
-.field { margin-bottom: 1rem; }
-.field label { display: block; font-size: 0.85rem; font-weight: 600; color: #555; margin-bottom: 0.25rem; }
-.field input { width: 100%; }
-.submit-btn { width: 100%; padding: 0.75rem; margin-top: 0.5rem; font-weight: 600; }
-.toggle { text-align: center; margin-top: 1.5rem; font-size: 0.85rem; color: #888; }
-.toggle a { color: #6366f1; text-decoration: none; }
-</style>
+    <NAlert v-if="error" type="error" closable style="margin-bottom: 16px" @close="error = ''">
+      {{ error }}
+    </NAlert>
+
+    <NTabs :value="mode" @update:value="(v: string) => mode = v as 'login' | 'register'" type="segment" animated>
+      <NTabPane name="login" tab="Login">
+        <NForm @submit.prevent="handleSubmit" style="margin-top: 16px">
+          <NFormItem label="Email">
+            <NInput v-model:value="email" type="text" placeholder="email@example.com" />
+          </NFormItem>
+          <NFormItem label="Password">
+            <NInput v-model:value="password" type="password" show-password-on="click" placeholder="Password" />
+          </NFormItem>
+          <NButton type="primary" block :loading="loading" attr-type="submit">
+            Login
+          </NButton>
+        </NForm>
+      </NTabPane>
+
+      <NTabPane name="register" tab="Register">
+        <NForm @submit.prevent="handleSubmit" style="margin-top: 16px">
+          <NFormItem label="Organization Name">
+            <NInput v-model:value="tenantName" placeholder="My Company" />
+          </NFormItem>
+          <NFormItem label="Email">
+            <NInput v-model:value="email" type="text" placeholder="email@example.com" />
+          </NFormItem>
+          <NFormItem label="Password">
+            <NInput v-model:value="password" type="password" show-password-on="click" placeholder="Min 8 characters" />
+          </NFormItem>
+          <NButton type="primary" block :loading="loading" attr-type="submit">
+            Register
+          </NButton>
+        </NForm>
+      </NTabPane>
+    </NTabs>
+
+    <template v-if="googleClientId">
+      <NDivider>or</NDivider>
+      <div id="google-btn" style="display: flex; justify-content: center"></div>
+    </template>
+  </NCard>
+</template>
