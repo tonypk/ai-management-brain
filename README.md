@@ -507,146 +507,27 @@ CulturePack (loaded from YAML)
 
 ---
 
-### Phased Roadmap
+### Completed Roadmap
 
-#### Phase 1: Core Bot (Week 1-3)
+All 5 phases are complete. The project evolved significantly beyond initial plans — delivering 16 mentors (vs planned 8), 9 culture packs (vs planned 6), MCP multi-client support, and a hybrid ClawHub skill.
 
-**Goal:** Complete daily loop with mentor-driven strategy + tenant isolation from day 1.
+| Phase | Goal | Key Deliverables | Status |
+|-------|------|-----------------|--------|
+| **1. Core Bot** | Daily management loop | Telegram Bot, scheduler, 2 mentors, tenant isolation, AES-256 secrets | Done |
+| **2. Full Mentor + Culture** | Complete strategy system | 9 mentors (expanded to 16 with light-touch), 9 culture packs, mentor blending, proactive actions, sentiment detection | Done |
+| **3. Open Source + Dashboard** | Distributable project | REST API (Gin), Vue3 Dashboard (NaiveUI + ECharts), Docker deploy, CI/CD, rate limiting, Prometheus metrics | Done |
+| **4. Multi-Channel + MCP** | Multi-client support | MCP server (13 tools), OpenClaw Skill, Claude Code + ChatGPT + Gemini support, AI C-Suite Board (6 seats), Organization Architecture Engine | Done |
+| **5. Cloud SaaS** | Production cloud service | `manageaibrain.com`, Web Dashboard v2.0, Organization Setup Wizard, boss-ai-agent@3.0.0 hybrid skill (Advisor + Team Ops modes), 23+ messaging platforms | Done |
 
-| Task | Output |
-|------|--------|
-| Project init + Docker Compose | Go module + PG + Redis |
-| DB schema + migrations (5 tables + indexes) | sql/migrations/ |
-| Secret encryption (AES-256-GCM) | internal/pkg/crypto.go |
-| Tenant isolation middleware (TenantFromContext) | internal/bot/middleware.go |
-| Mentor YAML loader (Inamori + Dalio) | internal/brain/mentor.go |
-| Culture pack loader (PH + SG) | internal/brain/culture.go |
-| Brain Engine v1 (strategy executor) | internal/brain/engine.go |
-| Claude API wrapper with retry + error handling | internal/brain/llm.go |
-| Telegram Bot framework + conversation state machine | internal/bot/ |
-| Employee registration (/addemployee + /join) | internal/bot/commands.go |
-| Report Collector (multi-turn conversation) | internal/report/collector.go |
-| Chase logic (mentor-driven escalation + cultural) | internal/report/chaser.go |
-| Summary generation (mentor-driven focus) | internal/report/summarizer.go |
-| Scheduler (remind/chase/summary + missed job catch-up) | internal/scheduler/jobs.go |
-| Bot commands: /start /status /help /addemployee /diagnostics | internal/bot/commands.go |
-| Health check endpoint (/healthz) | cmd/brain/main.go |
-| Structured logging (slog) | throughout |
+### Current State (v3.0.0)
 
-**Done when:**
-- Own Telegram group connected
-- Employees register via /join invite flow
-- Mentor-specific check-in questions sent via DM
-- Multi-turn report collection with conversation state
-- Chase uses mentor strategy + cultural adaptation
-- Boss receives mentor-focused AI summary
-- Switching Inamori ↔ Dalio visibly changes questions, chase style, summary
-- /status and /diagnostics work
-- All secrets encrypted in DB
-- Errors handled gracefully (Claude down, Telegram failure, etc.)
-
-#### Phase 2: Full Mentor + Culture (Week 4-5)
-
-**Goal:** Complete strategy system with 4 mentors, 4 cultures, proactive actions. Custom mentors deferred to Phase 3.
-
-| Task | Output |
-|------|--------|
-| 4 mentor YAMLs (Inamori/Dalio/Grove/Ren) with full strategy | configs/mentors/ |
-| 4 culture packs (PH/SG/ID/LK) | configs/cultures/ |
-| Mentor blending (weighted mix with clear semantics) | brain/mentor.go |
-| Proactive actions engine (weekly/monthly) | scheduler/jobs.go |
-| Trigger rules engine (event → action) | brain/engine.go |
-| Blocker analysis + sentiment detection | report/summarizer.go |
-| Bot: /mentor /culture /blend | bot/commands.go |
-| Employee profile (submission history, sentiment trend) | DB queries |
-
-**Done when:**
-- 4 mentors fully operational with distinct strategies
-- Culture adaptation per employee
-- Mentor blending (70/30) works with clear question/chase/summary behavior
-- Proactive actions fire (weekly recognition, etc.)
-- Triggers work (3 consecutive misses → manager notification)
-
-#### Phase 3: Open Source + Dashboard (Week 6-8)
-
-**Goal:** Distributable open-source project. docker compose up.
-
-| Task | Output |
-|------|--------|
-| PostgreSQL RLS policies | sql/migrations/ |
-| REST API (Gin): tenant/employee/report/config CRUD | api/ |
-| Vue3 Web Dashboard | frontend/ |
-| BYOK onboarding in dashboard | frontend + api |
-| Custom mentor creation (structured form, not AI-generated) | frontend + api |
-| Docker one-click deploy | docker-compose.yml + Dockerfile |
-| Open source prep (README, CONTRIBUTING, LICENSE Apache 2.0) | root |
-| Usage tracking (API calls per tenant) | DB + middleware |
-| GitHub Actions CI | .github/workflows/ |
-| Rate limiting (Redis-based per tenant) | internal/pkg/ |
-| Data retention config (default 90 days logs, 1 year reports) | scheduler/jobs.go |
-| Prometheus metrics endpoint | api/ |
-
-**Done when:**
-- Anyone: fork → clone → docker compose up → connect Telegram
-- Web UI handles all configuration
-- Multi-tenant isolation with RLS
-- Rate limiting active per tenant
-
-#### Phase 4: Multi-Channel + Agents (Week 9-11)
-
-**Goal:** Slack/Lark support. Boss natural language commands.
-
-| Task | Output |
-|------|--------|
-| Channel abstraction (Adapter interface: Send/Receive/Reply) | channel/adapter.go |
-| Slack adapter (Slack Bot + Events API) | channel/slack.go |
-| Lark adapter (Lark Open API) | channel/lark.go |
-| Multi-channel routing (one tenant, multiple channels) | channel/router.go |
-| Agent Orchestrator (intent detection → sub-task dispatch) | brain/orchestrator.go |
-| Chief of Staff: boss NL → structured action | brain/chief.go |
-| Alert Agent (anomaly detection + proactive warning) | report/alert.go |
-| Custom mentor via AI (name → Claude extracts philosophy → form) | brain/mentor.go |
-| Redis pub/sub for internal event bus | internal/events/ |
-
-**Done when:**
-- Slack + Telegram connected, messages unified
-- Boss: "Ask John about project progress" → Bot DMs John → reports back
-- Boss: "Announce tomorrow is holiday" → multi-channel broadcast
-- System proactively warns about anomalies (3-day miss, sentiment drop)
-
-#### Phase 5: Cloud SaaS (Week 12-14)
-
-**Goal:** Revenue-generating cloud service.
-
-Landing page, user registration (email+OAuth), Stripe billing, analytics dashboard, 8 mentors (add 孙正义/Jobs/Bezos/马云), 6 culture packs (add MY/CN), SSO/RBAC, webhook security, health monitoring.
-
----
-
-### Commercial Tiers
-
-**Open Source (Apache 2.0, self-hosted)**
-- Complete Bot + API + Dashboard
-- 2 mentors (Inamori + Dalio) + 2 culture packs (PH + SG)
-- Single tenant, up to 10 employees
-- Telegram only
-- Docker one-click deploy
-
-**Cloud Pro ($29/mo, up to 20 people)**
-- Cloud hosted, no server maintenance
-- All 4+ mentors + custom mentor creation
-- All 4+ culture packs + custom cultures
-- Multi-channel (Telegram + Slack)
-- Mentor blending
-- Proactive actions + trigger rules
-- Analytics dashboard
-
-**Cloud Enterprise ($299/mo, up to 100 people)**
-- Everything in Pro
-- Multi-tenant (manage multiple teams/departments)
-- BYOK (use your own API Key)
-- SSO + RBAC
-- Agent orchestration (boss NL commands)
-- Custom Skills plugins
+- **16 mentor philosophies**: 3 fully-embedded (Musk/Inamori/Ma) + 6 standard + 7 light-touch
+- **9 culture packs**: default, Philippines, Singapore, Indonesia, Sri Lanka, Malaysia, China, USA, India
+- **6 AI C-Suite seats**: CEO, CFO, CMO, CTO, CHRO, COO
+- **13 MCP tools**: 9 read + 4 write (message delivery)
+- **ClawHub Skill**: `boss-ai-agent@3.0.0` — Advisor Mode (zero dependency) + Team Operations Mode (MCP-connected)
+- **Web Dashboard**: Health gauge, submission trends, sentiment heatmap, alert center, organization setup
+- **Production**: `manageaibrain.com` on AWS t3a.small, Docker Compose, PostgreSQL 16, Redis 7
 - All channels (+ Lark/DingTalk)
 - SLA + priority support
 - Custom pricing for 100+ people
