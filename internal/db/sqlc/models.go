@@ -80,6 +80,26 @@ type Employee struct {
 	OrgUnitID        pgtype.UUID        `json:"org_unit_id"`
 }
 
+type Goal struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	OwnerID     pgtype.UUID        `json:"owner_id"`
+	Title       string             `json:"title"`
+	Description string             `json:"description"`
+	Status      string             `json:"status"`
+	Cycle       string             `json:"cycle"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type GoalSnapshot struct {
+	ID              pgtype.UUID        `json:"id"`
+	GoalID          pgtype.UUID        `json:"goal_id"`
+	OverallProgress pgtype.Numeric     `json:"overall_progress"`
+	SnapshotDate    pgtype.Date        `json:"snapshot_date"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type GroupChat struct {
 	ID             pgtype.UUID        `json:"id"`
 	TenantID       pgtype.UUID        `json:"tenant_id"`
@@ -90,6 +110,18 @@ type GroupChat struct {
 	IsActive       bool               `json:"is_active"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type KeyResult struct {
+	ID           pgtype.UUID        `json:"id"`
+	GoalID       pgtype.UUID        `json:"goal_id"`
+	Title        string             `json:"title"`
+	Target       pgtype.Numeric     `json:"target"`
+	CurrentValue pgtype.Numeric     `json:"current_value"`
+	Unit         string             `json:"unit"`
+	DueDate      pgtype.Date        `json:"due_date"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Memory struct {
