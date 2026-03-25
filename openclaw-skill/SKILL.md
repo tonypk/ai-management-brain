@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "2.4.0"
+version: "2.5.0"
 description: "Boss AI Agent — your AI management middleware. 16 mentor philosophies, 6 AI C-Suite seats, 9 culture packs, 7 automated scenarios, real-time dashboard with ECharts analytics. Works with Claude Code, ChatGPT, and Gemini via MCP."
 user-invocable: true
 emoji: "🤖"
@@ -11,7 +11,7 @@ metadata:
     optional:
       env:
         - name: "BOSS_AI_AGENT_API_KEY"
-          description: "Optional. Connects to manageaibrain.com cloud for full mentor configs, web dashboard, and cross-team analytics. Without it, all 7 scenarios work locally with no degradation. No local data is sent to the cloud — data flows are cloud-to-skill only (pulling mentor configs and analytics)."
+          description: "Optional. Makes read-only GET requests to manageaibrain.com/api/v1/ for mentor configs and analytics dashboards. API key sent as auth header only — no local files, memory, or chat history are sent. Without it, all 7 scenarios work locally with no degradation."
         - name: "MANAGEMENT_BRAIN_API_KEY"
           description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility."
     requires:
@@ -34,20 +34,24 @@ Always respond in the boss's language. Auto-detect from conversation context.
 - **Config file**: writes `~/.openclaw/skills/boss-ai-agent/config.json` during first run. User can read, edit, or delete this file at any time.
 - **Cron jobs**: registers up to 5 recurring jobs via OpenClaw's cron API. See [Cron Job Management](#cron-job-management) for full details, default schedules, and removal commands. Solo founder mode (team=0) only registers 2 jobs. All jobs can be listed (`cron list`), individually removed (`cron remove <id>`), or bulk-removed (`cron remove --skill boss-ai-agent`).
 - **External services** (GitHub, Linear, Jira, Notion): accessed through OpenClaw's configured integrations — the skill does NOT store or manage tokens for these services. If a service is not connected in OpenClaw, the corresponding scenario is skipped.
-- **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill makes read-only GET requests to `manageaibrain.com/api/v1/` to pull mentor YAML configs and aggregated analytics dashboards. The API key is sent as `Authorization: Bearer` header for authentication — no other data (messages, check-in responses, employee names, config.json, memory, chat history) is included in any request payload or query parameter. Removing the key immediately stops all cloud communication. All 7 scenarios work fully without it.
-- **MCP tools**: 9 read-only query tools + 4 write tools that can send messages to employees via Telegram/Slack/Lark/Signal. Write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) actively send messages — use with intent.
+- **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill makes read-only GET requests to `manageaibrain.com/api/v1/` to pull mentor YAML configs and aggregated analytics dashboards. The API key is sent as `Authorization: Bearer` header — no local files, memory, or chat history are included. Removing the key stops all cloud communication. All 7 scenarios work fully without it.
+- **MCP tools**: All 13 MCP tools are hosted on `manageaibrain.com/mcp`. When the skill invokes a tool, the tool parameters (e.g. employee name, discussion topic, report period) are sent to the cloud server for processing. 9 tools are read-only queries; 4 write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) actively send messages to employees via Telegram/Slack/Lark/Signal — use with intent.
 
 ## Data Flow
 
 | Direction | What | How |
 |-----------|------|-----|
-| Cloud → Skill | Mentor YAML configs, analytics dashboards | GET with API key auth (optional) |
-| Skill → Cloud | **Nothing** — API key in header only, no request body | Auth header only, no payload |
+| Skill → MCP Server | Tool parameters (employee names, topics, report periods) | MCP protocol to `manageaibrain.com/mcp` |
+| MCP Server → Skill | Query results (team status, reports, alerts, profiles) | MCP protocol response |
+| MCP Server → Employees | Check-in questions, chase reminders, summaries, messages | Write tools trigger delivery via Telegram/Slack/Lark/Signal |
+| Cloud API → Skill | Mentor YAML configs, analytics dashboards | GET with API key auth (optional) |
+| Skill → Cloud API | API key in auth header only — no request body | Auth header only, no payload |
 | OpenClaw → Skill | Employee messages, GitHub/Jira data | Via OpenClaw's configured integrations |
-| Skill → Employees | Check-in questions, chase reminders, custom messages | Write tools only (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) |
 | Skill → Local disk | `config.json` at first run | Single file, user-editable |
 
-**Never sent outbound**: employee messages, check-in responses, config.json contents, memory/chat history, employee personal data. The skill has no outbound HTTP endpoint other than the optional cloud GET requests described above.
+**What goes to the cloud**: MCP tool parameters (employee names, discussion topics, message content) are processed on `manageaibrain.com`. The server stores team data (check-ins, reports, employee profiles) in its PostgreSQL database.
+
+**What stays local**: `config.json`, chat history, memory, and any files on your machine. The optional Cloud API key only pulls data — it never sends local files or conversation history.
 
 ## Cron Job Management
 
@@ -239,6 +243,6 @@ Use `chat_with_seat` for direct questions to individual executives.
 ## Links
 
 - Website: https://manageaibrain.com
-- MCP HTTP: https://manageaibrain.com/mcp (ChatGPT/Gemini)
+- MCP Server: `https://manageaibrain.com/mcp` — cloud-hosted MCP endpoint where all 13 tools are processed. Claude Code connects via stdio; ChatGPT/Gemini connect via MCP HTTP to this URL.
 - GitHub: https://github.com/tonypk/ai-management-brain
 - ClawHub: https://clawhub.ai/tonypk/boss-ai-agent

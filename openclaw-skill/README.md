@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "2.4.0"
+version: "2.5.0"
 description: "Boss AI Agent — your AI management middleware. 16 mentor philosophies, 6 AI C-Suite seats, 9 culture packs, 7 automated scenarios, real-time dashboard with ECharts analytics. Works with Claude Code, ChatGPT, and Gemini via MCP."
 user-invocable: true
 emoji: "🤖"
@@ -11,7 +11,7 @@ metadata:
     optional:
       env:
         - name: "BOSS_AI_AGENT_API_KEY"
-          description: "Optional. Makes read-only GET requests to manageaibrain.com for mentor configs and analytics dashboards. API key sent as auth header only — no local data (messages, employee info, config, memory) is ever sent. Without it, all 7 scenarios work locally with no degradation."
+          description: "Optional. Makes read-only GET requests to manageaibrain.com/api/v1/ for mentor configs and analytics dashboards. API key sent as auth header only — no local files, memory, or chat history are sent. Without it, all 7 scenarios work locally with no degradation."
         - name: "MANAGEMENT_BRAIN_API_KEY"
           description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility."
     requires:
@@ -37,7 +37,7 @@ Your AI management middleware — connects you to all systems through mentor wis
 
 Boss AI Agent connects to your team through **OpenClaw's existing integrations** (Telegram, Slack, GitHub, etc.). It does NOT store or manage tokens for external services — all service access is inherited from OpenClaw's configured connections. If a service is not connected in OpenClaw, the corresponding feature is simply skipped.
 
-**Data flow**: The optional cloud API (`BOSS_AI_AGENT_API_KEY`) makes read-only GET requests to pull mentor configs and analytics. The API key is sent as an auth header — no local data (messages, check-in responses, employee names, memory, config) is included in any request. Removing the key stops all cloud communication. All 7 scenarios work fully without it.
+**Data flow**: All 13 MCP tools are hosted on `manageaibrain.com/mcp`. Tool parameters (employee names, discussion topics, message content) are sent to the cloud server for processing. The server stores team data (check-ins, reports, employee profiles) in PostgreSQL. Write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) deliver messages to employees via Telegram/Slack/Lark/Signal. Local files (`config.json`, chat history, memory) are never sent. The optional cloud API key (`BOSS_AI_AGENT_API_KEY`) adds read-only access to mentor configs and analytics dashboards — removing the key stops that communication. All 7 scenarios work fully without it.
 
 **Persistent behavior**: The skill registers up to 5 cron jobs (checkin, chase, summary, briefing, signalScan) via OpenClaw's cron API. Solo founder mode (team=0) only registers 2 (briefing + signalScan). Manage jobs:
 - View: `cron list`
@@ -123,7 +123,7 @@ Ask: *"Should we expand to Japan?"* → All 6 seats analyze from their perspecti
 | `send_summary` | Generate and send daily summary to boss |
 | `send_message` | Send custom message to an employee |
 
-**ChatGPT/Gemini**: connect via `https://manageaibrain.com/mcp` (MCP HTTP)
+**MCP endpoint**: All 13 tools are hosted at `https://manageaibrain.com/mcp`. Claude Code connects via stdio; ChatGPT/Gemini connect via MCP HTTP to this URL. Tool parameters are processed on the server.
 
 ## Scenarios
 
@@ -137,19 +137,6 @@ Ask: *"Should we expand to Japan?"* → All 6 seats analyze from their perspecti
 
 ## Web Dashboard (v2.0)
 
-Professional management dashboard at manageaibrain.com built with NaiveUI + ECharts:
-
-- **Health Gauge** — real-time team health score (red/yellow/green)
-- **Check-in Status Panel** — live submitted/pending/missed with chase counts
-- **Submission Trend Chart** — 7-day bar+line dual-axis (count + rate%)
-- **Sentiment Heatmap** — employee x date heatmap colored by sentiment
-- **Alert Center** — active alerts with severity badges (warning/critical)
-- **Employee Activity Table** — sortable/filterable 7-day activity with missed highlight
-- **Report Browser** — date-navigable daily reports with AI summaries
-- **Settings** — tenant, channels, scheduler, API keys, billing (5 tabs)
-
-## Web Dashboard (v2.0)
-
 Professional management dashboard at [manageaibrain.com](https://manageaibrain.com), built with NaiveUI + ECharts:
 
 - **Health Gauge** — real-time team health score (red/yellow/green)
@@ -157,6 +144,7 @@ Professional management dashboard at [manageaibrain.com](https://manageaibrain.c
 - **Submission Trend Chart** — 7-day bar+line dual-axis (count + rate%)
 - **Sentiment Heatmap** — employee × sentiment color matrix
 - **Alert Center** — active alerts with severity badges + alert rules
+- **Employee Activity Table** — sortable/filterable 7-day activity with missed highlight
 - **Report Browser** — date-navigable daily summaries with Q&A expand
 - **Settings** — tenant, channels, scheduler, API keys, billing (5 tabs)
 
