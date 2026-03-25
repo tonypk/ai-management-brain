@@ -132,3 +132,87 @@ func (q *Queries) UpdateOrganizationStatus(ctx context.Context, arg UpdateOrgani
 	_, err := q.db.Exec(ctx, updateOrganizationStatus, arg.TenantID, arg.Status)
 	return err
 }
+
+const upsertOrganization = `-- name: UpsertOrganization :one
+INSERT INTO organizations (
+    tenant_id, industry, size, stage, business_model, mentor_id,
+    management_plan, status, management_pain_points, current_projects,
+    target_framework, team_structure, communication_tools, culture_preferences
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9, $10, $11, $12, $13
+)
+ON CONFLICT (tenant_id) DO UPDATE SET
+    industry = EXCLUDED.industry,
+    size = EXCLUDED.size,
+    stage = EXCLUDED.stage,
+    business_model = EXCLUDED.business_model,
+    mentor_id = EXCLUDED.mentor_id,
+    management_plan = EXCLUDED.management_plan,
+    plan_version = organizations.plan_version + 1,
+    status = 'draft',
+    management_pain_points = EXCLUDED.management_pain_points,
+    current_projects = EXCLUDED.current_projects,
+    target_framework = EXCLUDED.target_framework,
+    team_structure = EXCLUDED.team_structure,
+    communication_tools = EXCLUDED.communication_tools,
+    culture_preferences = EXCLUDED.culture_preferences,
+    updated_at = NOW()
+RETURNING id, tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, plan_version, status, created_at, updated_at, management_pain_points, current_projects, target_framework, team_structure, communication_tools, culture_preferences
+`
+
+type UpsertOrganizationParams struct {
+	TenantID             pgtype.UUID `json:"tenant_id"`
+	Industry             pgtype.Text `json:"industry"`
+	Size                 pgtype.Int4 `json:"size"`
+	Stage                pgtype.Text `json:"stage"`
+	BusinessModel        pgtype.Text `json:"business_model"`
+	MentorID             string      `json:"mentor_id"`
+	ManagementPlan       []byte      `json:"management_plan"`
+	ManagementPainPoints []string    `json:"management_pain_points"`
+	CurrentProjects      []byte      `json:"current_projects"`
+	TargetFramework      pgtype.Text `json:"target_framework"`
+	TeamStructure        []byte      `json:"team_structure"`
+	CommunicationTools   []string    `json:"communication_tools"`
+	CulturePreferences   []byte      `json:"culture_preferences"`
+}
+
+func (q *Queries) UpsertOrganization(ctx context.Context, arg UpsertOrganizationParams) (Organization, error) {
+	row := q.db.QueryRow(ctx, upsertOrganization,
+		arg.TenantID,
+		arg.Industry,
+		arg.Size,
+		arg.Stage,
+		arg.BusinessModel,
+		arg.MentorID,
+		arg.ManagementPlan,
+		arg.ManagementPainPoints,
+		arg.CurrentProjects,
+		arg.TargetFramework,
+		arg.TeamStructure,
+		arg.CommunicationTools,
+		arg.CulturePreferences,
+	)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Industry,
+		&i.Size,
+		&i.Stage,
+		&i.BusinessModel,
+		&i.Region,
+		&i.MentorID,
+		&i.ManagementPlan,
+		&i.PlanVersion,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ManagementPainPoints,
+		&i.CurrentProjects,
+		&i.TargetFramework,
+		&i.TeamStructure,
+		&i.CommunicationTools,
+		&i.CulturePreferences,
+	)
+	return i, err
+}
