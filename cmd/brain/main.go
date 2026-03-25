@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"os"
 	"os/signal"
@@ -164,6 +165,13 @@ func parseUUIDForChat(s string) (pgtype.UUID, error) {
 }
 
 // formatPgUUID formats a pgtype.UUID as a hex string.
+func numericFromFloat(f float64) pgtype.Numeric {
+	bf := new(big.Float).SetFloat64(f)
+	scaled := new(big.Float).Mul(bf, big.NewFloat(100))
+	intVal, _ := scaled.Int(nil)
+	return pgtype.Numeric{Int: intVal, Exp: -2, Valid: true}
+}
+
 func formatPgUUID(u pgtype.UUID) string {
 	if !u.Valid {
 		return ""
@@ -1560,6 +1568,54 @@ func main() {
 		} else {
 			slog.Info("group_mentor job registered", "schedule", "daily 10:00")
 		}
+	}
+
+	// Goal snapshot cron job (daily at 23:00)
+	if err := sched.AddJob("goal_snapshots", "0 23 * * *", func(ctx context.Context) error {
+		slog.Info("goal_snapshots job: calculating daily progress")
+
+		tenantIDs, err := queries.ListTenantsWithActiveGoals(ctx)
+		if err != nil {
+			return fmt.Errorf("list tenants with active goals: %w", err)
+		}
+
+		today := pgtype.Date{Time: time.Now().Truncate(24 * time.Hour), Valid: true}
+		var snapshotCount int
+
+		for _, tenantID := range tenantIDs {
+			goals, err := queries.ListActiveGoalsByTenant(ctx, tenantID)
+			if err != nil {
+				slog.Error("goal_snapshots: list active goals", "error", err)
+				continue
+			}
+
+			for _, goal := range goals {
+				krs, err := queries.GetKeyResultsByGoal(ctx, goal.ID)
+				if err != nil {
+					slog.Error("goal_snapshots: get key results", "goal_id", goal.ID, "error", err)
+					continue
+				}
+
+				progress := api.CalculateGoalProgress(krs)
+
+				if err := queries.CreateGoalSnapshot(ctx, sqlc.CreateGoalSnapshotParams{
+					GoalID:          goal.ID,
+					OverallProgress: numericFromFloat(progress),
+					SnapshotDate:    today,
+				}); err != nil {
+					slog.Error("goal_snapshots: create snapshot", "goal_id", goal.ID, "error", err)
+					continue
+				}
+				snapshotCount++
+			}
+		}
+
+		slog.Info("goal_snapshots job: done", "tenants", len(tenantIDs), "snapshots", snapshotCount)
+		return nil
+	}); err != nil {
+		slog.Error("failed to register goal_snapshots job", "error", err)
+	} else {
+		slog.Info("goal_snapshots job registered", "schedule", "daily 23:00")
 	}
 
 	// Create AI Role Manager (requires LLM + scheduler)
