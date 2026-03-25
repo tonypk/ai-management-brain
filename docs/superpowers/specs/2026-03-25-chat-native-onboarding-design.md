@@ -14,9 +14,26 @@ After onboarding, the mentor joins team groups as a semi-autonomous management a
 4. **Enhanced in-group mentor**: semi-autonomous + responsive behavior after joining team groups
 5. **Dual-track**: chat experience and OpenClaw skill coexist, sharing the same backend
 
+## Core Management Framework
+
+Boss AI Agent's capabilities are built on the four pillars of management (Plan → Organize → Lead → Control), extended with people management, decision support, communication, and strategy:
+
+| Pillar | Sub-capabilities | How Boss AI Agent Implements It |
+|--------|-----------------|-------------------------------|
+| **Planning** | Goal setting (OKR/KPI/Scrum/MBO/BSC), strategy, resource allocation | AI recommends framework during onboarding; mentor tracks goals in daily cycles |
+| **Organizing** | Org structure design, roles & responsibilities, SOPs, process design | AI designs org tree during onboarding; `org_units` tracks structure; mentor suggests reorgs |
+| **Leading** | Team execution, communication, motivation, culture management | Mentor persona drives all interactions; culture packs adapt per-employee; check-ins motivate |
+| **Controlling** | Data monitoring, deviation correction, retrospectives | Signal scanning, risk alerts, weekly/monthly reports, sentiment tracking |
+| **People Mgmt** | Hiring, training, performance, incentives | Employee profiles, 1:1 prep, performance reports, Maslow/dual-factor awareness in mentor prompts |
+| **Decision Making** | Data-driven decisions, risk assessment, rapid decisions | C-Suite board discussions, data-backed recommendations, structured decision frameworks |
+| **Communication** | Upward (boss), downward (employees), cross-team | Multi-channel messaging, group management, mentor mediates communication |
+| **Strategy** | Positioning, business model, competitive advantage | Onboarding collects strategic context; C-Suite board analyzes strategy; industry insights |
+
+The onboarding dialogue collects enough context to activate ALL pillars. The AI mentor then operationalizes them through daily cycles, proactive suggestions, and on-demand analysis.
+
 ## Priority
 
-Phase 1 (this spec): Onboarding flow only. Group mentor enhancements are designed here but implemented later.
+Phase 1 (this spec): Onboarding flow + org structure. Group mentor enhancements are designed here but implemented later.
 
 ---
 
@@ -94,6 +111,7 @@ AI plays a "management consultant" role. The prompt includes:
 | Company stage | Startup / growth / mature / transformation | Yes |
 | Business model | B2B / B2C / SaaS / platform / services / etc. | Yes |
 | Team size | Headcount + rough structure | Yes |
+| Organizational structure | Departments, teams, reporting lines, key roles — AI decides depth based on company size/stage | Yes |
 | Current projects | What they're building, goals, timelines | Yes |
 | Management pain points | Top 1-3 management challenges | Yes |
 | Communication tools | Which tools, how many groups | Yes |
@@ -118,11 +136,12 @@ When collection completes, AI transitions to `configuring` state. A single LLM c
 
 ```go
 type ProposedPlan struct {
-    Mentor      MentorPlan      `json:"mentor"`
-    Board       []SeatPlan      `json:"board"`
-    Policies    PolicyPlan      `json:"policies"`
-    Schedule    SchedulePlan    `json:"schedule"`
-    Reasoning   string          `json:"reasoning"`
+    Mentor      MentorPlan       `json:"mentor"`
+    Board       []SeatPlan       `json:"board"`
+    OrgDesign   OrgDesignPlan    `json:"org_design"`
+    Policies    PolicyPlan       `json:"policies"`
+    Schedule    SchedulePlan     `json:"schedule"`
+    Reasoning   string           `json:"reasoning"`
 }
 
 type MentorPlan struct {
@@ -169,9 +188,25 @@ type SchedulePlan struct {
     SignalScan string `json:"signal_scan"` // cron expression
     Timezone   string `json:"timezone"`    // e.g., "Asia/Manila"
 }
+
+// OrgDesignPlan — AI-designed organizational structure
+// The AI decides depth and shape based on company size, stage, and industry.
+type OrgDesignPlan struct {
+    Units     []OrgUnitPlan `json:"units"`      // flat list with parent references forming a tree
+    Reasoning string        `json:"reasoning"`  // why this structure
+}
+
+type OrgUnitPlan struct {
+    RefID        string `json:"ref_id"`         // temporary ID for parent references, e.g., "eng", "eng-frontend"
+    ParentRefID  string `json:"parent_ref_id"`  // empty = top-level (reports to boss)
+    Name         string `json:"name"`           // e.g., "Engineering", "Frontend Team"
+    UnitType     string `json:"unit_type"`      // "department" / "team" / "squad" / "division" — AI decides
+    HeadRole     string `json:"head_role"`      // e.g., "VP Engineering", "Team Lead"
+    Responsibilities string `json:"responsibilities"`
+}
 ```
 
-### Three Confirmation Steps
+### Four Confirmation Steps
 
 **Step 1: Mentor + Board Configuration**
 
@@ -183,22 +218,46 @@ AI recommends based on industry, stage, and pain points:
 
 Boss can: accept / change mentor / adjust blend ratio / modify seat assignments
 
-**Step 2: Management Policies**
+**Step 2: Organizational Structure**
 
-Generated from industry + stage + pain points:
+AI designs the org structure based on company size, stage, industry, and team info collected during onboarding. The AI decides the depth (flat for 5-person startup, multi-level for 100-person company) and unit types (departments, teams, squads, etc.):
+
+- Visual tree of organizational units with reporting lines
+- Each unit: name, type, head role, responsibilities
+- Reasoning for the structure design (e.g., "At your stage, a flat structure with 3 functional teams is optimal for speed")
+
+Boss can: accept / add/remove/rename units / change reporting lines / adjust head roles
+
+Example output for a 20-person SaaS startup:
+```
+CEO (You)
+├── Engineering (VP Eng)
+│   ├── Frontend Team (Team Lead)
+│   └── Backend Team (Team Lead)
+├── Product (Product Manager)
+├── Marketing (Marketing Lead)
+└── Operations (Ops Manager)
+```
+
+After confirmation, org units are written to `org_units` table. Employees are assigned to units later (via `/addemployee` or group setup).
+
+**Step 3: Management Policies**
+
+Generated from industry + stage + pain points + org structure:
 
 - Goal management framework recommendation (OKR / KPI / Scrum / MBO / BSC) + reasoning
 - Customized check-in questions (based on mentor + industry, not generic templates)
-- Tracking focus areas (e.g., startup: burn rate + delivery speed; mature: retention + efficiency)
+- Per-unit tracking focus (e.g., Engineering: delivery velocity + code quality; Marketing: campaign ROI + lead gen)
 - Risk alert rules (consecutive missed check-ins threshold, sentiment drop threshold)
 - Management cadence (what happens daily / weekly / monthly)
 
 Boss can: confirm or modify each item
 
-**Step 3: Daily Plan + Group Setup**
+**Step 4: Daily Plan + Group Setup**
 
 - Scheduled task timetable (check-in, chase, summary, briefing, signal scan times)
 - Group setup instructions: boss adds bot to team group → bot auto-detects → mentor sends self-introduction in mentor persona
+- Group-to-unit mapping: which chat group corresponds to which org unit
 - Employee onboarding: bot generates invite link in group, or boss uses `/addemployee`
 
 ### Data Writes Per Step
@@ -208,8 +267,9 @@ All writes within a step use a single database transaction.
 | Step | Database writes (single transaction) |
 |------|--------------------------------------|
 | Step 1 confirmed | `tenants.mentor_id`, `tenants.mentor_blend`, `seats` table, `onboarding_sessions.confirm_step = 1` |
-| Step 2 confirmed | `organizations.management_plan` (JSONB — full policy plan), `onboarding_sessions.confirm_step = 2` |
-| Step 3 confirmed | `tenants.onboarding_completed_at = now()`, `onboarding_sessions.status = 'active'`, `onboarding_sessions.confirm_step = 3` |
+| Step 2 confirmed | `org_units` table (bulk insert all units), `onboarding_sessions.confirm_step = 2` |
+| Step 3 confirmed | `organizations.management_plan` (JSONB — full policy plan), `onboarding_sessions.confirm_step = 3` |
+| Step 4 confirmed | `tenants.onboarding_completed_at = now()`, `onboarding_sessions.status = 'active'`, `onboarding_sessions.confirm_step = 4` |
 
 **Scheduler registration (Step 3)**: The existing scheduler jobs (remind, chase, summary, etc.) already run globally at startup via gocron. They read per-tenant config from the database at execution time. No dynamic per-tenant job registration is needed. Step 3 writes the tenant's schedule config to `organizations.management_plan.schedule`, and the existing jobs pick it up on their next run. This is consistent with the current architecture.
 
@@ -265,6 +325,54 @@ Note: Existing `organizations` fields (`industry`, `size`, `stage`) have `NOT NU
 
 Note: Using `TEXT` instead of `VARCHAR(50)` for Slack/Lark IDs — Lark open IDs (`ou_xxx`) can exceed 50 chars in some regions. No performance difference in PostgreSQL.
 
+### New Table: `org_units`
+
+Flexible N-level organizational tree. AI decides the structure during onboarding.
+
+```sql
+CREATE TABLE org_units (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    parent_id UUID REFERENCES org_units(id),  -- NULL = top-level (reports to boss)
+    name VARCHAR(200) NOT NULL,
+    unit_type VARCHAR(50) NOT NULL,            -- department / team / squad / division / etc.
+    head_role VARCHAR(200),                    -- e.g., "VP Engineering", "Team Lead"
+    head_employee_id UUID REFERENCES employees(id),  -- NULL until employee assigned as head
+    responsibilities TEXT,
+    sort_order INT NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_org_units_tenant ON org_units(tenant_id);
+CREATE INDEX idx_org_units_parent ON org_units(parent_id) WHERE parent_id IS NOT NULL;
+```
+
+- `parent_id`: self-referencing FK forming the tree. NULL = reports directly to boss.
+- `unit_type`: AI-chosen (department, team, squad, division, etc.). No fixed enum — the AI adapts to the company's vocabulary.
+- `head_employee_id`: filled when an employee is assigned as head. Can be NULL (position exists but not filled).
+- `sort_order`: for display ordering among siblings.
+
+**Employee-to-unit assignment**: `employees` table gets a new `org_unit_id UUID REFERENCES org_units(id)` column. An employee belongs to one unit. Unit heads are tracked both via `org_units.head_employee_id` (for the unit) and `employees.org_unit_id` (for the employee).
+
+### Org-Aware Mentor Intelligence
+
+With organizational structure, the mentor gains these capabilities:
+
+| Capability | Example |
+|-----------|---------|
+| **Targeted check-ins** | Different questions for Engineering vs Marketing |
+| **Scoped tracking** | "Frontend team has 3 overdue PRs" instead of generic "team has overdue PRs" |
+| **Delegation routing** | "Let the Backend Lead follow up on this API issue" |
+| **Unit-level reports** | Weekly report broken down by department |
+| **Structure suggestions** | "Your Engineering team has 12 people — consider splitting into Frontend and Backend squads" |
+| **Head accountability** | Chase unit heads first, not individual members |
+| **Span of control alerts** | "Marketing Lead manages 8 people — consider adding a sub-team" |
+| **Reorg recommendations** | "Based on the new project, consider moving Alice from Backend to the new Data team" |
+
+The mentor uses `org_units` context in all system prompts — for check-ins, chases, summaries, group messages, and 1:1 prep.
+
 ### New Table: `onboarding_sessions`
 
 Replaces the deprecated `wizard_sessions` table.
@@ -288,7 +396,7 @@ CREATE UNIQUE INDEX idx_onboarding_sessions_tenant
 ```
 
 - `status`: onboarding / configuring / confirming / active
-- `confirm_step`: 0 = not started, 1 = mentor confirmed, 2 = policies confirmed, 3 = plan confirmed
+- `confirm_step`: 0 = not started, 1 = mentor+board confirmed, 2 = org structure confirmed, 3 = policies confirmed, 4 = plan confirmed
 - `collected_data`: structured info extracted from dialogue (updated in real-time, source of truth)
 - `proposed_plan`: AI-generated management plan (pending confirmation), typed as `ProposedPlan`
 - `message_count`: dialogue turn counter
@@ -469,7 +577,29 @@ CREATE TABLE onboarding_sessions (
 );
 CREATE UNIQUE INDEX idx_onboarding_sessions_tenant ON onboarding_sessions(tenant_id);
 
--- 3. Extend organizations table (all new fields nullable)
+-- 3. Create org_units table (flexible N-level tree)
+CREATE TABLE org_units (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID NOT NULL REFERENCES tenants(id),
+    parent_id       UUID REFERENCES org_units(id),
+    name            VARCHAR(200) NOT NULL,
+    unit_type       VARCHAR(50) NOT NULL,
+    head_role       VARCHAR(200),
+    head_employee_id UUID REFERENCES employees(id),
+    responsibilities TEXT,
+    sort_order      INT NOT NULL DEFAULT 0,
+    is_active       BOOLEAN NOT NULL DEFAULT true,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_org_units_tenant ON org_units(tenant_id);
+CREATE INDEX idx_org_units_parent ON org_units(parent_id) WHERE parent_id IS NOT NULL;
+
+-- 4. Add org_unit_id to employees
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS org_unit_id UUID REFERENCES org_units(id);
+CREATE INDEX IF NOT EXISTS idx_employees_org_unit ON employees(org_unit_id) WHERE org_unit_id IS NOT NULL;
+
+-- 5. Extend organizations table (all new fields nullable)
 ALTER TABLE organizations ALTER COLUMN industry DROP NOT NULL;
 ALTER TABLE organizations ALTER COLUMN size DROP NOT NULL;
 ALTER TABLE organizations ALTER COLUMN stage DROP NOT NULL;
@@ -480,7 +610,7 @@ ALTER TABLE organizations ADD COLUMN IF NOT EXISTS team_structure JSONB;
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS communication_tools TEXT[];
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS culture_preferences JSONB;
 
--- 4. Extend tenants table
+-- 6. Extend tenants table
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS boss_slack_id TEXT;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS boss_lark_id TEXT;
@@ -505,6 +635,9 @@ CREATE TABLE IF NOT EXISTS wizard_sessions (
 );
 
 DROP TABLE IF EXISTS onboarding_sessions;
+
+ALTER TABLE employees DROP COLUMN IF EXISTS org_unit_id;
+DROP TABLE IF EXISTS org_units;
 
 ALTER TABLE organizations DROP COLUMN IF EXISTS management_pain_points;
 ALTER TABLE organizations DROP COLUMN IF EXISTS current_projects;
@@ -532,6 +665,13 @@ Migration 000011 must also be added to the `runMigrations()` function in `cmd/br
 - `GetTenantByBossSlackID`
 - `GetTenantByBossLarkID`
 - `UpdateOrganizationFromOnboarding` (bulk update all new fields)
+- `CreateOrgUnit`
+- `ListOrgUnits` (by tenant_id, returns all units for tree construction)
+- `GetOrgUnit` (by id)
+- `UpdateOrgUnit` (name, unit_type, parent_id, head_role, head_employee_id)
+- `DeleteOrgUnit` (soft delete: set is_active = false)
+- `AssignEmployeeToUnit` (update employees.org_unit_id)
+- `ListEmployeesByUnit` (by org_unit_id)
 
 ---
 
@@ -544,9 +684,10 @@ Migration 000011 must also be added to the `runMigrations()` function in `cmd/br
 | `internal/onboarding/extractor.go` | New — structured info extraction |
 | `internal/onboarding/planner.go` | New — management plan generation + ProposedPlan validation |
 | `internal/onboarding/confirmer.go` | New — 3-step confirmation flow |
-| `sql/migrations/000011_onboarding.up.sql` | New — schema changes (drop wizard_sessions, create onboarding_sessions, extend organizations/tenants) |
+| `sql/migrations/000011_onboarding.up.sql` | New — schema changes (drop wizard_sessions, create onboarding_sessions + org_units, extend employees/organizations/tenants) |
 | `sql/migrations/000011_onboarding.down.sql` | New — rollback |
-| `sql/queries/onboarding.sql` | New — sqlc queries |
+| `sql/queries/onboarding.sql` | New — sqlc queries for onboarding_sessions |
+| `sql/queries/org_units.sql` | New — sqlc queries for org_units + employee assignment |
 | `internal/channel/boss_resolve.go` | New — `ResolveBoss(ctx, db, channelType, userID)` for inbound boss identity resolution |
 | `internal/channel/message_handler.go` | Modify — add boss resolution + onboarding routing before employee resolution |
 | `internal/bot/commands.go` | Modify — `HandleStart` delegates to OnboardingService |
