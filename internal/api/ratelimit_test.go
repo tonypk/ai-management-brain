@@ -15,7 +15,7 @@ func TestMetricsEndpoint(t *testing.T) {
 	db := newMockDBTX()
 	router := setupRouter(db)
 
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req := httptest.NewRequest(http.MethodGet, "/__metrics", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -44,7 +44,7 @@ func TestMetrics_RecordsRequests(t *testing.T) {
 
 	r := gin.New()
 	r.Use(metrics.Middleware())
-	r.GET("/metrics", metrics.Handler())
+	r.GET("/__metrics", metrics.Handler())
 	r.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"ok": true})
 	})
@@ -59,7 +59,7 @@ func TestMetrics_RecordsRequests(t *testing.T) {
 	}
 
 	// Now check metrics
-	req = httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req = httptest.NewRequest(http.MethodGet, "/__metrics", nil)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

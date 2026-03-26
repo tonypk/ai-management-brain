@@ -14,7 +14,7 @@ import (
 const createGoal = `-- name: CreateGoal :one
 INSERT INTO goals (tenant_id, owner_id, title, description, status, cycle)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, tenant_id, owner_id, title, description, status, cycle, created_at, updated_at
+RETURNING id, tenant_id, owner_id, title, description, status, cycle, created_at, updated_at, level, goal_type, source_system, source_ref
 `
 
 type CreateGoalParams struct {
@@ -46,6 +46,10 @@ func (q *Queries) CreateGoal(ctx context.Context, arg CreateGoalParams) (Goal, e
 		&i.Cycle,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Level,
+		&i.GoalType,
+		&i.SourceSystem,
+		&i.SourceRef,
 	)
 	return i, err
 }
@@ -70,7 +74,7 @@ func (q *Queries) CreateGoalSnapshot(ctx context.Context, arg CreateGoalSnapshot
 const createKeyResult = `-- name: CreateKeyResult :one
 INSERT INTO key_results (goal_id, title, target, current_value, unit, due_date)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, goal_id, title, target, current_value, unit, due_date, created_at, updated_at
+RETURNING id, goal_id, title, target, current_value, unit, due_date, created_at, updated_at, metric_id, baseline_value, formula_note, status, owner_id
 `
 
 type CreateKeyResultParams struct {
@@ -102,6 +106,11 @@ func (q *Queries) CreateKeyResult(ctx context.Context, arg CreateKeyResultParams
 		&i.DueDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MetricID,
+		&i.BaselineValue,
+		&i.FormulaNote,
+		&i.Status,
+		&i.OwnerID,
 	)
 	return i, err
 }
@@ -130,7 +139,7 @@ func (q *Queries) DeleteKeyResult(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getGoal = `-- name: GetGoal :one
-SELECT id, tenant_id, owner_id, title, description, status, cycle, created_at, updated_at FROM goals WHERE id = $1 AND tenant_id = $2
+SELECT id, tenant_id, owner_id, title, description, status, cycle, created_at, updated_at, level, goal_type, source_system, source_ref FROM goals WHERE id = $1 AND tenant_id = $2
 `
 
 type GetGoalParams struct {
@@ -151,12 +160,16 @@ func (q *Queries) GetGoal(ctx context.Context, arg GetGoalParams) (Goal, error) 
 		&i.Cycle,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Level,
+		&i.GoalType,
+		&i.SourceSystem,
+		&i.SourceRef,
 	)
 	return i, err
 }
 
 const getKeyResultsByGoal = `-- name: GetKeyResultsByGoal :many
-SELECT id, goal_id, title, target, current_value, unit, due_date, created_at, updated_at FROM key_results WHERE goal_id = $1 ORDER BY created_at
+SELECT id, goal_id, title, target, current_value, unit, due_date, created_at, updated_at, metric_id, baseline_value, formula_note, status, owner_id FROM key_results WHERE goal_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) GetKeyResultsByGoal(ctx context.Context, goalID pgtype.UUID) ([]KeyResult, error) {
@@ -178,6 +191,11 @@ func (q *Queries) GetKeyResultsByGoal(ctx context.Context, goalID pgtype.UUID) (
 			&i.DueDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MetricID,
+			&i.BaselineValue,
+			&i.FormulaNote,
+			&i.Status,
+			&i.OwnerID,
 		); err != nil {
 			return nil, err
 		}
@@ -253,7 +271,7 @@ func (q *Queries) ListGoalSnapshots(ctx context.Context, goalID pgtype.UUID) ([]
 }
 
 const listGoalsByCycle = `-- name: ListGoalsByCycle :many
-SELECT g.id, g.tenant_id, g.owner_id, g.title, g.description, g.status, g.cycle, g.created_at, g.updated_at,
+SELECT g.id, g.tenant_id, g.owner_id, g.title, g.description, g.status, g.cycle, g.created_at, g.updated_at, g.level, g.goal_type, g.source_system, g.source_ref,
        COALESCE(
          (SELECT json_agg(kr ORDER BY kr.created_at)
           FROM key_results kr WHERE kr.goal_id = g.id),
@@ -279,6 +297,10 @@ type ListGoalsByCycleRow struct {
 	Cycle          string             `json:"cycle"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	Level          string             `json:"level"`
+	GoalType       string             `json:"goal_type"`
+	SourceSystem   pgtype.Text        `json:"source_system"`
+	SourceRef      pgtype.Text        `json:"source_ref"`
 	KeyResultsJson interface{}        `json:"key_results_json"`
 }
 
@@ -301,6 +323,10 @@ func (q *Queries) ListGoalsByCycle(ctx context.Context, arg ListGoalsByCyclePara
 			&i.Cycle,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Level,
+			&i.GoalType,
+			&i.SourceSystem,
+			&i.SourceRef,
 			&i.KeyResultsJson,
 		); err != nil {
 			return nil, err
@@ -343,7 +369,7 @@ const updateGoal = `-- name: UpdateGoal :one
 UPDATE goals
 SET title = $3, description = $4, status = $5, cycle = $6, owner_id = $7, updated_at = now()
 WHERE id = $1 AND tenant_id = $2
-RETURNING id, tenant_id, owner_id, title, description, status, cycle, created_at, updated_at
+RETURNING id, tenant_id, owner_id, title, description, status, cycle, created_at, updated_at, level, goal_type, source_system, source_ref
 `
 
 type UpdateGoalParams struct {
@@ -377,6 +403,10 @@ func (q *Queries) UpdateGoal(ctx context.Context, arg UpdateGoalParams) (Goal, e
 		&i.Cycle,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Level,
+		&i.GoalType,
+		&i.SourceSystem,
+		&i.SourceRef,
 	)
 	return i, err
 }

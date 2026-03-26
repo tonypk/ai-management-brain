@@ -2,11 +2,10 @@ import { get } from './client'
 import type { Alert, CheckinStatus } from '@/types'
 
 export async function getAlerts(): Promise<Alert[]> {
-  const res = await get<{ data: Alert[] }>('/openclaw/alerts')
-  return res.data
+  const res = await get<{ alerts: Alert[]; total: number }>('/openclaw/alerts')
+  return res.alerts ?? []
 }
 
 export async function getCheckinStatus(): Promise<CheckinStatus> {
-  const res = await get<{ data: CheckinStatus }>('/openclaw/status')
-  return res.data
+  return get<CheckinStatus>('/openclaw/status')
 }

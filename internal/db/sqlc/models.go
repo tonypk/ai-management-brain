@@ -80,6 +80,24 @@ type ChaseLog struct {
 	Channel    string             `json:"channel"`
 }
 
+type CommunicationEvent struct {
+	ID               pgtype.UUID        `json:"id"`
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	SourceType       string             `json:"source_type"`
+	SourceID         pgtype.UUID        `json:"source_id"`
+	Platform         string             `json:"platform"`
+	EventType        string             `json:"event_type"`
+	ActorID          pgtype.UUID        `json:"actor_id"`
+	TargetID         pgtype.UUID        `json:"target_id"`
+	RelatedTaskID    pgtype.UUID        `json:"related_task_id"`
+	RelatedProjectID pgtype.UUID        `json:"related_project_id"`
+	RelatedGoalID    pgtype.UUID        `json:"related_goal_id"`
+	Payload          []byte             `json:"payload"`
+	Confidence       pgtype.Numeric     `json:"confidence"`
+	OccurredAt       pgtype.Timestamptz `json:"occurred_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
 type Employee struct {
 	ID               pgtype.UUID        `json:"id"`
 	TenantID         pgtype.UUID        `json:"tenant_id"`
@@ -99,6 +117,11 @@ type Employee struct {
 	Country          string             `json:"country"`
 	Language         string             `json:"language"`
 	OrgUnitID        pgtype.UUID        `json:"org_unit_id"`
+	ExecutionScore   pgtype.Numeric     `json:"execution_score"`
+	CurrentLoad      pgtype.Text        `json:"current_load"`
+	Strengths        []byte             `json:"strengths"`
+	RiskFlags        []byte             `json:"risk_flags"`
+	WorkScope        []byte             `json:"work_scope"`
 }
 
 type EmployeeSkill struct {
@@ -111,16 +134,32 @@ type EmployeeSkill struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
-type Goal struct {
+type ExecutionSignal struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
-	OwnerID     pgtype.UUID        `json:"owner_id"`
-	Title       string             `json:"title"`
-	Description string             `json:"description"`
-	Status      string             `json:"status"`
-	Cycle       string             `json:"cycle"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	SubjectType string             `json:"subject_type"`
+	SubjectID   pgtype.UUID        `json:"subject_id"`
+	SignalType  string             `json:"signal_type"`
+	Score       pgtype.Numeric     `json:"score"`
+	Reasons     []byte             `json:"reasons"`
+	TimeWindow  pgtype.Text        `json:"time_window"`
+	GeneratedAt pgtype.Timestamptz `json:"generated_at"`
+}
+
+type Goal struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	OwnerID      pgtype.UUID        `json:"owner_id"`
+	Title        string             `json:"title"`
+	Description  string             `json:"description"`
+	Status       string             `json:"status"`
+	Cycle        string             `json:"cycle"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	Level        string             `json:"level"`
+	GoalType     string             `json:"goal_type"`
+	SourceSystem pgtype.Text        `json:"source_system"`
+	SourceRef    pgtype.Text        `json:"source_ref"`
 }
 
 type GoalSnapshot struct {
@@ -143,16 +182,51 @@ type GroupChat struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+type IncentiveRule struct {
+	ID               pgtype.UUID        `json:"id"`
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	Name             string             `json:"name"`
+	RewardModel      string             `json:"reward_model"`
+	PayoutCycle      string             `json:"payout_cycle"`
+	AttributionRules []byte             `json:"attribution_rules"`
+	PenaltyRules     []byte             `json:"penalty_rules"`
+	ScoringFormula   []byte             `json:"scoring_formula"`
+	AppliesTo        []byte             `json:"applies_to"`
+	IsActive         bool               `json:"is_active"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type IncentiveScore struct {
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	RuleID                pgtype.UUID        `json:"rule_id"`
+	PersonID              pgtype.UUID        `json:"person_id"`
+	Period                string             `json:"period"`
+	Score                 pgtype.Numeric     `json:"score"`
+	ScoreBreakdown        []byte             `json:"score_breakdown"`
+	PayoutWeight          pgtype.Numeric     `json:"payout_weight"`
+	AttributionConfidence pgtype.Numeric     `json:"attribution_confidence"`
+	Status                string             `json:"status"`
+	CalculatedAt          pgtype.Timestamptz `json:"calculated_at"`
+	ReviewedAt            pgtype.Timestamptz `json:"reviewed_at"`
+}
+
 type KeyResult struct {
-	ID           pgtype.UUID        `json:"id"`
-	GoalID       pgtype.UUID        `json:"goal_id"`
-	Title        string             `json:"title"`
-	Target       pgtype.Numeric     `json:"target"`
-	CurrentValue pgtype.Numeric     `json:"current_value"`
-	Unit         string             `json:"unit"`
-	DueDate      pgtype.Date        `json:"due_date"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	GoalID        pgtype.UUID        `json:"goal_id"`
+	Title         string             `json:"title"`
+	Target        pgtype.Numeric     `json:"target"`
+	CurrentValue  pgtype.Numeric     `json:"current_value"`
+	Unit          string             `json:"unit"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	MetricID      pgtype.UUID        `json:"metric_id"`
+	BaselineValue pgtype.Numeric     `json:"baseline_value"`
+	FormulaNote   pgtype.Text        `json:"formula_note"`
+	Status        string             `json:"status"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
 }
 
 type Meeting struct {
@@ -200,6 +274,35 @@ type Memory struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Metric struct {
+	ID               pgtype.UUID        `json:"id"`
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	Name             string             `json:"name"`
+	DisplayName      string             `json:"display_name"`
+	Formula          string             `json:"formula"`
+	Unit             pgtype.Text        `json:"unit"`
+	Source           string             `json:"source"`
+	RefreshFrequency pgtype.Text        `json:"refresh_frequency"`
+	TargetValue      pgtype.Numeric     `json:"target_value"`
+	AlertThreshold   pgtype.Numeric     `json:"alert_threshold"`
+	OwnerID          pgtype.UUID        `json:"owner_id"`
+	OwnerTeamID      pgtype.UUID        `json:"owner_team_id"`
+	Tags             []byte             `json:"tags"`
+	IsActive         bool               `json:"is_active"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MetricValue struct {
+	ID         int64              `json:"id"`
+	MetricID   pgtype.UUID        `json:"metric_id"`
+	ObservedAt pgtype.Timestamptz `json:"observed_at"`
+	Value      pgtype.Numeric     `json:"value"`
+	Dimensions []byte             `json:"dimensions"`
+	SourceRef  pgtype.Text        `json:"source_ref"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 type OnboardingSession struct {
 	ID            pgtype.UUID        `json:"id"`
 	TenantID      pgtype.UUID        `json:"tenant_id"`
@@ -229,25 +332,29 @@ type OrgUnit struct {
 }
 
 type Organization struct {
-	ID                   pgtype.UUID        `json:"id"`
-	TenantID             pgtype.UUID        `json:"tenant_id"`
-	Industry             pgtype.Text        `json:"industry"`
-	Size                 pgtype.Int4        `json:"size"`
-	Stage                pgtype.Text        `json:"stage"`
-	BusinessModel        pgtype.Text        `json:"business_model"`
-	Region               pgtype.Text        `json:"region"`
-	MentorID             string             `json:"mentor_id"`
-	ManagementPlan       []byte             `json:"management_plan"`
-	PlanVersion          int32              `json:"plan_version"`
-	Status               string             `json:"status"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	ManagementPainPoints []string           `json:"management_pain_points"`
-	CurrentProjects      []byte             `json:"current_projects"`
-	TargetFramework      pgtype.Text        `json:"target_framework"`
-	TeamStructure        []byte             `json:"team_structure"`
-	CommunicationTools   []string           `json:"communication_tools"`
-	CulturePreferences   []byte             `json:"culture_preferences"`
+	ID                     pgtype.UUID        `json:"id"`
+	TenantID               pgtype.UUID        `json:"tenant_id"`
+	Industry               pgtype.Text        `json:"industry"`
+	Size                   pgtype.Int4        `json:"size"`
+	Stage                  pgtype.Text        `json:"stage"`
+	BusinessModel          pgtype.Text        `json:"business_model"`
+	Region                 pgtype.Text        `json:"region"`
+	MentorID               string             `json:"mentor_id"`
+	ManagementPlan         []byte             `json:"management_plan"`
+	PlanVersion            int32              `json:"plan_version"`
+	Status                 string             `json:"status"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ManagementPainPoints   []string           `json:"management_pain_points"`
+	CurrentProjects        []byte             `json:"current_projects"`
+	TargetFramework        pgtype.Text        `json:"target_framework"`
+	TeamStructure          []byte             `json:"team_structure"`
+	CommunicationTools     []string           `json:"communication_tools"`
+	CulturePreferences     []byte             `json:"culture_preferences"`
+	StrategicPriorities    []byte             `json:"strategic_priorities"`
+	KeyRisks               []byte             `json:"key_risks"`
+	ManagementStyleWeights []byte             `json:"management_style_weights"`
+	Countries              []byte             `json:"countries"`
 }
 
 type PerformanceReview struct {
@@ -268,6 +375,26 @@ type PerformanceReview struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Project struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Name            string             `json:"name"`
+	Description     pgtype.Text        `json:"description"`
+	OwnerID         pgtype.UUID        `json:"owner_id"`
+	OwnerTeamID     pgtype.UUID        `json:"owner_team_id"`
+	Status          string             `json:"status"`
+	Priority        string             `json:"priority"`
+	LinkedGoalIds   []byte             `json:"linked_goal_ids"`
+	LinkedMetricIds []byte             `json:"linked_metric_ids"`
+	Blockers        []byte             `json:"blockers"`
+	SourceSystem    pgtype.Text        `json:"source_system"`
+	SourceRef       pgtype.Text        `json:"source_ref"`
+	StartDate       pgtype.Date        `json:"start_date"`
+	DueDate         pgtype.Date        `json:"due_date"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Report struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
@@ -278,6 +405,15 @@ type Report struct {
 	Sentiment   pgtype.Text        `json:"sentiment"`
 	SubmittedAt pgtype.Timestamptz `json:"submitted_at"`
 	Channel     string             `json:"channel"`
+}
+
+type ReportingLine struct {
+	ID               pgtype.UUID        `json:"id"`
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	ManagerID        pgtype.UUID        `json:"manager_id"`
+	ReportID         pgtype.UUID        `json:"report_id"`
+	RelationshipType string             `json:"relationship_type"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type ReviewCycle struct {
@@ -322,6 +458,26 @@ type Summary struct {
 	BlockersCount  int32              `json:"blockers_count"`
 	KeyMetrics     []byte             `json:"key_metrics"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type Task struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	GoalID         pgtype.UUID        `json:"goal_id"`
+	KeyResultID    pgtype.UUID        `json:"key_result_id"`
+	Title          string             `json:"title"`
+	Description    pgtype.Text        `json:"description"`
+	OwnerID        pgtype.UUID        `json:"owner_id"`
+	OwnerTeamID    pgtype.UUID        `json:"owner_team_id"`
+	Status         string             `json:"status"`
+	Priority       string             `json:"priority"`
+	DueAt          pgtype.Timestamptz `json:"due_at"`
+	SourceSystem   pgtype.Text        `json:"source_system"`
+	SourceRef      pgtype.Text        `json:"source_ref"`
+	CreatedByAgent bool               `json:"created_by_agent"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Tenant struct {
@@ -381,4 +537,27 @@ type User struct {
 	Role         string             `json:"role"`
 	IsActive     bool               `json:"is_active"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type Workflow struct {
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	Name              string             `json:"name"`
+	Category          pgtype.Text        `json:"category"`
+	TriggerConditions []byte             `json:"trigger_conditions"`
+	Steps             []byte             `json:"steps"`
+	ApprovalRules     []byte             `json:"approval_rules"`
+	EscalationRules   []byte             `json:"escalation_rules"`
+	IsActive          bool               `json:"is_active"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WorkingMemorySnapshot struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	SnapshotType string             `json:"snapshot_type"`
+	Content      []byte             `json:"content"`
+	GeneratedBy  pgtype.Text        `json:"generated_by"`
+	GeneratedAt  pgtype.Timestamptz `json:"generated_at"`
 }

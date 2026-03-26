@@ -11,6 +11,17 @@ import {
   sendSummary,
   sendMessage,
 } from "./tools/actions.js";
+import {
+  getCompanyState,
+  getExecutionSignals,
+  getCommunicationEvents,
+  getTopRisks,
+  getWorkingMemory,
+  getKPIDashboard,
+  getOverdueTasks,
+  getTaskStats,
+  getIncentiveScores,
+} from "./tools/brain.js";
 
 const NO_KEY_MSG =
   "Please set MANAGEMENT_BRAIN_API_KEY environment variable.";
@@ -254,6 +265,122 @@ export function createServer(): McpServer {
       if (!client)
         return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
       return sendMessage(client, employee_name, message);
+    },
+  );
+
+  // --- Group 6: Brain Layer — Execution Intelligence ---
+
+  server.tool(
+    "get_company_state",
+    "Get a comprehensive snapshot of the company's current operational state: top execution risks, overdue tasks, task status breakdown, communication event counts, blocked projects, and AI working memory. Use this for situational awareness before making management decisions.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getCompanyState(client);
+    },
+  );
+
+  server.tool(
+    "get_execution_signals",
+    "Get AI-generated execution risk signals: overload risk, delivery risk, engagement drops, blocker cascades, performance spikes, and metric anomalies. Each signal has a severity score (0-1) and evidence-based reasons. Use this to identify which people or projects need attention.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getExecutionSignals(client);
+    },
+  );
+
+  server.tool(
+    "get_communication_events",
+    "Get structured management events extracted from daily check-in reports: blockers reported, tasks completed, commitments made, delays, escalations, and proactive updates. Each event has a confidence score. Use this to understand team communication patterns and key signals.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getCommunicationEvents(client);
+    },
+  );
+
+  server.tool(
+    "get_top_risks",
+    "Get the highest-severity execution risk signals across the organization. Returns signals sorted by score, highlighting the most urgent issues that need management attention. Use this for quick risk assessment.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getTopRisks(client);
+    },
+  );
+
+  server.tool(
+    "get_working_memory",
+    "Get the AI's latest working memory snapshot: focus areas, risk summary, team momentum (positive/neutral/negative), pending decisions, recent wins, and action items. This is the AI manager's situational awareness context.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getWorkingMemory(client);
+    },
+  );
+
+  server.tool(
+    "get_kpi_dashboard",
+    "Get all KPI metrics with their latest values and targets. Shows metric name, unit, current value, target value, and owner. Use this to monitor business performance and identify metrics that are off-track.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getKPIDashboard(client);
+    },
+  );
+
+  server.tool(
+    "get_overdue_tasks",
+    "Get all tasks that are past their due date. Shows task title, priority, assignee, and how overdue they are. Use this to identify delivery risks and follow up with task owners.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getOverdueTasks(client);
+    },
+  );
+
+  server.tool(
+    "get_task_stats",
+    "Get task status breakdown: counts of tasks in each status (todo, in_progress, in_review, done, blocked). Use this for a quick pulse on team workload and throughput.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getTaskStats(client);
+    },
+  );
+
+  server.tool(
+    "get_incentive_scores",
+    "Get incentive evaluation scores for a specific period. Shows per-employee scores, breakdowns, payout weights, and whether human review is needed. Use this for compensation decisions and performance recognition.",
+    {
+      period: z
+        .string()
+        .describe(
+          "Period in YYYY-MM format, e.g. '2026-03' for March 2026",
+        ),
+    },
+    async ({ period }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getIncentiveScores(client, period);
     },
   );
 

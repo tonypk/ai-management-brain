@@ -114,6 +114,31 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/CareerView.vue'),
       },
       {
+        path: 'metrics',
+        name: 'Metrics',
+        component: () => import('@/views/MetricsView.vue'),
+      },
+      {
+        path: 'projects',
+        name: 'Projects',
+        component: () => import('@/views/ProjectsView.vue'),
+      },
+      {
+        path: 'tasks',
+        name: 'Tasks',
+        component: () => import('@/views/TasksView.vue'),
+      },
+      {
+        path: 'incentives',
+        name: 'Incentives',
+        component: () => import('@/views/IncentivesView.vue'),
+      },
+      {
+        path: 'state',
+        name: 'State',
+        component: () => import('@/views/StateView.vue'),
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/SettingsView.vue'),

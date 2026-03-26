@@ -603,6 +603,444 @@ CREATE INDEX IF NOT EXISTS idx_tenants_boss_slack ON tenants(boss_slack_id) WHER
 CREATE INDEX IF NOT EXISTS idx_tenants_boss_lark ON tenants(boss_lark_id) WHERE boss_lark_id IS NOT NULL;
 `
 	_, err := pool.Exec(ctx, migration011)
+	if err != nil {
+		return err
+	}
+
+	// Migration 000012: Goals / OKR tables
+	const migration012 = `
+CREATE TABLE IF NOT EXISTS goals (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id),
+    owner_id    UUID REFERENCES employees(id),
+    title       VARCHAR(500) NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    status      VARCHAR(20) NOT NULL DEFAULT 'draft'
+                CHECK (status IN ('draft', 'active', 'completed', 'cancelled')),
+    cycle       VARCHAR(10) NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_goals_tenant_cycle ON goals(tenant_id, cycle);
+CREATE INDEX IF NOT EXISTS idx_goals_owner ON goals(owner_id) WHERE owner_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS key_results (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    goal_id       UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    title         VARCHAR(500) NOT NULL,
+    target        NUMERIC(12,2) NOT NULL DEFAULT 0,
+    current_value NUMERIC(12,2) NOT NULL DEFAULT 0,
+    unit          VARCHAR(20) NOT NULL DEFAULT '%',
+    due_date      DATE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_key_results_goal ON key_results(goal_id);
+
+CREATE TABLE IF NOT EXISTS goal_snapshots (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    goal_id          UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    overall_progress NUMERIC(5,2) NOT NULL DEFAULT 0,
+    snapshot_date    DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_goal_snapshots_goal_date ON goal_snapshots(goal_id, snapshot_date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_goal_snapshots_unique ON goal_snapshots(goal_id, snapshot_date);
+`
+	if _, err := pool.Exec(ctx, migration012); err != nil {
+		return err
+	}
+
+	// Migration 000013: Reviews, Meetings, Skills
+	const migration013 = `
+CREATE TABLE IF NOT EXISTS review_cycles (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id),
+    title       VARCHAR(200) NOT NULL,
+    period      VARCHAR(20) NOT NULL,
+    status      VARCHAR(20) NOT NULL DEFAULT 'draft'
+                CHECK (status IN ('draft', 'active', 'completed')),
+    start_date  DATE NOT NULL,
+    end_date    DATE NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_review_cycles_tenant ON review_cycles(tenant_id, status);
+
+CREATE TABLE IF NOT EXISTS performance_reviews (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cycle_id        UUID NOT NULL REFERENCES review_cycles(id) ON DELETE CASCADE,
+    employee_id     UUID NOT NULL REFERENCES employees(id),
+    reviewer_id     UUID REFERENCES employees(id),
+    status          VARCHAR(20) NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'in_progress', 'submitted', 'acknowledged')),
+    self_rating     SMALLINT CHECK (self_rating BETWEEN 1 AND 5),
+    manager_rating  SMALLINT CHECK (manager_rating BETWEEN 1 AND 5),
+    self_summary    TEXT NOT NULL DEFAULT '',
+    manager_summary TEXT NOT NULL DEFAULT '',
+    strengths       TEXT NOT NULL DEFAULT '',
+    improvements    TEXT NOT NULL DEFAULT '',
+    submitted_at    TIMESTAMPTZ,
+    acknowledged_at TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_reviews_cycle ON performance_reviews(cycle_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_employee ON performance_reviews(employee_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_unique ON performance_reviews(cycle_id, employee_id);
+
+CREATE TABLE IF NOT EXISTS meetings (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id      UUID NOT NULL REFERENCES tenants(id),
+    employee_id    UUID NOT NULL REFERENCES employees(id),
+    manager_id     UUID REFERENCES employees(id),
+    meeting_date   DATE NOT NULL,
+    duration_min   SMALLINT NOT NULL DEFAULT 30,
+    notes          TEXT NOT NULL DEFAULT '',
+    mood           VARCHAR(20) NOT NULL DEFAULT ''
+                   CHECK (mood IN ('', 'great', 'good', 'neutral', 'concerning', 'critical')),
+    follow_up      TEXT NOT NULL DEFAULT '',
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_meetings_tenant ON meetings(tenant_id, meeting_date DESC);
+CREATE INDEX IF NOT EXISTS idx_meetings_employee ON meetings(employee_id, meeting_date DESC);
+
+CREATE TABLE IF NOT EXISTS meeting_action_items (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    meeting_id  UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    title       VARCHAR(500) NOT NULL,
+    assignee_id UUID REFERENCES employees(id),
+    status      VARCHAR(20) NOT NULL DEFAULT 'open'
+                CHECK (status IN ('open', 'in_progress', 'done')),
+    due_date    DATE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_action_items_meeting ON meeting_action_items(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_action_items_assignee ON meeting_action_items(assignee_id) WHERE assignee_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS skills (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id),
+    name        VARCHAR(200) NOT NULL,
+    category    VARCHAR(100) NOT NULL DEFAULT 'general',
+    description TEXT NOT NULL DEFAULT '',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_unique ON skills(tenant_id, name);
+
+CREATE TABLE IF NOT EXISTS employee_skills (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    skill_id    UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    level       SMALLINT NOT NULL DEFAULT 1 CHECK (level BETWEEN 1 AND 5),
+    notes       TEXT NOT NULL DEFAULT '',
+    assessed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_skills_unique ON employee_skills(employee_id, skill_id);
+CREATE INDEX IF NOT EXISTS idx_employee_skills_skill ON employee_skills(skill_id);
+`
+	if _, err := pool.Exec(ctx, migration013); err != nil {
+		return err
+	}
+
+	// Migration 000014: Training + Career
+	const migration014 = `
+CREATE TABLE IF NOT EXISTS training_programs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '',
+    duration_hours INT NOT NULL DEFAULT 0,
+    provider TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '',
+    is_mandatory BOOLEAN NOT NULL DEFAULT FALSE,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_training_programs_tenant ON training_programs(tenant_id);
+
+CREATE TABLE IF NOT EXISTS training_enrollments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    program_id UUID NOT NULL REFERENCES training_programs(id) ON DELETE CASCADE,
+    employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'enrolled' CHECK (status IN ('enrolled', 'in_progress', 'completed', 'dropped')),
+    enrolled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    score INT,
+    notes TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_training_enrollments_unique ON training_enrollments(program_id, employee_id);
+CREATE INDEX IF NOT EXISTS idx_training_enrollments_program ON training_enrollments(program_id);
+CREATE INDEX IF NOT EXISTS idx_training_enrollments_employee ON training_enrollments(employee_id);
+
+CREATE TABLE IF NOT EXISTS career_levels (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    title TEXT NOT NULL,
+    level_order INT NOT NULL DEFAULT 0,
+    description TEXT NOT NULL DEFAULT '',
+    requirements TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_career_levels_tenant ON career_levels(tenant_id);
+
+CREATE TABLE IF NOT EXISTS career_paths (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    current_level_id UUID REFERENCES career_levels(id),
+    target_level_id UUID REFERENCES career_levels(id),
+    target_date DATE,
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_career_paths_unique ON career_paths(employee_id);
+CREATE INDEX IF NOT EXISTS idx_career_paths_employee ON career_paths(employee_id);
+`
+	if _, err := pool.Exec(ctx, migration014); err != nil {
+		return err
+	}
+
+	// Migration 000015: Brain Layer v2 — Context + State + Incentives
+	const migration015 = `
+-- Extend employees with execution context
+ALTER TABLE employees
+  ADD COLUMN IF NOT EXISTS execution_score NUMERIC(5,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS current_load TEXT DEFAULT 'medium',
+  ADD COLUMN IF NOT EXISTS strengths JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS risk_flags JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS work_scope JSONB DEFAULT '[]'::jsonb;
+
+-- Extend organizations with strategic context
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS strategic_priorities JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS key_risks JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS management_style_weights JSONB DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS countries JSONB DEFAULT '[]'::jsonb;
+
+-- Extend goals with level and source
+ALTER TABLE goals
+  ADD COLUMN IF NOT EXISTS level TEXT NOT NULL DEFAULT 'team',
+  ADD COLUMN IF NOT EXISTS goal_type TEXT NOT NULL DEFAULT 'okr',
+  ADD COLUMN IF NOT EXISTS source_system TEXT,
+  ADD COLUMN IF NOT EXISTS source_ref TEXT;
+
+-- Extend key_results with metric link and status
+ALTER TABLE key_results
+  ADD COLUMN IF NOT EXISTS metric_id UUID,
+  ADD COLUMN IF NOT EXISTS baseline_value NUMERIC(12,2),
+  ADD COLUMN IF NOT EXISTS formula_note TEXT,
+  ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'on_track',
+  ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES employees(id);
+
+-- metrics (KPI definitions)
+CREATE TABLE IF NOT EXISTS metrics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  formula TEXT NOT NULL DEFAULT '',
+  unit TEXT DEFAULT '%',
+  source TEXT NOT NULL DEFAULT 'manual',
+  refresh_frequency TEXT DEFAULT 'daily',
+  target_value NUMERIC(12,2),
+  alert_threshold NUMERIC(12,2),
+  owner_id UUID REFERENCES employees(id),
+  owner_team_id UUID REFERENCES org_units(id),
+  tags JSONB DEFAULT '[]'::jsonb,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_metrics_tenant ON metrics(tenant_id) WHERE is_active = true;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_metrics_tenant_name ON metrics(tenant_id, name);
+
+-- metric_values (time-series)
+CREATE TABLE IF NOT EXISTS metric_values (
+  id BIGSERIAL PRIMARY KEY,
+  metric_id UUID NOT NULL REFERENCES metrics(id) ON DELETE CASCADE,
+  observed_at TIMESTAMPTZ NOT NULL,
+  value NUMERIC(12,4) NOT NULL,
+  dimensions JSONB DEFAULT '{}'::jsonb,
+  source_ref TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_metric_values_metric_time ON metric_values(metric_id, observed_at DESC);
+
+-- projects
+CREATE TABLE IF NOT EXISTS projects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  owner_id UUID REFERENCES employees(id),
+  owner_team_id UUID REFERENCES org_units(id),
+  status TEXT NOT NULL DEFAULT 'planned',
+  priority TEXT NOT NULL DEFAULT 'medium',
+  linked_goal_ids JSONB DEFAULT '[]'::jsonb,
+  linked_metric_ids JSONB DEFAULT '[]'::jsonb,
+  blockers JSONB DEFAULT '[]'::jsonb,
+  source_system TEXT,
+  source_ref TEXT,
+  start_date DATE,
+  due_date DATE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_projects_tenant ON projects(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_projects_owner ON projects(owner_id) WHERE owner_id IS NOT NULL;
+
+-- tasks
+CREATE TABLE IF NOT EXISTS tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+  goal_id UUID REFERENCES goals(id) ON DELETE SET NULL,
+  key_result_id UUID REFERENCES key_results(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  owner_id UUID REFERENCES employees(id),
+  owner_team_id UUID REFERENCES org_units(id),
+  status TEXT NOT NULL DEFAULT 'todo',
+  priority TEXT NOT NULL DEFAULT 'medium',
+  due_at TIMESTAMPTZ,
+  source_system TEXT DEFAULT 'manual',
+  source_ref TEXT,
+  created_by_agent BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_tenant ON tasks(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id) WHERE owner_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id) WHERE project_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(tenant_id, status) WHERE status NOT IN ('done', 'cancelled');
+
+-- reporting_lines
+CREATE TABLE IF NOT EXISTS reporting_lines (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  manager_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  report_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  relationship_type TEXT NOT NULL DEFAULT 'direct',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_reporting_lines_manager ON reporting_lines(manager_id);
+CREATE INDEX IF NOT EXISTS idx_reporting_lines_report ON reporting_lines(report_id);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_reporting_line') THEN
+    ALTER TABLE reporting_lines ADD CONSTRAINT uq_reporting_line UNIQUE(manager_id, report_id);
+  END IF;
+END $$;
+
+-- workflows
+CREATE TABLE IF NOT EXISTS workflows (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  category TEXT DEFAULT 'general',
+  trigger_conditions JSONB DEFAULT '{}'::jsonb,
+  steps JSONB NOT NULL DEFAULT '[]'::jsonb,
+  approval_rules JSONB DEFAULT '{}'::jsonb,
+  escalation_rules JSONB DEFAULT '{}'::jsonb,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_workflows_tenant ON workflows(tenant_id) WHERE is_active = true;
+
+-- incentive_rules
+CREATE TABLE IF NOT EXISTS incentive_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  reward_model TEXT NOT NULL DEFAULT 'individual',
+  payout_cycle TEXT NOT NULL DEFAULT 'monthly',
+  attribution_rules JSONB NOT NULL DEFAULT '{}'::jsonb,
+  penalty_rules JSONB DEFAULT '[]'::jsonb,
+  scoring_formula JSONB NOT NULL DEFAULT '{}'::jsonb,
+  applies_to JSONB DEFAULT '[]'::jsonb,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_incentive_rules_tenant ON incentive_rules(tenant_id) WHERE is_active = true;
+
+-- incentive_scores
+CREATE TABLE IF NOT EXISTS incentive_scores (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  rule_id UUID NOT NULL REFERENCES incentive_rules(id) ON DELETE CASCADE,
+  person_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  period TEXT NOT NULL,
+  score NUMERIC(8,2) NOT NULL DEFAULT 0,
+  score_breakdown JSONB NOT NULL DEFAULT '{}'::jsonb,
+  payout_weight NUMERIC(4,3) DEFAULT 1.0,
+  attribution_confidence NUMERIC(4,3) DEFAULT 0.8,
+  status TEXT NOT NULL DEFAULT 'calculated',
+  calculated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reviewed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_incentive_scores_person ON incentive_scores(person_id, period);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_incentive_score') THEN
+    ALTER TABLE incentive_scores ADD CONSTRAINT uq_incentive_score UNIQUE(rule_id, person_id, period);
+  END IF;
+END $$;
+
+-- communication_events
+CREATE TABLE IF NOT EXISTS communication_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  source_type TEXT NOT NULL,
+  source_id UUID,
+  platform TEXT NOT NULL DEFAULT 'telegram',
+  event_type TEXT NOT NULL,
+  actor_id UUID REFERENCES employees(id),
+  target_id UUID REFERENCES employees(id),
+  related_task_id UUID REFERENCES tasks(id),
+  related_project_id UUID REFERENCES projects(id),
+  related_goal_id UUID REFERENCES goals(id),
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  confidence NUMERIC(4,3) DEFAULT 0.8,
+  occurred_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_comm_events_tenant_time ON communication_events(tenant_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_comm_events_actor ON communication_events(actor_id) WHERE actor_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_comm_events_type ON communication_events(tenant_id, event_type);
+
+-- execution_signals
+CREATE TABLE IF NOT EXISTS execution_signals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  subject_type TEXT NOT NULL,
+  subject_id UUID NOT NULL,
+  signal_type TEXT NOT NULL,
+  score NUMERIC(5,2) NOT NULL,
+  reasons JSONB DEFAULT '[]'::jsonb,
+  time_window TEXT DEFAULT '7d',
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_exec_signals_tenant ON execution_signals(tenant_id, generated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_exec_signals_subject ON execution_signals(subject_type, subject_id, generated_at DESC);
+
+-- working_memory_snapshots
+CREATE TABLE IF NOT EXISTS working_memory_snapshots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  snapshot_type TEXT NOT NULL,
+  content JSONB NOT NULL,
+  generated_by TEXT DEFAULT 'system',
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_wm_snapshots_tenant_type ON working_memory_snapshots(tenant_id, snapshot_type, generated_at DESC);
+`
+	_, err = pool.Exec(ctx, migration015)
 	return err
 }
 
@@ -775,6 +1213,24 @@ func main() {
 		onboardingSvc = onboarding.NewService(queries, rdb, onboardLLM, onboardLLM, onboardLLM, onboardLLM)
 		slog.Info("onboarding service initialized")
 	}
+
+	// Brain Layer v2: Context Service + State Engine + Execution Planner + Incentive Engine
+	contextService := brain.NewContextService(queries)
+	var stateEngine *brain.StateEngine
+	var execPlanner *brain.ExecutionPlanner
+	var incentiveEngine *brain.IncentiveEngine
+	if cfg.AnthropicKey != "" {
+		stateLLM, err := brain.NewAnthropicClient(cfg.AnthropicKey)
+		if err != nil {
+			slog.Error("failed to create state engine LLM client", "error", err)
+			os.Exit(1)
+		}
+		stateEngine = brain.NewStateEngine(stateLLM, queries)
+		execPlanner = brain.NewExecutionPlanner(stateLLM, queries, contextService)
+		incentiveEngine = brain.NewIncentiveEngine(stateLLM, queries, contextService)
+		slog.Info("brain layer v2 engines initialized (state + context + planner + incentive)")
+	}
+	_ = execPlanner // will be used in Phase 4 MCP tools
 
 	// Create report collector with default questions (overridden per-remind)
 	defaultEngine, _ := engineFactory.ForTenant("inamori", "default")
@@ -1277,6 +1733,36 @@ func main() {
 		slog.Info("memory event subscribers registered")
 	}
 
+	// Brain Layer v2: StateEngine event subscriber — extract communication events from reports
+	if stateEngine != nil {
+		eventBus.Subscribe(events.ReportSubmitted, func(ctx context.Context, event events.Event) error {
+			var payload events.ReportSubmittedPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				return err
+			}
+			reportID, answersJSON, err := reportDB.GetLatestReportByEmployee(ctx, payload.EmployeeID, payload.ReportDate)
+			if err != nil {
+				slog.Warn("state_engine: fetch report for event extraction failed", "error", err)
+				return nil
+			}
+			var answers map[string]string
+			if err := json.Unmarshal([]byte(answersJSON), &answers); err != nil {
+				slog.Warn("state_engine: parse answers failed", "error", err)
+				return nil
+			}
+			var tenantUUID pgtype.UUID
+			_ = tenantUUID.Scan(event.TenantID)
+			var reportUUID pgtype.UUID
+			_ = reportUUID.Scan(reportID)
+			_, err = stateEngine.ExtractEventsFromReport(ctx, tenantUUID, reportUUID, payload.EmployeeName, answers)
+			if err != nil {
+				slog.Warn("state_engine: extract events failed", "error", err)
+			}
+			return nil
+		})
+		slog.Info("state engine event subscriber registered")
+	}
+
 	// Start bot polling in background
 	go tgBot.Start()
 
@@ -1616,6 +2102,94 @@ func main() {
 		slog.Error("failed to register goal_snapshots job", "error", err)
 	} else {
 		slog.Info("goal_snapshots job registered", "schedule", "daily 23:00")
+	}
+
+	// Brain Layer v2: Daily signal generation + working memory job
+	if stateEngine != nil {
+		if err := sched.AddJob("brain_signals", "0 22 * * *", func(ctx context.Context) error {
+			slog.Info("brain_signals job: generating execution signals + working memory")
+			tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID)
+			if err != nil {
+				return fmt.Errorf("get tenant: %w", err)
+			}
+			var tenantUUID pgtype.UUID
+			if err := tenantUUID.Scan(tenant.ID); err != nil {
+				return fmt.Errorf("parse tenant UUID: %w", err)
+			}
+
+			// Generate signals for each active employee
+			employees, err := queries.ListActiveEmployees(ctx, tenantUUID)
+			if err != nil {
+				slog.Error("brain_signals: list employees", "error", err)
+			} else {
+				for _, emp := range employees {
+					_, sigErr := stateEngine.GenerateSignals(ctx, tenantUUID, "employee", emp.ID, emp.Name)
+					if sigErr != nil {
+						slog.Error("brain_signals: generate signal", "employee", emp.Name, "error", sigErr)
+					}
+				}
+			}
+
+			// Generate working memory snapshot
+			contextJSON, err := contextService.FormatContextForPrompt(ctx, tenantUUID)
+			if err != nil {
+				slog.Error("brain_signals: format context", "error", err)
+			} else {
+				_, err = stateEngine.GenerateWorkingMemory(ctx, tenantUUID, contextJSON)
+				if err != nil {
+					slog.Error("brain_signals: generate working memory", "error", err)
+				}
+			}
+
+			slog.Info("brain_signals job: done")
+			return nil
+		}); err != nil {
+			slog.Error("failed to register brain_signals job", "error", err)
+		} else {
+			slog.Info("brain_signals job registered", "schedule", "daily 22:00")
+		}
+	}
+
+	// Brain Layer v2: Monthly incentive calculation job
+	if incentiveEngine != nil {
+		if err := sched.AddJob("incentive_calc", "0 6 1 * *", func(ctx context.Context) error {
+			slog.Info("incentive_calc job: calculating monthly incentive scores")
+			tenant, err := botDB.GetTenantByBossChatID(ctx, cfg.BossTelegramID)
+			if err != nil {
+				return fmt.Errorf("get tenant: %w", err)
+			}
+			var tenantUUID pgtype.UUID
+			if err := tenantUUID.Scan(tenant.ID); err != nil {
+				return fmt.Errorf("parse tenant UUID: %w", err)
+			}
+
+			// Calculate for the previous month
+			now := time.Now().In(loc)
+			prevMonth := now.AddDate(0, -1, 0)
+			period := prevMonth.Format("2006-01")
+
+			employees, err := queries.ListActiveEmployees(ctx, tenantUUID)
+			if err != nil {
+				return fmt.Errorf("list employees: %w", err)
+			}
+
+			var totalScores int
+			for _, emp := range employees {
+				scores, err := incentiveEngine.Calculate(ctx, tenantUUID, period, emp.ID, emp.Name)
+				if err != nil {
+					slog.Error("incentive_calc: calculate", "employee", emp.Name, "error", err)
+					continue
+				}
+				totalScores += len(scores)
+			}
+
+			slog.Info("incentive_calc job: done", "period", period, "employees", len(employees), "scores", totalScores)
+			return nil
+		}); err != nil {
+			slog.Error("failed to register incentive_calc job", "error", err)
+		} else {
+			slog.Info("incentive_calc job registered", "schedule", "monthly 1st 06:00")
+		}
 	}
 
 	// Create AI Role Manager (requires LLM + scheduler)

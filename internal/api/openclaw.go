@@ -42,15 +42,6 @@ func handleOpenClawStatus(queries *sqlc.Queries) gin.HandlerFunc {
 
 		today := pgtype.Date{Time: time.Now().Truncate(24 * time.Hour), Valid: true}
 
-		submissionCount, err := queries.CountReportsByTenantDate(ctx, sqlc.CountReportsByTenantDateParams{
-			TenantID:   tenantID,
-			ReportDate: today,
-		})
-		if err != nil {
-			slog.Error("openclaw status: count reports", "error", err)
-			submissionCount = 0
-		}
-
 		reports, err := queries.GetReportsByTenantDate(ctx, sqlc.GetReportsByTenantDateParams{
 			TenantID:   tenantID,
 			ReportDate: today,
@@ -60,10 +51,29 @@ func handleOpenClawStatus(queries *sqlc.Queries) gin.HandlerFunc {
 			reports = nil
 		}
 
-		// Build set of employee IDs who submitted
+		// Build set of employee IDs who submitted + submitted employee list
 		submittedSet := make(map[[16]byte]bool, len(reports))
+		type submittedEmployee struct {
+			ID          string `json:"id"`
+			Name        string `json:"name"`
+			SubmittedAt string `json:"submitted_at"`
+		}
+		submitted := make([]submittedEmployee, 0, len(reports))
+
+		// Build a name lookup from employees
+		empNameMap := make(map[[16]byte]string, len(employees))
+		for _, emp := range employees {
+			empNameMap[emp.ID.Bytes] = emp.Name
+		}
+
 		for _, r := range reports {
 			submittedSet[r.EmployeeID.Bytes] = true
+			name := empNameMap[r.EmployeeID.Bytes]
+			submitted = append(submitted, submittedEmployee{
+				ID:          formatUUID(r.EmployeeID),
+				Name:        name,
+				SubmittedAt: r.SubmittedAt.Time.Format(time.RFC3339),
+			})
 		}
 
 		// Build pending list and chase counts
@@ -74,6 +84,7 @@ func handleOpenClawStatus(queries *sqlc.Queries) gin.HandlerFunc {
 		}
 
 		pending := make([]pendingEmployee, 0)
+		missed := make([]string, 0)
 		totalChaseCount := 0
 
 		for _, emp := range employees {
@@ -107,8 +118,9 @@ func handleOpenClawStatus(queries *sqlc.Queries) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{
 			"date":            today.Time.Format("2006-01-02"),
 			"total_employees": len(employees),
-			"submitted":       submissionCount,
+			"submitted":       submitted,
 			"pending":         pending,
+			"missed":          missed,
 			"chase_count":     totalChaseCount,
 			"mentor":          tenant.MentorID,
 			"mentor_name":     mentorName,

@@ -45,7 +45,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	// Metrics
 	metrics := NewMetrics()
 	r.Use(metrics.Middleware())
-	r.GET("/metrics", metrics.Handler())
+	r.GET("/__metrics", metrics.Handler())
 
 	// Rate limiting (60 req/min per IP)
 	if cfg.Redis != nil {
@@ -215,6 +215,85 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			career.DELETE("/paths/:id", handleDeleteCareerPath(cfg.Queries))
 		}
 
+		// Metrics / KPIs
+		kpis := protected.Group("/kpis")
+		kpis.Use(RequireRole("boss"))
+		{
+			kpis.GET("", handleListMetrics(cfg.Queries))
+			kpis.POST("", handleCreateMetric(cfg.Queries))
+			kpis.GET("/dashboard", handleGetMetricsWithValues(cfg.Queries))
+			kpis.PUT("/:id", handleUpdateMetric(cfg.Queries))
+			kpis.DELETE("/:id", handleDeleteMetric(cfg.Queries))
+			kpis.POST("/:id/values", handleIngestMetricValue(cfg.Queries))
+			kpis.GET("/:id/values", handleListMetricValues(cfg.Queries))
+		}
+
+		// Projects
+		projects := protected.Group("/projects")
+		projects.Use(RequireRole("boss"))
+		{
+			projects.GET("", handleListProjects(cfg.Queries))
+			projects.POST("", handleCreateProject(cfg.Queries))
+			projects.GET("/:id", handleGetProject(cfg.Queries))
+			projects.PUT("/:id", handleUpdateProject(cfg.Queries))
+			projects.DELETE("/:id", handleDeleteProject(cfg.Queries))
+		}
+
+		// Tasks
+		tasks := protected.Group("/tasks")
+		tasks.Use(RequireRole("boss"))
+		{
+			tasks.GET("", handleListTasks(cfg.Queries))
+			tasks.POST("", handleCreateTask(cfg.Queries))
+			tasks.GET("/overdue", handleListOverdueTasks(cfg.Queries))
+			tasks.GET("/stats", handleCountTasksByStatus(cfg.Queries))
+			tasks.GET("/:id", handleGetTask(cfg.Queries))
+			tasks.PUT("/:id", handleUpdateTask(cfg.Queries))
+			tasks.DELETE("/:id", handleDeleteTask(cfg.Queries))
+		}
+
+		// Reporting Lines
+		reporting := protected.Group("/reporting-lines")
+		reporting.Use(RequireRole("boss"))
+		{
+			reporting.GET("", handleListReportingLines(cfg.Queries))
+			reporting.POST("", handleCreateReportingLine(cfg.Queries))
+			reporting.DELETE("/:id", handleDeleteReportingLine(cfg.Queries))
+			reporting.GET("/reports/:manager_id", handleGetDirectReports(cfg.Queries))
+		}
+
+		// Workflows
+		workflows := protected.Group("/workflows")
+		workflows.Use(RequireRole("boss"))
+		{
+			workflows.GET("", handleListWorkflows(cfg.Queries))
+			workflows.POST("", handleCreateWorkflow(cfg.Queries))
+			workflows.PUT("/:id", handleUpdateWorkflow(cfg.Queries))
+			workflows.DELETE("/:id", handleDeleteWorkflow(cfg.Queries))
+		}
+
+		// Incentives
+		incentives := protected.Group("/incentives")
+		incentives.Use(RequireRole("boss"))
+		{
+			incentives.GET("/rules", handleListIncentiveRules(cfg.Queries))
+			incentives.POST("/rules", handleCreateIncentiveRule(cfg.Queries))
+			incentives.PUT("/rules/:id", handleUpdateIncentiveRule(cfg.Queries))
+			incentives.DELETE("/rules/:id", handleDeleteIncentiveRule(cfg.Queries))
+			incentives.GET("/scores", handleListIncentiveScores(cfg.Queries))
+		}
+
+		// State & Signals
+		state := protected.Group("/state")
+		state.Use(RequireRole("boss"))
+		{
+			state.GET("", handleGetCompanyState(cfg.Queries))
+			state.GET("/events", handleListCommunicationEvents(cfg.Queries))
+			state.GET("/signals", handleListExecutionSignals(cfg.Queries))
+			state.GET("/risks", handleGetTopRisks(cfg.Queries))
+			state.GET("/memory", handleGetWorkingMemory(cfg.Queries))
+		}
+
 		// Memory routes (optional — requires memory engine)
 		if cfg.MemoryStore != nil {
 			memories := protected.Group("/memories")
@@ -304,6 +383,17 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		}
 		mcpAPI.GET("/seats/mentors", handleListMentorsWithDomain())
 		mcpAPI.GET("/employees/profile/:name", handleEmployeeProfile(cfg.Queries))
+
+		// Brain Layer v2 (MCP accessible — under /openclaw/ to avoid route conflicts)
+		mcpAPI.GET("/openclaw/state", handleGetCompanyState(cfg.Queries))
+		mcpAPI.GET("/openclaw/state/events", handleListCommunicationEvents(cfg.Queries))
+		mcpAPI.GET("/openclaw/state/signals", handleListExecutionSignals(cfg.Queries))
+		mcpAPI.GET("/openclaw/state/risks", handleGetTopRisks(cfg.Queries))
+		mcpAPI.GET("/openclaw/state/memory", handleGetWorkingMemory(cfg.Queries))
+		mcpAPI.GET("/openclaw/kpis", handleGetMetricsWithValues(cfg.Queries))
+		mcpAPI.GET("/openclaw/tasks/overdue", handleListOverdueTasks(cfg.Queries))
+		mcpAPI.GET("/openclaw/tasks/stats", handleCountTasksByStatus(cfg.Queries))
+		mcpAPI.GET("/openclaw/incentives/scores", handleListIncentiveScores(cfg.Queries))
 	}
 
 	// Webhook endpoints (signature-verified, no JWT)

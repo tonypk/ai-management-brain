@@ -25,3 +25,11 @@ export type { Meeting, MeetingMood, ActionItem, ActionItemStatus, OpenActionItem
 export type { Skill, EmployeeSkill, SkillMatrixEntry } from './skills'
 export type { TrainingProgram, TrainingProgramStatus, TrainingEnrollment, EnrollmentStatus } from './training'
 export type { CareerLevel, CareerPath } from './career'
+export type { Metric, MetricWithValue, MetricValue } from './metrics'
+export type { Project } from './projects'
+export type { Task, TaskStats } from './tasks'
+export type { IncentiveRule, IncentiveScore } from './incentives'
+export type {
+  CommunicationEvent, ExecutionSignal, WorkingMemorySnapshot,
+  CompanyState, Workflow, ReportingLine,
+} from './state'

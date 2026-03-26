@@ -13,7 +13,7 @@ import (
 
 const createOrganization = `-- name: CreateOrganization :one
 INSERT INTO organizations (tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, plan_version, status, created_at, updated_at, management_pain_points, current_projects, target_framework, team_structure, communication_tools, culture_preferences
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, plan_version, status, created_at, updated_at, management_pain_points, current_projects, target_framework, team_structure, communication_tools, culture_preferences, strategic_priorities, key_risks, management_style_weights, countries
 `
 
 type CreateOrganizationParams struct {
@@ -61,6 +61,10 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 		&i.TeamStructure,
 		&i.CommunicationTools,
 		&i.CulturePreferences,
+		&i.StrategicPriorities,
+		&i.KeyRisks,
+		&i.ManagementStyleWeights,
+		&i.Countries,
 	)
 	return i, err
 }
@@ -75,7 +79,7 @@ func (q *Queries) DeleteOrganization(ctx context.Context, tenantID pgtype.UUID) 
 }
 
 const getOrganizationByTenant = `-- name: GetOrganizationByTenant :one
-SELECT id, tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, plan_version, status, created_at, updated_at, management_pain_points, current_projects, target_framework, team_structure, communication_tools, culture_preferences FROM organizations WHERE tenant_id = $1
+SELECT id, tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, plan_version, status, created_at, updated_at, management_pain_points, current_projects, target_framework, team_structure, communication_tools, culture_preferences, strategic_priorities, key_risks, management_style_weights, countries FROM organizations WHERE tenant_id = $1
 `
 
 func (q *Queries) GetOrganizationByTenant(ctx context.Context, tenantID pgtype.UUID) (Organization, error) {
@@ -101,6 +105,10 @@ func (q *Queries) GetOrganizationByTenant(ctx context.Context, tenantID pgtype.U
 		&i.TeamStructure,
 		&i.CommunicationTools,
 		&i.CulturePreferences,
+		&i.StrategicPriorities,
+		&i.KeyRisks,
+		&i.ManagementStyleWeights,
+		&i.Countries,
 	)
 	return i, err
 }
@@ -157,7 +165,7 @@ ON CONFLICT (tenant_id) DO UPDATE SET
     communication_tools = EXCLUDED.communication_tools,
     culture_preferences = EXCLUDED.culture_preferences,
     updated_at = NOW()
-RETURNING id, tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, plan_version, status, created_at, updated_at, management_pain_points, current_projects, target_framework, team_structure, communication_tools, culture_preferences
+RETURNING id, tenant_id, industry, size, stage, business_model, region, mentor_id, management_plan, plan_version, status, created_at, updated_at, management_pain_points, current_projects, target_framework, team_structure, communication_tools, culture_preferences, strategic_priorities, key_risks, management_style_weights, countries
 `
 
 type UpsertOrganizationParams struct {
@@ -213,6 +221,10 @@ func (q *Queries) UpsertOrganization(ctx context.Context, arg UpsertOrganization
 		&i.TeamStructure,
 		&i.CommunicationTools,
 		&i.CulturePreferences,
+		&i.StrategicPriorities,
+		&i.KeyRisks,
+		&i.ManagementStyleWeights,
+		&i.Countries,
 	)
 	return i, err
 }

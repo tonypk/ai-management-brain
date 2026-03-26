@@ -19,6 +19,14 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/db/sqlc"
 )
 
+// jsonMarshal marshals v to JSON bytes for JSONB columns.
+func jsonMarshal(v interface{}) ([]byte, error) {
+	if v == nil {
+		return []byte("{}"), nil
+	}
+	return json.Marshal(v)
+}
+
 // parseUUID converts a string UUID to pgtype.UUID.
 func parseUUID(s string) (pgtype.UUID, error) {
 	var u pgtype.UUID

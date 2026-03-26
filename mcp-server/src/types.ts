@@ -114,6 +114,77 @@ export interface EmployeeProfile {
   consecutive_missed: number;
 }
 
+// Brain Layer v2 tools
+export interface CompanyState {
+  top_risks: Array<{
+    signal_type: string;
+    score: string;
+    reasons: string;
+  }>;
+  overdue_tasks: Array<{
+    id: string;
+    title: string;
+    priority: string;
+    due_at: string;
+  }>;
+  task_stats: Array<{
+    status: string;
+    count: number;
+  }>;
+  event_counts: Array<{
+    event_type: string;
+    count: number;
+  }>;
+  blocked_projects: Array<{
+    id: string;
+    name: string;
+    status: string;
+  }>;
+  working_memory: Record<string, unknown> | null;
+}
+
+export interface ExecutionSignal {
+  id: string;
+  signal_type: string;
+  score: string;
+  reasons: string;
+  subject_type: string;
+  subject_id: string;
+  time_window: string;
+  generated_at: string;
+}
+
+export interface CommunicationEvent {
+  id: string;
+  event_type: string;
+  payload: string;
+  confidence: string;
+  source_type: string;
+  platform: string;
+  occurred_at: string;
+}
+
+export interface MetricWithValue {
+  id: string;
+  name: string;
+  unit: string;
+  latest_value: string;
+  target_value: string;
+  owner_name: string;
+}
+
+export interface IncentiveScore {
+  id: string;
+  rule_id: string;
+  person_id: string;
+  period: string;
+  score: string;
+  score_breakdown: string;
+  payout_weight: string;
+  attribution_confidence: string;
+  status: string;
+}
+
 // Action tools (write operations)
 export interface CheckinResult {
   sent_to: string[];

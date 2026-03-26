@@ -23,6 +23,11 @@ import {
   HammerOutline as SkillsIcon,
   BookOutline as TrainingIcon,
   TrendingUpOutline as CareerIcon,
+  SpeedometerOutline as MetricsIcon,
+  FolderOutline as ProjectsIcon,
+  CheckboxOutline as TasksIcon,
+  TrophyOutline as IncentivesIcon,
+  PulseOutline as StateIcon,
 } from '@vicons/ionicons5'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
@@ -46,12 +51,16 @@ function renderIcon(icon: typeof DashboardIcon) {
 const menuOptions: MenuOption[] = [
   { type: 'group', label: 'Observe', key: 'observe-group', children: [
     { label: 'Dashboard', key: 'dashboard', icon: renderIcon(DashboardIcon) },
+    { label: 'Company State', key: 'state', icon: renderIcon(StateIcon) },
+    { label: 'KPI Metrics', key: 'metrics', icon: renderIcon(MetricsIcon) },
     { label: 'Alerts', key: 'alerts', icon: renderIcon(AlertIcon) },
     { label: 'Reports', key: 'reports', icon: renderIcon(ReportIcon) },
   ]},
   { type: 'group', label: 'Organize', key: 'organize-group', children: [
     { label: 'Team Members', key: 'employees', icon: renderIcon(PeopleIcon) },
     { label: 'Organization', key: 'organization', icon: renderIcon(OrgIcon) },
+    { label: 'Projects', key: 'projects', icon: renderIcon(ProjectsIcon) },
+    { label: 'Tasks', key: 'tasks', icon: renderIcon(TasksIcon) },
     { label: 'Skill Inventory', key: 'skills', icon: renderIcon(SkillsIcon) },
     { label: 'Mentor', key: 'mentor', icon: renderIcon(MentorIcon) },
     { label: 'C-Suite Board', key: 'seats', icon: renderIcon(SeatsIcon) },
@@ -61,6 +70,7 @@ const menuOptions: MenuOption[] = [
     { label: '1:1 Coaching', key: 'coaching', icon: renderIcon(CoachingIcon) },
     { label: '1:1 Meetings', key: 'meetings', icon: renderIcon(MeetingsIcon) },
     { label: 'Reviews', key: 'reviews', icon: renderIcon(ReviewsIcon) },
+    { label: 'Incentives', key: 'incentives', icon: renderIcon(IncentivesIcon) },
     { label: 'Training', key: 'training', icon: renderIcon(TrainingIcon) },
     { label: 'Career Paths', key: 'career', icon: renderIcon(CareerIcon) },
   ]},
