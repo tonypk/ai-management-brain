@@ -1,8 +1,8 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "5.0.1"
-description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, AI recommendation engine. Works instantly after install. Connect manageaibrain.com MCP for full team automation: auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, AI recommendations, 23+ platform messaging."
+version: "5.1.0"
+description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, AI recommendation engine. Works instantly after install. Connect manageaibrain.com MCP for full team automation: auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, AI recommendations, 23+ platform messaging. Integrates with OpenClaw MCP connectors (Notion, Jira, GitHub, Slack, etc.) to build a company context layer — the foundation for all management intelligence."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
@@ -40,6 +40,7 @@ Everything in Advisor Mode, plus:
 - **11 automated scenarios**: daily check-in cycle, project health patrol, smart briefing, 1:1 meeting prep, signal scanning, knowledge base, emergency response, execution risk review, KPI health check, incentive review, AI recommendations
 - **6 cron jobs**: automated check-ins, chases, summaries, briefings, signal scans, daily recommendation scan
 - **23+ messaging platforms**: Telegram, Slack, Lark, Signal, and more via OpenClaw
+- **OpenClaw connector integration**: storage tools (Notion/Jira/Sheets), dev tools (GitHub/Linear/Calendar), communication tools (Slack/Discord/Lark) feed data into the company context layer
 - **AI Recommendation Engine**: daily scans + real-time triggers generate prioritized management suggestions with one-click actions
 - **Web Dashboard**: real-time analytics at [manageaibrain.com](https://manageaibrain.com) — 20+ pages including Dashboard, Company State, KPI Metrics, Projects, Tasks, Incentives, Recommendations, Goals, Reviews, Skills, Training, Career Paths
 
@@ -80,6 +81,33 @@ The skill auto-detects which mode to use based on whether MCP tools are availabl
 **Team Operations Mode**: AI connects to `manageaibrain.com/mcp` for real team operations. Tool parameters (employee names, discussion topics, message content) are sent to the cloud server for processing. Write tools deliver messages to employees via connected platforms. Local files (`config.json`, chat history, memory) are never sent to the server.
 
 **Persistent behavior** (Team Operations only): Registers up to 5 cron jobs that run autonomously — including jobs that send messages to employees. Review schedules in `config.json` before activating. Manage with `cron list` / `cron remove`.
+
+## OpenClaw Integration Architecture
+
+Boss AI Agent is the **brain layer** — it works with OpenClaw's MCP connector ecosystem to build a complete management intelligence system.
+
+```
+OpenClaw Runtime (user environment)
+  ├── MCP Connectors (user self-installs)
+  │    ├── Storage: Notion / Jira / Google Sheets
+  │    ├── Development: GitHub / Linear / Calendar
+  │    └── Communication: Telegram / Slack / Discord / Lark
+  │
+  └── Boss AI Agent Skill (brain layer)
+       └── manageaibrain.com API
+            ├── Company Context Layer  ← foundation
+            ├── Execution Intelligence ← signals + risks
+            ├── Communication Parser   ← messages → events
+            ├── Incentive Engine       ← context-aware scoring
+            └── AI Recommendations     ← proactive suggestions
+```
+
+**Company Context Layer** is the foundation — all intelligence engines depend on it:
+- Storage connectors (Notion/Jira/Sheets) → project updates, task status, documentation flow into context
+- Dev connectors (GitHub/Linear) → PR activity, commit patterns, CI status feed into execution signals
+- Communication connectors (Telegram/Slack/Discord/Lark) → employee messages are parsed into structured management events
+
+**Key principle**: the skill does NOT manage tokens for external tools — OpenClaw handles all tool connections. The skill consumes the data and builds management intelligence on top.
 
 ## Mentors
 
@@ -188,9 +216,16 @@ Boss AI Agent 是老板的 AI 管理中间件。安装后立即可用（Advisor 
 - **顾问模式**（零依赖）— 16 位导师哲学框架（稻盛和夫、马云、马斯克等）、9 套文化包（中国、菲律宾、新加坡等）、C-Suite 董事会模拟、1:1 准备、管理决策建议。装了就能用，不联网。
 - **团队运营模式**（连接 MCP）— 24 个 MCP 工具实现自动签到、追踪、报表、消息推送、执行力分析、KPI 仪表盘、任务管理、激励评分、AI 推荐引擎，6 个定时任务，23+ 平台支持。
 
+**OpenClaw 集成架构（v5.1 新增）：** Boss AI Agent 作为"大脑层"，与 OpenClaw MCP 连接器配合使用：
+- **储存工具**（Notion / Jira / Sheets）→ 项目、任务、文档自动汇入公司上下文
+- **开发工具**（GitHub / Linear / Calendar）→ PR、提交、CI 状态转化为执行力信号
+- **沟通工具**（Telegram / Slack / Discord / Lark）→ 员工消息解析为结构化管理事件
+
+**公司上下文层**是所有智能引擎的地基，执行力分析、AI 推荐、激励评分都依赖它。
+
 **AI 推荐引擎（v5.0 新增）：** 每日 10:30 自动扫描团队数据，结合导师视角生成管理建议（如：连续缺勤提醒、情绪下降预警、任务逾期跟进）。支持一键执行建议动作，也可通过实时触发器即时生成。
 
-**数据说明：** 顾问模式不发送任何数据到云端。团队运营模式中，MCP 工具参数发送至 `manageaibrain.com` 处理，本地文件不上传。
+**数据说明：** 顾问模式不发送任何数据到云端。团队运营模式中，MCP 工具参数发送至 `manageaibrain.com` 处理。外部工具通过 OpenClaw 连接器访问，Skill 不管理令牌。
 
 安装：`clawhub install boss-ai-agent`
 
