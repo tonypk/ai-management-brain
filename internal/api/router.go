@@ -35,6 +35,7 @@ type RouterConfig struct {
 	Scheduler      *scheduler.Scheduler    // nil = scheduler disabled
 	SeatService    *seats.SeatService      // nil = seats disabled
 	ActionService  *service.ActionService  // nil = action endpoints disabled
+	HalaOSMapper   halaosMapper            // nil = HalaOS dispatch disabled (wired in Task 14)
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -402,6 +403,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	webhooks := r.Group("/webhooks")
 	{
 		webhooks.POST("/stripe", webhookVerifier.VerifyMiddleware("stripe"), billingHandler.HandleStripeWebhook)
+
+		halaosHandler := NewHalaOSWebhookHandler(cfg.Queries, cfg.HalaOSMapper)
+		webhooks.POST("/halaos", halaosHandler.HandleWebhook)
 	}
 
 	// Signal webhook (no auth — called by signal-cli container on internal network)
