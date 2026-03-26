@@ -303,6 +303,15 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			incentives.GET("/scores", handleListIncentiveScores(cfg.Queries))
 		}
 
+		// Sync management (frontend accessible)
+		sync := protected.Group("/sync")
+		sync.Use(RequireRole("boss"))
+		{
+			sync.GET("/configs", handleListSyncConfigs(cfg.Queries))
+			sync.PUT("/config", handleConfigureSync(cfg.Queries))
+			sync.GET("/logs", handleListSyncLogs(cfg.Queries))
+		}
+
 		// State & Signals
 		state := protected.Group("/state")
 		state.Use(RequireRole("boss"))
@@ -422,6 +431,13 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		mcpAPI.POST("/openclaw/incentives/calculate", handleCalculateIncentives(cfg.IncentiveEngine))
 		mcpAPI.GET("/openclaw/goals", handleListGoals(cfg.Queries))
 		mcpAPI.POST("/openclaw/kpis/:id/values", handleIngestMetricValue(cfg.Queries))
+
+		// Sync endpoints (MCP accessible)
+		mcpAPI.GET("/openclaw/sync/manifest", handleGetSyncManifest(cfg.Queries))
+		mcpAPI.POST("/openclaw/sync/result", handleReportSyncResult(cfg.Queries))
+		mcpAPI.PUT("/openclaw/sync/config", handleConfigureSync(cfg.Queries))
+		mcpAPI.GET("/openclaw/sync/configs", handleListSyncConfigs(cfg.Queries))
+		mcpAPI.GET("/openclaw/sync/logs", handleListSyncLogs(cfg.Queries))
 	}
 
 	// Webhook endpoints (signature-verified, no JWT)

@@ -1,0 +1,14 @@
+ALTER TABLE metrics DROP COLUMN IF EXISTS external_url;
+ALTER TABLE metrics DROP COLUMN IF EXISTS external_source;
+ALTER TABLE metrics DROP COLUMN IF EXISTS external_id;
+ALTER TABLE projects DROP COLUMN IF EXISTS external_url;
+ALTER TABLE projects DROP COLUMN IF EXISTS external_source;
+ALTER TABLE projects DROP COLUMN IF EXISTS external_id;
+ALTER TABLE goals DROP COLUMN IF EXISTS external_url;
+ALTER TABLE goals DROP COLUMN IF EXISTS external_source;
+ALTER TABLE goals DROP COLUMN IF EXISTS external_id;
+ALTER TABLE tasks DROP COLUMN IF EXISTS external_url;
+ALTER TABLE tasks DROP COLUMN IF EXISTS external_source;
+ALTER TABLE tasks DROP COLUMN IF EXISTS external_id;
+DROP TABLE IF EXISTS sync_logs;
+DROP TABLE IF EXISTS sync_configs;

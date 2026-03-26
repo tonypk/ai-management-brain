@@ -488,6 +488,35 @@ type Skill struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type SyncConfig struct {
+	ID                   pgtype.UUID        `json:"id"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	StorageType          string             `json:"storage_type"`
+	IsEnabled            bool               `json:"is_enabled"`
+	EntityTypes          []string           `json:"entity_types"`
+	SyncFrequencyMinutes int32              `json:"sync_frequency_minutes"`
+	LastSyncAt           pgtype.Timestamptz `json:"last_sync_at"`
+	LastSyncStatus       pgtype.Text        `json:"last_sync_status"`
+	Config               []byte             `json:"config"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SyncLog struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	SyncConfigID pgtype.UUID        `json:"sync_config_id"`
+	Direction    string             `json:"direction"`
+	StartedAt    pgtype.Timestamptz `json:"started_at"`
+	CompletedAt  pgtype.Timestamptz `json:"completed_at"`
+	Status       string             `json:"status"`
+	ItemsPushed  int32              `json:"items_pushed"`
+	ItemsPulled  int32              `json:"items_pulled"`
+	Conflicts    int32              `json:"conflicts"`
+	Errors       []byte             `json:"errors"`
+	Summary      pgtype.Text        `json:"summary"`
+}
+
 type Summary struct {
 	ID             pgtype.UUID        `json:"id"`
 	TenantID       pgtype.UUID        `json:"tenant_id"`

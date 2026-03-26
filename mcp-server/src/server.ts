@@ -28,6 +28,7 @@ import { getGoalState } from "./tools/goals.js";
 import { createExecutionPlan } from "./tools/planning.js";
 import { ingestMetric } from "./tools/metrics-write.js";
 import { calculateIncentives } from "./tools/incentives-calc.js";
+import { getSyncManifest, reportSyncResult, configureSync } from "./tools/sync.js";
 
 const NO_KEY_MSG =
   "Please set MANAGEMENT_BRAIN_API_KEY environment variable.";
@@ -537,6 +538,112 @@ export function createServer(): McpServer {
       if (!client)
         return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
       return calculateIncentives(client, { period });
+    },
+  );
+
+  // --- Group 8: Sync Tools ---
+
+  server.tool(
+    "get_sync_manifest",
+    "Get a list of data changes since the last sync. Returns changed tasks, goals, projects, and metrics with their current values and timestamps.",
+    {
+      storage_type: z
+        .enum(["notion", "sheets"])
+        .describe("Which storage to get manifest for"),
+    },
+    async ({ storage_type }) => {
+      const client = makeClient();
+      if (!client)
+        return {
+          content: [{ type: "text", text: NO_KEY_MSG }],
+          isError: true,
+        };
+      return getSyncManifest(client, storage_type);
+    },
+  );
+
+  server.tool(
+    "report_sync_result",
+    "Report the result of a sync operation. Call this after completing a sync to record stats and write pulled items back to manageaibrain.",
+    {
+      storage_type: z.enum(["notion", "sheets"]),
+      items_pushed: z
+        .number()
+        .describe("Number of items pushed to external storage"),
+      items_pulled: z
+        .number()
+        .describe("Number of items pulled from external storage"),
+      conflicts: z.number().describe("Number of conflicts detected"),
+      errors: z
+        .array(z.string())
+        .optional()
+        .describe("Error messages if any"),
+      pulled_items: z
+        .array(
+          z.object({
+            entity_type: z.string(),
+            external_id: z.string(),
+            data: z.record(z.string(), z.any()),
+          }),
+        )
+        .optional()
+        .describe(
+          "Items pulled from external storage to update in manageaibrain",
+        ),
+    },
+    async ({
+      storage_type,
+      items_pushed,
+      items_pulled,
+      conflicts,
+      errors,
+      pulled_items,
+    }) => {
+      const client = makeClient();
+      if (!client)
+        return {
+          content: [{ type: "text", text: NO_KEY_MSG }],
+          isError: true,
+        };
+      return reportSyncResult(client, {
+        storage_type,
+        items_pushed,
+        items_pulled,
+        conflicts,
+        errors,
+        pulled_items,
+      });
+    },
+  );
+
+  server.tool(
+    "configure_sync",
+    "Configure sync settings for Notion or Google Sheets. Set which data types to sync, frequency, and storage-specific config.",
+    {
+      storage_type: z.enum(["notion", "sheets"]),
+      is_enabled: z.boolean(),
+      entity_types: z.array(
+        z.enum(["tasks", "goals", "projects", "metrics"]),
+      ),
+      sync_frequency_minutes: z
+        .number()
+        .optional()
+        .describe("Sync interval in minutes, default 30"),
+      config: z
+        .record(z.string(), z.any())
+        .optional()
+        .describe(
+          "Storage-specific config: Notion database IDs or Sheet IDs",
+        ),
+    },
+    async (params) => {
+      const client = makeClient();
+      if (!client)
+        return {
+          content: [{ type: "text", text: NO_KEY_MSG }],
+          isError: true,
+        };
+      return configureSync(client, params);
     },
   );
 
