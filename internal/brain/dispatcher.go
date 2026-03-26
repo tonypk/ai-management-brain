@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/big"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/tonypk/ai-management-brain/internal/channel"
@@ -26,6 +28,9 @@ type ActionResult struct {
 	Skipped           string `json:"skipped,omitempty"`
 	NeedsConfirmation bool   `json:"needs_confirmation,omitempty"`
 	Link              string `json:"link,omitempty"`
+	TaskID            string `json:"task_id,omitempty"`
+	MeetingID         string `json:"meeting_id,omitempty"`
+	SignalID          string `json:"signal_id,omitempty"`
 }
 
 // SuggestedAction is one action in a recommendation's suggested_actions array.
@@ -89,15 +94,54 @@ func (d *Dispatcher) ExecuteAll(ctx context.Context, tenantID pgtype.UUID, actio
 	return results
 }
 
-// scheduleMeeting creates a meeting record for the given employee.
+// scheduleMeeting creates a meeting record in the database.
 func (d *Dispatcher) scheduleMeeting(ctx context.Context, tenantID pgtype.UUID, params map[string]any) ActionResult {
 	empIDStr, _ := params["employee_id"].(string)
 	if empIDStr == "" {
 		return ActionResult{Error: "missing employee_id"}
 	}
-	// Create a simple meeting record (log for now, integrate with meetings module later)
-	slog.Info("dispatcher: schedule_meeting", "employee", empIDStr)
-	return ActionResult{Success: true, Message: fmt.Sprintf("1:1 meeting scheduled with employee %s", empIDStr[:min(len(empIDStr), 8)])}
+	empID, err := dispatchParseUUID(empIDStr)
+	if err != nil {
+		return ActionResult{Error: "invalid employee_id"}
+	}
+
+	notes, _ := params["agenda"].(string)
+	if notes == "" {
+		notes, _ = params["notes"].(string)
+	}
+	durationMin := int16(30)
+	if d, ok := params["duration_min"].(float64); ok && d > 0 {
+		durationMin = int16(d)
+	}
+
+	// Default meeting date: tomorrow
+	meetingDate := time.Now().Add(24 * time.Hour)
+	if dateStr, ok := params["date"].(string); ok && dateStr != "" {
+		if t, err := time.Parse("2006-01-02", dateStr); err == nil {
+			meetingDate = t
+		}
+	}
+
+	meeting, err := d.queries.CreateMeeting(ctx, sqlc.CreateMeetingParams{
+		TenantID:    tenantID,
+		EmployeeID:  empID,
+		ManagerID:   pgtype.UUID{}, // boss is implicit
+		MeetingDate: pgtype.Date{Time: meetingDate, Valid: true},
+		DurationMin: durationMin,
+		Notes:       notes,
+		Mood:        "neutral",
+		FollowUp:    "",
+	})
+	if err != nil {
+		slog.Error("dispatcher: schedule_meeting failed", "error", err)
+		return ActionResult{Error: fmt.Sprintf("create meeting failed: %v", err)}
+	}
+	slog.Info("dispatcher: meeting scheduled", "meeting_id", meeting.ID, "employee", empIDStr[:min(len(empIDStr), 8)])
+	return ActionResult{
+		Success:   true,
+		Message:   fmt.Sprintf("1:1 meeting scheduled with employee %s", empIDStr[:min(len(empIDStr), 8)]),
+		MeetingID: uuidToString(meeting.ID),
+	}
 }
 
 // sendMessage resolves the employee's preferred channel and sends a message.
@@ -155,24 +199,99 @@ func (d *Dispatcher) sendMessage(ctx context.Context, tenantID pgtype.UUID, para
 	return ActionResult{Success: true, Message: fmt.Sprintf("Message sent to %s", emp.Name)}
 }
 
-// createTask creates a new task with the given parameters.
+// createTask creates a new task in the database.
 func (d *Dispatcher) createTask(ctx context.Context, tenantID pgtype.UUID, params map[string]any) ActionResult {
 	title, _ := params["title"].(string)
 	if title == "" {
 		return ActionResult{Error: "missing task title"}
 	}
-	slog.Info("dispatcher: create_task", "title", title)
-	return ActionResult{Success: true, Message: fmt.Sprintf("Task created: %s", title)}
+	description, _ := params["description"].(string)
+	priority, _ := params["priority"].(string)
+	if priority == "" {
+		priority = "medium"
+	}
+
+	var ownerID pgtype.UUID
+	if ownerStr, ok := params["owner_id"].(string); ok && ownerStr != "" {
+		ownerID, _ = dispatchParseUUID(ownerStr)
+	}
+
+	var dueAt pgtype.Timestamptz
+	if dueStr, ok := params["due_at"].(string); ok && dueStr != "" {
+		if t, err := time.Parse(time.RFC3339, dueStr); err == nil {
+			dueAt = pgtype.Timestamptz{Time: t, Valid: true}
+		} else if t, err := time.Parse("2006-01-02", dueStr); err == nil {
+			dueAt = pgtype.Timestamptz{Time: t, Valid: true}
+		}
+	}
+
+	task, err := d.queries.CreateTask(ctx, sqlc.CreateTaskParams{
+		TenantID:       tenantID,
+		Title:          title,
+		Description:    pgtype.Text{String: description, Valid: description != ""},
+		OwnerID:        ownerID,
+		Status:         "todo",
+		Priority:       priority,
+		DueAt:          dueAt,
+		SourceSystem:   pgtype.Text{String: "consulting", Valid: true},
+		CreatedByAgent: true,
+	})
+	if err != nil {
+		slog.Error("dispatcher: create_task failed", "error", err, "title", title)
+		return ActionResult{Error: fmt.Sprintf("create task failed: %v", err)}
+	}
+	slog.Info("dispatcher: task created", "task_id", task.ID, "title", title)
+	return ActionResult{
+		Success: true,
+		Message: fmt.Sprintf("Task created: %s", title),
+		TaskID:  uuidToString(task.ID),
+	}
 }
 
-// flagRisk flags a risk on a project.
+// flagRisk creates an execution signal in the database.
 func (d *Dispatcher) flagRisk(ctx context.Context, tenantID pgtype.UUID, params map[string]any) ActionResult {
 	riskDesc, _ := params["risk_description"].(string)
 	if riskDesc == "" {
 		return ActionResult{Error: "missing risk_description"}
 	}
-	slog.Info("dispatcher: flag_risk", "description", riskDesc)
-	return ActionResult{Success: true, Message: fmt.Sprintf("Risk flagged: %s", riskDesc)}
+
+	subjectType, _ := params["subject_type"].(string)
+	if subjectType == "" {
+		subjectType = "team"
+	}
+	var subjectID pgtype.UUID
+	if sid, ok := params["subject_id"].(string); ok && sid != "" {
+		subjectID, _ = dispatchParseUUID(sid)
+	} else {
+		subjectID = tenantID // default to tenant as subject
+	}
+
+	severity := 7.0
+	if s, ok := params["severity"].(float64); ok && s > 0 {
+		severity = s
+	}
+
+	reasonsJSON, _ := json.Marshal([]string{riskDesc})
+
+	signal, err := d.queries.CreateExecutionSignal(ctx, sqlc.CreateExecutionSignalParams{
+		TenantID:    tenantID,
+		SubjectType: subjectType,
+		SubjectID:   subjectID,
+		SignalType:  "risk_flag",
+		Score:       pgtype.Numeric{Int: big.NewInt(int64(severity * 100)), Exp: -2, Valid: true},
+		Reasons:     reasonsJSON,
+		TimeWindow:  pgtype.Text{String: "7d", Valid: true},
+	})
+	if err != nil {
+		slog.Error("dispatcher: flag_risk failed", "error", err)
+		return ActionResult{Error: fmt.Sprintf("flag risk failed: %v", err)}
+	}
+	slog.Info("dispatcher: risk flagged", "signal_id", signal.ID, "description", riskDesc)
+	return ActionResult{
+		Success:  true,
+		Message:  fmt.Sprintf("Risk flagged: %s", riskDesc),
+		SignalID: uuidToString(signal.ID),
+	}
 }
 
 // publicRecognition sends a recognition message to the team group.
