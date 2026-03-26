@@ -88,9 +88,10 @@ func (b *Bot) RegisterCommands(h *CommandHandler) {
 	b.bot.Handle("/board", wrap(h.HandleBoard))
 	b.bot.Handle("/team", wrap(h.HandleTeam))
 	b.bot.Handle("/assign", wrap(h.HandleAssign))
+	b.bot.Handle("/consult", wrap(h.HandleConsult))
 
 	slog.Info("bot commands registered",
-		"commands", []string{"/start", "/help", "/status", "/addemployee", "/join", "/mentor", "/blend", "/culture", "/profile", "/diagnostics", "/talk", "/board", "/team", "/assign"},
+		"commands", []string{"/start", "/help", "/status", "/addemployee", "/join", "/mentor", "/blend", "/culture", "/profile", "/diagnostics", "/talk", "/board", "/team", "/assign", "/consult"},
 	)
 }
 

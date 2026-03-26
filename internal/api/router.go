@@ -42,6 +42,7 @@ type RouterConfig struct {
 	ContextService  *brain.ContextService  // nil = context features disabled
 	ExecPlanner     *brain.ExecutionPlanner // nil = planning disabled
 	IncentiveEngine *brain.IncentiveEngine  // nil = incentive calc disabled
+	ConsultingEngine *brain.ConsultingEngine // nil = consulting features disabled
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -302,6 +303,23 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			incentives.PUT("/rules/:id", handleUpdateIncentiveRule(cfg.Queries))
 			incentives.DELETE("/rules/:id", handleDeleteIncentiveRule(cfg.Queries))
 			incentives.GET("/scores", handleListIncentiveScores(cfg.Queries))
+		}
+
+		// Consulting engagements
+		if cfg.ConsultingEngine != nil {
+			consulting := protected.Group("/consulting")
+			consulting.Use(RequireRole("boss"))
+			{
+				consulting.GET("", handleListEngagements(cfg.Queries))
+				consulting.POST("/start", handleStartEngagement(cfg.ConsultingEngine))
+				consulting.GET("/:id", handleGetEngagement(cfg.Queries))
+				consulting.POST("/:id/answer", handleAnswerQuestion(cfg.ConsultingEngine))
+				consulting.POST("/:id/execute", handleExecuteApproved(cfg.ConsultingEngine))
+				consulting.GET("/:id/progress", handleCheckProgress(cfg.ConsultingEngine))
+				consulting.POST("/:id/close", handleCloseEngagement(cfg.ConsultingEngine))
+				consulting.GET("/:id/actions", handleListEngagementActions(cfg.Queries))
+				consulting.POST("/actions/:id/review", handleReviewAction(cfg.ConsultingEngine, cfg.Queries))
+			}
 		}
 
 		// Sync management (frontend accessible)

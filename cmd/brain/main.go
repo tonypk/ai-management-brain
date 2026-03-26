@@ -273,6 +273,95 @@ func (a *onboardingAdapter) HandleMessage(ctx context.Context, tenantID string, 
 	return a.svc.HandleMessage(ctx, uid, channelType, userID, text)
 }
 
+// consultingBotAdapter bridges brain.ConsultingEngine (pgtype.UUID) to bot.ConsultingServicer (string IDs).
+type consultingBotAdapter struct {
+	engine  *brain.ConsultingEngine
+	queries *sqlc.Queries
+}
+
+func (a *consultingBotAdapter) StartEngagement(ctx context.Context, tenantID, problem, mentorID, cultureCode string) (string, string, error) {
+	tid, err := parseUUIDForChat(tenantID)
+	if err != nil {
+		return "", "", fmt.Errorf("parse tenant ID: %w", err)
+	}
+	eng, firstQuestion, err := a.engine.StartEngagement(ctx, tid, problem, mentorID, cultureCode)
+	if err != nil {
+		return "", "", err
+	}
+	return formatPgUUID(eng.ID), firstQuestion, nil
+}
+
+func (a *consultingBotAdapter) AnswerQuestion(ctx context.Context, engagementID, answer string) (string, string, bool, error) {
+	eid, err := parseUUIDForChat(engagementID)
+	if err != nil {
+		return "", "", false, fmt.Errorf("parse engagement ID: %w", err)
+	}
+	return a.engine.AnswerQuestion(ctx, eid, answer)
+}
+
+func (a *consultingBotAdapter) ReviewActions(ctx context.Context, engagementID string, approved bool) (string, error) {
+	eid, err := parseUUIDForChat(engagementID)
+	if err != nil {
+		return "", fmt.Errorf("parse engagement ID: %w", err)
+	}
+	actions, err := a.queries.ListEngagementActions(ctx, eid)
+	if err != nil {
+		return "", fmt.Errorf("list engagement actions: %w", err)
+	}
+	for _, action := range actions {
+		if action.Status == "pending" {
+			if reviewErr := a.engine.ReviewAction(ctx, action.ID, approved); reviewErr != nil {
+				slog.Warn("consulting bot: review action failed",
+					"action_id", formatPgUUID(action.ID), "error", reviewErr)
+			}
+		}
+	}
+	status := "rejected"
+	if approved {
+		status = "approved"
+	}
+	return fmt.Sprintf("All pending actions marked as %s.", status), nil
+}
+
+func (a *consultingBotAdapter) ExecuteApproved(ctx context.Context, engagementID string) (string, error) {
+	eid, err := parseUUIDForChat(engagementID)
+	if err != nil {
+		return "", fmt.Errorf("parse engagement ID: %w", err)
+	}
+	results, err := a.engine.ExecuteApproved(ctx, eid)
+	if err != nil {
+		return "", err
+	}
+	succeeded := 0
+	for _, r := range results {
+		if r.Success {
+			succeeded++
+		}
+	}
+	return fmt.Sprintf("Executed %d/%d actions successfully.", succeeded, len(results)), nil
+}
+
+func (a *consultingBotAdapter) ListActiveEngagements(ctx context.Context, tenantID string) (string, error) {
+	tid, err := parseUUIDForChat(tenantID)
+	if err != nil {
+		return "", fmt.Errorf("parse tenant ID: %w", err)
+	}
+	engagements, err := a.queries.ListActiveEngagements(ctx, tid)
+	if err != nil {
+		return "", fmt.Errorf("list active engagements: %w", err)
+	}
+	if len(engagements) == 0 {
+		return "No active consulting engagements.", nil
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Active Engagements (%d):\n\n", len(engagements)))
+	for i, e := range engagements {
+		sb.WriteString(fmt.Sprintf("%d. [%s] %s\n   ID: %s\n",
+			i+1, e.Phase, e.Title, formatPgUUID(e.ID)))
+	}
+	return sb.String(), nil
+}
+
 // runMigrations applies database migrations idempotently.
 func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	migrationSQL := `
@@ -1269,6 +1358,9 @@ func main() {
 	}
 	// execPlanner and incentiveEngine are wired into RouterConfig below (Brain Layer v3)
 
+	// Create consulting engine (requires LLM + dispatcher, wired after dispatcher is created below)
+	var consultingEngine *brain.ConsultingEngine
+
 	// Create report collector with default questions (overridden per-remind)
 	defaultEngine, _ := engineFactory.ForTenant("inamori", "default")
 	collector := report.NewCollector(redisClient, defaultEngine.GetCheckinQuestions())
@@ -1352,6 +1444,17 @@ func main() {
 		slog.Info("recommendation dispatcher initialized")
 	}
 
+	// Wire consulting engine now that dispatcher and contextService are available
+	if cfg.AnthropicKey != "" && dispatcher != nil {
+		consultingLLM, consultingLLMErr := brain.NewAnthropicClient(cfg.AnthropicKey)
+		if consultingLLMErr != nil {
+			slog.Error("failed to create consulting engine LLM client", "error", consultingLLMErr)
+			os.Exit(1)
+		}
+		consultingEngine = brain.NewConsultingEngine(consultingLLM, contextService, dispatcher, queries, memStore)
+		slog.Info("consulting engine enabled")
+	}
+
 	// Create event bus
 	eventBus := events.NewBus(rdb)
 
@@ -1376,6 +1479,9 @@ func main() {
 	}
 	if onboardingSvc != nil {
 		cmdHandler.SetOnboardingService(&onboardingAdapter{svc: onboardingSvc})
+	}
+	if consultingEngine != nil {
+		cmdHandler.SetConsultingService(&consultingBotAdapter{engine: consultingEngine, queries: queries})
 	}
 
 	// Wire diagnostics to show scheduler info + current mentor
@@ -2352,9 +2458,10 @@ func main() {
 		Recommender:     recommender,
 		Dispatcher:      dispatcher,
 		RecFeedback:     recFeedback,
-		ContextService:  contextService,
-		ExecPlanner:     execPlanner,
-		IncentiveEngine: incentiveEngine,
+		ContextService:   contextService,
+		ExecPlanner:      execPlanner,
+		IncentiveEngine:  incentiveEngine,
+		ConsultingEngine: consultingEngine,
 	})
 
 	// Health check (public, outside /api/v1)
