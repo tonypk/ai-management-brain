@@ -36,6 +36,8 @@ type RouterConfig struct {
 	SeatService    *seats.SeatService      // nil = seats disabled
 	ActionService  *service.ActionService  // nil = action endpoints disabled
 	HalaOSMapper   halaosMapper            // nil = HalaOS dispatch disabled (wired in Task 14)
+	Recommender    *brain.Recommender     // nil = recommendation engine disabled
+	Dispatcher     *brain.Dispatcher      // nil = recommendation dispatch disabled
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -251,6 +253,20 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			tasks.GET("/:id", handleGetTask(cfg.Queries))
 			tasks.PUT("/:id", handleUpdateTask(cfg.Queries))
 			tasks.DELETE("/:id", handleDeleteTask(cfg.Queries))
+		}
+
+		// Recommendations (AI recommendation engine)
+		if cfg.Dispatcher != nil {
+			recs := protected.Group("/recommendations")
+			recs.Use(RequireRole("boss"))
+			{
+				recs.GET("", handleListRecommendations(cfg.Queries))
+				recs.GET("/summary", handleGetRecommendationSummary(cfg.Queries))
+				recs.POST("/:id/execute", handleExecuteRecommendation(cfg.Queries, cfg.Dispatcher))
+				recs.POST("/:id/execute-all", handleExecuteAllRecommendation(cfg.Queries, cfg.Dispatcher))
+				recs.POST("/:id/dismiss", handleDismissRecommendation(cfg.Queries))
+				recs.DELETE("/:id", handleDeleteRecommendation(cfg.Queries))
+			}
 		}
 
 		// Reporting Lines
