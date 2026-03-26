@@ -103,7 +103,7 @@ func (q *Queries) GetOrgUnit(ctx context.Context, id pgtype.UUID) (OrgUnit, erro
 }
 
 const listEmployeesByUnit = `-- name: ListEmployeesByUnit :many
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope FROM employees WHERE org_unit_id = $1 AND is_active = true ORDER BY name
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope, halaos_employee_id, halaos_employee_no FROM employees WHERE org_unit_id = $1 AND is_active = true ORDER BY name
 `
 
 func (q *Queries) ListEmployeesByUnit(ctx context.Context, orgUnitID pgtype.UUID) ([]Employee, error) {
@@ -139,6 +139,8 @@ func (q *Queries) ListEmployeesByUnit(ctx context.Context, orgUnitID pgtype.UUID
 			&i.Strengths,
 			&i.RiskFlags,
 			&i.WorkScope,
+			&i.HalaosEmployeeID,
+			&i.HalaosEmployeeNo,
 		); err != nil {
 			return nil, err
 		}

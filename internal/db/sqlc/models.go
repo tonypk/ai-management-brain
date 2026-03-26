@@ -122,6 +122,8 @@ type Employee struct {
 	Strengths        []byte             `json:"strengths"`
 	RiskFlags        []byte             `json:"risk_flags"`
 	WorkScope        []byte             `json:"work_scope"`
+	HalaosEmployeeID pgtype.Int8        `json:"halaos_employee_id"`
+	HalaosEmployeeNo pgtype.Text        `json:"halaos_employee_no"`
 }
 
 type EmployeeSkill struct {
@@ -180,6 +182,24 @@ type GroupChat struct {
 	IsActive       bool               `json:"is_active"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type HalaosEvent struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	EventType      string             `json:"event_type"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	Payload        []byte             `json:"payload"`
+	ProcessedAt    pgtype.Timestamptz `json:"processed_at"`
+}
+
+type HalaosLink struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	WebhookSecret   string             `json:"webhook_secret"`
+	HalaosCompanyID int64              `json:"halaos_company_id"`
+	IsActive        bool               `json:"is_active"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type IncentiveRule struct {

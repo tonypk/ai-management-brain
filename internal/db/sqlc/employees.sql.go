@@ -14,7 +14,7 @@ import (
 const createEmployee = `-- name: CreateEmployee :one
 INSERT INTO employees (tenant_id, name, telegram_id, culture_code, role, invite_code, job_title, responsibilities, country, language)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope
+RETURNING id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope, halaos_employee_id, halaos_employee_no
 `
 
 type CreateEmployeeParams struct {
@@ -68,12 +68,14 @@ func (q *Queries) CreateEmployee(ctx context.Context, arg CreateEmployeeParams) 
 		&i.Strengths,
 		&i.RiskFlags,
 		&i.WorkScope,
+		&i.HalaosEmployeeID,
+		&i.HalaosEmployeeNo,
 	)
 	return i, err
 }
 
 const getEmployee = `-- name: GetEmployee :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope FROM employees WHERE id = $1 AND tenant_id = $2
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope, halaos_employee_id, halaos_employee_no FROM employees WHERE id = $1 AND tenant_id = $2
 `
 
 type GetEmployeeParams struct {
@@ -108,12 +110,14 @@ func (q *Queries) GetEmployee(ctx context.Context, arg GetEmployeeParams) (Emplo
 		&i.Strengths,
 		&i.RiskFlags,
 		&i.WorkScope,
+		&i.HalaosEmployeeID,
+		&i.HalaosEmployeeNo,
 	)
 	return i, err
 }
 
 const getEmployeeByInviteCode = `-- name: GetEmployeeByInviteCode :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope FROM employees WHERE invite_code = $1 AND telegram_id IS NULL
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope, halaos_employee_id, halaos_employee_no FROM employees WHERE invite_code = $1 AND telegram_id IS NULL
 `
 
 func (q *Queries) GetEmployeeByInviteCode(ctx context.Context, inviteCode pgtype.Text) (Employee, error) {
@@ -143,12 +147,14 @@ func (q *Queries) GetEmployeeByInviteCode(ctx context.Context, inviteCode pgtype
 		&i.Strengths,
 		&i.RiskFlags,
 		&i.WorkScope,
+		&i.HalaosEmployeeID,
+		&i.HalaosEmployeeNo,
 	)
 	return i, err
 }
 
 const getEmployeeByLarkID = `-- name: GetEmployeeByLarkID :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope FROM employees WHERE lark_id = $1 AND is_active = true
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope, halaos_employee_id, halaos_employee_no FROM employees WHERE lark_id = $1 AND is_active = true
 `
 
 func (q *Queries) GetEmployeeByLarkID(ctx context.Context, larkID pgtype.Text) (Employee, error) {
@@ -178,12 +184,14 @@ func (q *Queries) GetEmployeeByLarkID(ctx context.Context, larkID pgtype.Text) (
 		&i.Strengths,
 		&i.RiskFlags,
 		&i.WorkScope,
+		&i.HalaosEmployeeID,
+		&i.HalaosEmployeeNo,
 	)
 	return i, err
 }
 
 const getEmployeeByNameFuzzy = `-- name: GetEmployeeByNameFuzzy :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope FROM employees
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope, halaos_employee_id, halaos_employee_no FROM employees
 WHERE tenant_id = $1 AND is_active = true AND name ILIKE '%' || $2 || '%'
 ORDER BY name
 LIMIT 1
@@ -221,12 +229,14 @@ func (q *Queries) GetEmployeeByNameFuzzy(ctx context.Context, arg GetEmployeeByN
 		&i.Strengths,
 		&i.RiskFlags,
 		&i.WorkScope,
+		&i.HalaosEmployeeID,
+		&i.HalaosEmployeeNo,
 	)
 	return i, err
 }
 
 const getEmployeeBySignalPhone = `-- name: GetEmployeeBySignalPhone :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope FROM employees WHERE signal_phone = $1 AND is_active = true
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope, halaos_employee_id, halaos_employee_no FROM employees WHERE signal_phone = $1 AND is_active = true
 `
 
 func (q *Queries) GetEmployeeBySignalPhone(ctx context.Context, signalPhone pgtype.Text) (Employee, error) {
@@ -256,12 +266,14 @@ func (q *Queries) GetEmployeeBySignalPhone(ctx context.Context, signalPhone pgty
 		&i.Strengths,
 		&i.RiskFlags,
 		&i.WorkScope,
+		&i.HalaosEmployeeID,
+		&i.HalaosEmployeeNo,
 	)
 	return i, err
 }
 
 const getEmployeeBySlackID = `-- name: GetEmployeeBySlackID :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope FROM employees WHERE slack_id = $1 AND is_active = true
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope, halaos_employee_id, halaos_employee_no FROM employees WHERE slack_id = $1 AND is_active = true
 `
 
 func (q *Queries) GetEmployeeBySlackID(ctx context.Context, slackID pgtype.Text) (Employee, error) {
@@ -291,12 +303,14 @@ func (q *Queries) GetEmployeeBySlackID(ctx context.Context, slackID pgtype.Text)
 		&i.Strengths,
 		&i.RiskFlags,
 		&i.WorkScope,
+		&i.HalaosEmployeeID,
+		&i.HalaosEmployeeNo,
 	)
 	return i, err
 }
 
 const getEmployeeByTelegramID = `-- name: GetEmployeeByTelegramID :one
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope FROM employees WHERE telegram_id = $1
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope, halaos_employee_id, halaos_employee_no FROM employees WHERE telegram_id = $1
 `
 
 func (q *Queries) GetEmployeeByTelegramID(ctx context.Context, telegramID pgtype.Int8) (Employee, error) {
@@ -326,12 +340,14 @@ func (q *Queries) GetEmployeeByTelegramID(ctx context.Context, telegramID pgtype
 		&i.Strengths,
 		&i.RiskFlags,
 		&i.WorkScope,
+		&i.HalaosEmployeeID,
+		&i.HalaosEmployeeNo,
 	)
 	return i, err
 }
 
 const listActiveEmployees = `-- name: ListActiveEmployees :many
-SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope FROM employees WHERE tenant_id = $1 AND is_active = true ORDER BY name
+SELECT id, tenant_id, name, telegram_id, culture_code, role, invite_code, is_active, created_at, signal_phone, slack_id, lark_id, preferred_channel, job_title, responsibilities, country, language, org_unit_id, execution_score, current_load, strengths, risk_flags, work_scope, halaos_employee_id, halaos_employee_no FROM employees WHERE tenant_id = $1 AND is_active = true ORDER BY name
 `
 
 func (q *Queries) ListActiveEmployees(ctx context.Context, tenantID pgtype.UUID) ([]Employee, error) {
@@ -367,6 +383,8 @@ func (q *Queries) ListActiveEmployees(ctx context.Context, tenantID pgtype.UUID)
 			&i.Strengths,
 			&i.RiskFlags,
 			&i.WorkScope,
+			&i.HalaosEmployeeID,
+			&i.HalaosEmployeeNo,
 		); err != nil {
 			return nil, err
 		}
@@ -440,7 +458,7 @@ func (q *Queries) ListEmployeesWithChannels(ctx context.Context, tenantID pgtype
 }
 
 const listEmployeesWithoutReport = `-- name: ListEmployeesWithoutReport :many
-SELECT e.id, e.tenant_id, e.name, e.telegram_id, e.culture_code, e.role, e.invite_code, e.is_active, e.created_at, e.signal_phone, e.slack_id, e.lark_id, e.preferred_channel, e.job_title, e.responsibilities, e.country, e.language, e.org_unit_id, e.execution_score, e.current_load, e.strengths, e.risk_flags, e.work_scope FROM employees e
+SELECT e.id, e.tenant_id, e.name, e.telegram_id, e.culture_code, e.role, e.invite_code, e.is_active, e.created_at, e.signal_phone, e.slack_id, e.lark_id, e.preferred_channel, e.job_title, e.responsibilities, e.country, e.language, e.org_unit_id, e.execution_score, e.current_load, e.strengths, e.risk_flags, e.work_scope, e.halaos_employee_id, e.halaos_employee_no FROM employees e
 LEFT JOIN reports r ON e.id = r.employee_id AND r.report_date = $2
 WHERE e.tenant_id = $1 AND e.is_active = true AND e.role = 'member' AND r.id IS NULL
 `
@@ -483,6 +501,8 @@ func (q *Queries) ListEmployeesWithoutReport(ctx context.Context, arg ListEmploy
 			&i.Strengths,
 			&i.RiskFlags,
 			&i.WorkScope,
+			&i.HalaosEmployeeID,
+			&i.HalaosEmployeeNo,
 		); err != nil {
 			return nil, err
 		}

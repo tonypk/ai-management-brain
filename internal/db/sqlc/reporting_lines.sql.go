@@ -53,7 +53,7 @@ func (q *Queries) DeleteReportingLine(ctx context.Context, id pgtype.UUID) error
 }
 
 const getDirectReports = `-- name: GetDirectReports :many
-SELECT e.id, e.tenant_id, e.name, e.telegram_id, e.culture_code, e.role, e.invite_code, e.is_active, e.created_at, e.signal_phone, e.slack_id, e.lark_id, e.preferred_channel, e.job_title, e.responsibilities, e.country, e.language, e.org_unit_id, e.execution_score, e.current_load, e.strengths, e.risk_flags, e.work_scope FROM employees e
+SELECT e.id, e.tenant_id, e.name, e.telegram_id, e.culture_code, e.role, e.invite_code, e.is_active, e.created_at, e.signal_phone, e.slack_id, e.lark_id, e.preferred_channel, e.job_title, e.responsibilities, e.country, e.language, e.org_unit_id, e.execution_score, e.current_load, e.strengths, e.risk_flags, e.work_scope, e.halaos_employee_id, e.halaos_employee_no FROM employees e
 JOIN reporting_lines rl ON rl.report_id = e.id
 WHERE rl.manager_id = $1 AND rl.relationship_type = 'direct'
 ORDER BY e.name
@@ -92,6 +92,8 @@ func (q *Queries) GetDirectReports(ctx context.Context, managerID pgtype.UUID) (
 			&i.Strengths,
 			&i.RiskFlags,
 			&i.WorkScope,
+			&i.HalaosEmployeeID,
+			&i.HalaosEmployeeNo,
 		); err != nil {
 			return nil, err
 		}
@@ -104,7 +106,7 @@ func (q *Queries) GetDirectReports(ctx context.Context, managerID pgtype.UUID) (
 }
 
 const getManager = `-- name: GetManager :one
-SELECT e.id, e.tenant_id, e.name, e.telegram_id, e.culture_code, e.role, e.invite_code, e.is_active, e.created_at, e.signal_phone, e.slack_id, e.lark_id, e.preferred_channel, e.job_title, e.responsibilities, e.country, e.language, e.org_unit_id, e.execution_score, e.current_load, e.strengths, e.risk_flags, e.work_scope FROM employees e
+SELECT e.id, e.tenant_id, e.name, e.telegram_id, e.culture_code, e.role, e.invite_code, e.is_active, e.created_at, e.signal_phone, e.slack_id, e.lark_id, e.preferred_channel, e.job_title, e.responsibilities, e.country, e.language, e.org_unit_id, e.execution_score, e.current_load, e.strengths, e.risk_flags, e.work_scope, e.halaos_employee_id, e.halaos_employee_no FROM employees e
 JOIN reporting_lines rl ON rl.manager_id = e.id
 WHERE rl.report_id = $1 AND rl.relationship_type = 'direct'
 LIMIT 1
@@ -137,6 +139,8 @@ func (q *Queries) GetManager(ctx context.Context, reportID pgtype.UUID) (Employe
 		&i.Strengths,
 		&i.RiskFlags,
 		&i.WorkScope,
+		&i.HalaosEmployeeID,
+		&i.HalaosEmployeeNo,
 	)
 	return i, err
 }
