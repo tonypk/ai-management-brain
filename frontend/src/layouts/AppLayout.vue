@@ -21,6 +21,8 @@ import {
   StarOutline as ReviewsIcon,
   CalendarOutline as MeetingsIcon,
   HammerOutline as SkillsIcon,
+  BookOutline as TrainingIcon,
+  TrendingUpOutline as CareerIcon,
 } from '@vicons/ionicons5'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
@@ -59,6 +61,8 @@ const menuOptions: MenuOption[] = [
     { label: '1:1 Coaching', key: 'coaching', icon: renderIcon(CoachingIcon) },
     { label: '1:1 Meetings', key: 'meetings', icon: renderIcon(MeetingsIcon) },
     { label: 'Reviews', key: 'reviews', icon: renderIcon(ReviewsIcon) },
+    { label: 'Training', key: 'training', icon: renderIcon(TrainingIcon) },
+    { label: 'Career Paths', key: 'career', icon: renderIcon(CareerIcon) },
   ]},
   { type: 'group', label: 'Plan', key: 'plan-group', children: [
     { label: 'Board Records', key: 'board-records', icon: renderIcon(BoardRecordsIcon) },

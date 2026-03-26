@@ -188,6 +188,33 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			skills.DELETE("/employees/:emp_id/:skill_id", handleDeleteEmployeeSkill(cfg.Queries))
 		}
 
+		// Training Programs
+		training := protected.Group("/training")
+		training.Use(RequireRole("boss"))
+		{
+			training.GET("", handleListTrainingPrograms(cfg.Queries))
+			training.POST("", handleCreateTrainingProgram(cfg.Queries))
+			training.PUT("/:id", handleUpdateTrainingProgram(cfg.Queries))
+			training.DELETE("/:id", handleDeleteTrainingProgram(cfg.Queries))
+			training.GET("/:id/enrollments", handleListEnrollments(cfg.Queries))
+			training.POST("/:id/enrollments", handleCreateEnrollment(cfg.Queries))
+			training.PUT("/:id/enrollments/:eid", handleUpdateEnrollment(cfg.Queries))
+			training.DELETE("/:id/enrollments/:eid", handleDeleteEnrollment(cfg.Queries))
+		}
+
+		// Career Paths
+		career := protected.Group("/career")
+		career.Use(RequireRole("boss"))
+		{
+			career.GET("/levels", handleListCareerLevels(cfg.Queries))
+			career.POST("/levels", handleCreateCareerLevel(cfg.Queries))
+			career.PUT("/levels/:id", handleUpdateCareerLevel(cfg.Queries))
+			career.DELETE("/levels/:id", handleDeleteCareerLevel(cfg.Queries))
+			career.GET("/paths", handleListCareerPaths(cfg.Queries))
+			career.POST("/paths", handleUpsertCareerPath(cfg.Queries))
+			career.DELETE("/paths/:id", handleDeleteCareerPath(cfg.Queries))
+		}
+
 		// Memory routes (optional — requires memory engine)
 		if cfg.MemoryStore != nil {
 			memories := protected.Group("/memories")

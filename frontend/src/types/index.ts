@@ -23,3 +23,5 @@ export type {
 export type { ReviewCycle, ReviewCycleStatus, PerformanceReview, ReviewStatus } from './reviews'
 export type { Meeting, MeetingMood, ActionItem, ActionItemStatus, OpenActionItem } from './meetings'
 export type { Skill, EmployeeSkill, SkillMatrixEntry } from './skills'
+export type { TrainingProgram, TrainingProgramStatus, TrainingEnrollment, EnrollmentStatus } from './training'
+export type { CareerLevel, CareerPath } from './career'

@@ -47,6 +47,27 @@ type ApiKey struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
+type CareerLevel struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	Title        string             `json:"title"`
+	LevelOrder   int32              `json:"level_order"`
+	Description  string             `json:"description"`
+	Requirements string             `json:"requirements"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type CareerPath struct {
+	ID             pgtype.UUID        `json:"id"`
+	EmployeeID     pgtype.UUID        `json:"employee_id"`
+	CurrentLevelID pgtype.UUID        `json:"current_level_id"`
+	TargetLevelID  pgtype.UUID        `json:"target_level_id"`
+	TargetDate     pgtype.Date        `json:"target_date"`
+	Notes          string             `json:"notes"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ChaseLog struct {
 	ID         pgtype.UUID        `json:"id"`
 	TenantID   pgtype.UUID        `json:"tenant_id"`
@@ -324,6 +345,32 @@ type Tenant struct {
 	OnboardingCompletedAt pgtype.Timestamptz `json:"onboarding_completed_at"`
 	BossSlackID           pgtype.Text        `json:"boss_slack_id"`
 	BossLarkID            pgtype.Text        `json:"boss_lark_id"`
+}
+
+type TrainingEnrollment struct {
+	ID          pgtype.UUID        `json:"id"`
+	ProgramID   pgtype.UUID        `json:"program_id"`
+	EmployeeID  pgtype.UUID        `json:"employee_id"`
+	Status      string             `json:"status"`
+	EnrolledAt  pgtype.Timestamptz `json:"enrolled_at"`
+	CompletedAt pgtype.Timestamptz `json:"completed_at"`
+	Score       pgtype.Int4        `json:"score"`
+	Notes       string             `json:"notes"`
+}
+
+type TrainingProgram struct {
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	Title         string             `json:"title"`
+	Description   string             `json:"description"`
+	Category      string             `json:"category"`
+	DurationHours int32              `json:"duration_hours"`
+	Provider      string             `json:"provider"`
+	Url           string             `json:"url"`
+	IsMandatory   bool               `json:"is_mandatory"`
+	Status        string             `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {
