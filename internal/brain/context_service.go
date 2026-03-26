@@ -4,16 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+
 	sqlc "github.com/tonypk/ai-management-brain/internal/db/sqlc"
+	"github.com/tonypk/ai-management-brain/internal/memory"
 )
+
+// MemoryReader is the subset of memory.MemoryStore needed by ContextService.
+type MemoryReader interface {
+	GetProfile(ctx context.Context, tenantID, employeeID string) (*memory.Memory, error)
+	List(ctx context.Context, tenantID, memType, memTier, employeeID string, limit, offset int32) ([]memory.Memory, error)
+}
 
 // ContextService aggregates company context from multiple data sources
 // for use by prompts and MCP tools.
 type ContextService struct {
-	queries *sqlc.Queries
+	queries     *sqlc.Queries
+	memoryStore MemoryReader
 }
 
 // NewContextService creates a new ContextService.
@@ -21,14 +32,20 @@ func NewContextService(queries *sqlc.Queries) *ContextService {
 	return &ContextService{queries: queries}
 }
 
+// SetMemoryReader injects the memory reader dependency after construction.
+func (cs *ContextService) SetMemoryReader(mr MemoryReader) {
+	cs.memoryStore = mr
+}
+
 // CompanyContext holds the aggregated company context.
 type CompanyContext struct {
-	Organization *OrgContext      `json:"organization,omitempty"`
-	Goals        []GoalContext    `json:"goals,omitempty"`
-	Metrics      []MetricContext  `json:"metrics,omitempty"`
-	TopRisks     []RiskContext    `json:"top_risks,omitempty"`
-	TeamSize     int              `json:"team_size"`
-	HRInsights   *HRInsightsContext `json:"hr_insights,omitempty"`
+	Organization     *OrgContext               `json:"organization,omitempty"`
+	Goals            []GoalContext             `json:"goals,omitempty"`
+	Metrics          []MetricContext           `json:"metrics,omitempty"`
+	TopRisks         []RiskContext             `json:"top_risks,omitempty"`
+	TeamSize         int                       `json:"team_size"`
+	HRInsights       *HRInsightsContext        `json:"hr_insights,omitempty"`
+	MemoryHighlights []EmployeeMemoryHighlight `json:"memory_highlights,omitempty"`
 }
 
 // HRInsightsContext holds aggregated HR signal insights from HalaOS.
@@ -38,6 +55,16 @@ type HRInsightsContext struct {
 	AvgTeamHealth     float64 `json:"avg_team_health,omitempty"`
 	ActiveBlindSpots  int     `json:"active_blindspots,omitempty"`
 	RecentAnomalies   int     `json:"recent_anomalies,omitempty"`
+}
+
+// EmployeeMemoryHighlight summarises a single employee's memory signals
+// for inclusion in the company context sent to the AI.
+type EmployeeMemoryHighlight struct {
+	Name           string   `json:"name"`
+	EmployeeID     string   `json:"employee_id"`
+	ProfileSummary string   `json:"profile_summary,omitempty"`
+	RecentThemes   []string `json:"recent_themes,omitempty"`
+	MemoryCount    int      `json:"memory_count"`
 }
 
 // OrgContext holds organization-level context.
@@ -215,7 +242,131 @@ func (cs *ContextService) GetCompanyContext(ctx context.Context, tenantID pgtype
 		result.HRInsights = hrInsights
 	}
 
+	// Enrich with employee memory highlights if memory store is available
+	result.MemoryHighlights = cs.GetMemoryHighlights(ctx, tenantID)
+
 	return result, nil
+}
+
+// GetMemoryHighlights builds per-employee memory highlights from the memory store.
+// Returns nil if no memory store has been configured.
+func (cs *ContextService) GetMemoryHighlights(ctx context.Context, tenantID pgtype.UUID) []EmployeeMemoryHighlight {
+	if cs.memoryStore == nil {
+		return nil
+	}
+
+	tenantStr := uuidToString(tenantID)
+
+	employees, err := cs.queries.ListActiveEmployees(ctx, tenantID)
+	if err != nil || len(employees) == 0 {
+		return nil
+	}
+
+	highlights := make([]EmployeeMemoryHighlight, 0, len(employees))
+
+	for _, emp := range employees {
+		empID := uuidToString(emp.ID)
+
+		h := EmployeeMemoryHighlight{
+			Name:       emp.Name,
+			EmployeeID: empID,
+		}
+
+		// Fetch profile memory for summary
+		profile, err := cs.memoryStore.GetProfile(ctx, tenantStr, empID)
+		if err == nil && profile != nil {
+			h.ProfileSummary = profile.Summary
+		}
+
+		// Fetch recent short-term employee_insight memories (up to 20)
+		recentMems, err := cs.memoryStore.List(
+			ctx,
+			tenantStr,
+			memory.TypeEmployeeInsight,
+			memory.TierShortTerm,
+			empID,
+			20,
+			0,
+		)
+		if err == nil {
+			h.MemoryCount = len(recentMems)
+			h.RecentThemes = extractThemes(recentMems)
+		}
+
+		// Only include employees that have some memory data
+		if h.ProfileSummary != "" || h.MemoryCount > 0 {
+			highlights = append(highlights, h)
+		}
+	}
+
+	// Sort by memory count descending, cap at 10
+	sort.Slice(highlights, func(i, j int) bool {
+		return highlights[i].MemoryCount > highlights[j].MemoryCount
+	})
+	if len(highlights) > 10 {
+		highlights = highlights[:10]
+	}
+
+	if len(highlights) == 0 {
+		return nil
+	}
+	return highlights
+}
+
+// extractThemes performs simple keyword frequency analysis over memory content
+// and returns the top themes (up to 5).
+func extractThemes(mems []memory.Memory) []string {
+	// Stopwords to ignore
+	stopwords := map[string]bool{
+		"the": true, "a": true, "an": true, "and": true, "or": true,
+		"but": true, "in": true, "on": true, "at": true, "to": true,
+		"for": true, "of": true, "with": true, "is": true, "was": true,
+		"are": true, "has": true, "had": true, "have": true, "be": true,
+		"been": true, "it": true, "its": true, "this": true, "that": true,
+		"they": true, "he": true, "she": true, "we": true, "you": true,
+		"i": true, "my": true, "his": true, "her": true, "our": true,
+		"by": true, "as": true, "from": true, "not": true, "no": true,
+		"s": true, "also": true, "very": true, "more": true, "about": true,
+	}
+
+	freq := make(map[string]int)
+	for _, m := range mems {
+		text := strings.ToLower(m.Content + " " + m.Summary)
+		words := strings.FieldsFunc(text, func(r rune) bool {
+			return !('a' <= r && r <= 'z')
+		})
+		for _, w := range words {
+			if len(w) < 4 || stopwords[w] {
+				continue
+			}
+			freq[w]++
+		}
+	}
+
+	type kv struct {
+		word  string
+		count int
+	}
+	ranked := make([]kv, 0, len(freq))
+	for w, c := range freq {
+		ranked = append(ranked, kv{w, c})
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].count != ranked[j].count {
+			return ranked[i].count > ranked[j].count
+		}
+		return ranked[i].word < ranked[j].word
+	})
+
+	const maxThemes = 5
+	themes := make([]string, 0, maxThemes)
+	for _, kv := range ranked {
+		if len(themes) >= maxThemes {
+			break
+		}
+		themes = append(themes, kv.word)
+	}
+	return themes
 }
 
 // FormatContextForPrompt formats company context as a text block for prompt injection.
