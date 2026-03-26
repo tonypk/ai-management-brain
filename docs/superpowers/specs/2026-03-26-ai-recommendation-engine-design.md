@@ -309,7 +309,7 @@ New section below alerts on Dashboard page:
 
 ### MCP Tools (2 new)
 
-Added to the existing Node.js MCP server (`mcp/src/`), calling the Go API endpoints:
+Added to the existing Node.js MCP server (`mcp-server/src/`), calling the Go API endpoints:
 
 ```
 get_recommendations      — GET /api/v1/recommendations?status=pending → List pending
@@ -428,7 +428,7 @@ internal/report/triggers.go          — Add realtime trigger call sites
 internal/brain/state_engine.go       — Call RealtimeEvaluate after signal generation
 internal/api/metric_handlers.go      — Call RealtimeEvaluate after metric update
 cmd/brain/main.go                    — Register cron job + init recommender + inline migration 000017
-mcp/src/tools/                       — Add 2 new MCP tool definitions
+mcp-server/src/tools/                 — Add 2 new MCP tool definitions
 frontend/src/router/index.ts         — Add /recommendations route
 frontend/src/layouts/AppLayout.vue   — Sidebar menu item + pending badge
 frontend/src/views/DashboardView.vue — Embed RecommendationSummary component

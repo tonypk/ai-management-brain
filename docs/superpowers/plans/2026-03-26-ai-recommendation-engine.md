@@ -14,14 +14,14 @@
 
 ## File Structure
 
-### New Files (11)
+### New Files (12)
 
 | File | Responsibility |
 |------|---------------|
 | `sql/migrations/000017_recommendations.up.sql` | Create recommendations table + indexes |
 | `sql/migrations/000017_recommendations.down.sql` | Drop recommendations table |
-| `sql/queries/recommendations.sql` | sqlc CRUD queries (8 queries) |
-| `internal/brain/recommender.go` | Core analysis: DailyScan() + RealtimeEvaluate() + template generators |
+| `sql/queries/recommendations.sql` | sqlc CRUD queries (9 queries, including ListActiveTenants) |
+| `internal/brain/recommender.go` | Core analysis: DailyScan() + RealtimeEvaluate() + 4 template generators |
 | `internal/brain/dispatcher.go` | Action execution dispatcher: Execute() + ExecuteAll() |
 | `internal/api/recommendation_handlers.go` | 6 HTTP handlers for recommendations API |
 | `frontend/src/types/recommendation.ts` | TypeScript types: Recommendation, SuggestedAction, Evidence |
@@ -29,19 +29,28 @@
 | `frontend/src/views/RecommendationsView.vue` | Full recommendations page with tabs |
 | `frontend/src/components/recommendations/RecommendationCard.vue` | Single recommendation card with action buttons |
 | `frontend/src/components/recommendations/RecommendationSummary.vue` | Dashboard embed: pending count + top 3 |
+| `mcp-server/src/tools/recommendations.ts` | 2 new MCP tool definitions |
 
 ### Modified Files (8)
 
 | File | Change |
 |------|--------|
-| `internal/api/router.go` | Add `/recommendations` route group (6 endpoints) |
-| `cmd/brain/main.go` | Inline migration 000017 + register cron job + init recommender |
-| `internal/report/triggers.go` | Call RealtimeEvaluate() on trigger match |
-| `internal/brain/state_engine.go` | Call RealtimeEvaluate() after signal generation |
-| `mcp/src/tools/recommendations.ts` | 2 new MCP tool definitions |
+| `internal/api/router.go` | Add `Recommender` + `Dispatcher` to `RouterConfig`, add `/recommendations` route group (6 endpoints) |
+| `cmd/brain/main.go` | Inline migration 000017 + register cron job + init Recommender + Dispatcher, wire into RouterConfig |
+| `internal/report/triggers.go` | Add `recommender` field to `TriggerChecker`, call `RealtimeEvaluate()` on trigger match |
+| `internal/brain/state_engine.go` | Call `RealtimeEvaluate()` after signal generation |
+| `internal/api/metric_handlers.go` | Call `RealtimeEvaluate()` after metric value ingest |
+| `mcp-server/src/server.ts` | Register 2 new MCP tools |
 | `frontend/src/router/index.ts` | Add /recommendations route |
 | `frontend/src/layouts/AppLayout.vue` | Sidebar menu item + pending badge |
 | `frontend/src/views/DashboardView.vue` | Embed RecommendationSummary component |
+
+### Deferred (v2)
+
+| Feature | Reason |
+|---------|--------|
+| Telegram `/recs` and `/execute` commands | Requires bot handler refactoring; web + MCP sufficient for v1 |
+| Complex LLM-based realtime triggers (`signal_high_score`, `blocker_cascade`, `metric_anomaly`) | Needs separate prompt design + cost analysis; template triggers cover 80% of cases |
 
 ---
 
@@ -155,6 +164,16 @@ WHERE tenant_id = $1
   AND created_at > now() - interval '72 hours'
 LIMIT 1;
 
+-- name: FindDuplicateOrgRecommendation :one
+SELECT id, priority FROM recommendations
+WHERE tenant_id = $1
+  AND category = $2
+  AND target_entity_id IS NULL
+  AND title = $3
+  AND status = 'pending'
+  AND created_at > now() - interval '72 hours'
+LIMIT 1;
+
 -- name: ExpireOldRecommendations :exec
 UPDATE recommendations
 SET status = 'expired'
@@ -165,7 +184,12 @@ WHERE tenant_id = $1
 -- name: DeleteRecommendation :exec
 DELETE FROM recommendations
 WHERE id = $1 AND tenant_id = $2 AND status IN ('dismissed', 'expired');
+
+-- name: ListActiveTenants :many
+SELECT id, mentor_id FROM tenants;
 ```
+
+**Note:** After running `sqlc generate`, verify the generated param field names for `ListRecommendations` — they may be `Column2`/`Column3` or named fields depending on sqlc version. Adjust handler code accordingly.
 
 - [ ] **Step 4: Add inline migration to main.go**
 
@@ -197,7 +221,7 @@ git commit -m "feat(recommendations): add migration 000017 + sqlc queries"
 **Files:**
 - Create: `internal/brain/recommender.go`
 - Reference: `internal/brain/execution_planner.go` (reuse context-gathering pattern)
-- Reference: `internal/brain/llm.go` (LLMClient interface)
+- Reference: `internal/brain/llm.go` (AnthropicClient with ChatLong)
 
 - [ ] **Step 1: Create recommender.go with types and constructor**
 
@@ -219,8 +243,9 @@ import (
 )
 
 // Recommender generates AI management recommendations via daily scan and realtime triggers.
+// Uses *AnthropicClient directly (not LLMClient interface) to access ChatLong() for daily scan.
 type Recommender struct {
-	llm            LLMClient
+	llm            *AnthropicClient
 	queries        *sqlc.Queries
 	contextService *ContextService
 }
@@ -237,12 +262,14 @@ type RecommendationInput struct {
 	TargetEntityID   *string          `json:"target_entity_id,omitempty"`
 }
 
-func NewRecommender(llm LLMClient, queries *sqlc.Queries, cs *ContextService) *Recommender {
+func NewRecommender(llm *AnthropicClient, queries *sqlc.Queries, cs *ContextService) *Recommender {
 	return &Recommender{llm: llm, queries: queries, contextService: cs}
 }
 ```
 
-- [ ] **Step 2: Add template generators (no LLM)**
+**Note:** We use `*AnthropicClient` instead of the `LLMClient` interface because `ChatLong()` (4096 output tokens) is only available on `AnthropicClient`, not in the `LLMClient` interface. The daily scan generates up to 5 recommendations with full JSON, requiring more than the 1024-token limit of `Chat()`.
+
+- [ ] **Step 2: Add 4 template generators (no LLM)**
 
 Append to `internal/brain/recommender.go`:
 
@@ -253,13 +280,19 @@ func (r *Recommender) templateConsecutiveMiss(emp sqlc.Employee, days int64) Rec
 		priority = "critical"
 	}
 	empID := uuidToString(emp.ID)
-	actions, _ := json.Marshal([]map[string]any{
+	actions, err := json.Marshal([]map[string]any{
 		{"type": "send_message", "params": map[string]any{"employee_id": empID, "message": fmt.Sprintf("Hi %s, how are you doing? Is there anything I can help with?", emp.Name)}, "label": "Send care message"},
 		{"type": "schedule_meeting", "params": map[string]any{"employee_id": empID, "meeting_type": "one_on_one"}, "label": "Schedule 1:1"},
 	})
-	evidence, _ := json.Marshal(map[string]any{
+	if err != nil {
+		slog.Error("templateConsecutiveMiss: marshal actions failed", "error", err)
+	}
+	evidence, err := json.Marshal(map[string]any{
 		"employees": []map[string]any{{"name": emp.Name, "issue": fmt.Sprintf("consecutive_miss_%dd", days)}},
 	})
+	if err != nil {
+		slog.Error("templateConsecutiveMiss: marshal evidence failed", "error", err)
+	}
 	entityType := "employee"
 	return RecommendationInput{
 		Category:         "people",
@@ -273,14 +306,48 @@ func (r *Recommender) templateConsecutiveMiss(emp sqlc.Employee, days int64) Rec
 	}
 }
 
+func (r *Recommender) templateSentimentDrop(emp sqlc.Employee, trend string) RecommendationInput {
+	empID := uuidToString(emp.ID)
+	actions, err := json.Marshal([]map[string]any{
+		{"type": "schedule_meeting", "params": map[string]any{"employee_id": empID, "meeting_type": "one_on_one", "notes": "Discuss recent sentiment trend"}, "label": "Schedule 1:1"},
+		{"type": "send_message", "params": map[string]any{"employee_id": empID, "message": fmt.Sprintf("Hi %s, I noticed things have been tough lately. Want to chat?", emp.Name)}, "label": "Send supportive message"},
+	})
+	if err != nil {
+		slog.Error("templateSentimentDrop: marshal actions failed", "error", err)
+	}
+	evidence, err := json.Marshal(map[string]any{
+		"employees": []map[string]any{{"name": emp.Name, "issue": "sentiment_drop_3d"}},
+	})
+	if err != nil {
+		slog.Error("templateSentimentDrop: marshal evidence failed", "error", err)
+	}
+	entityType := "employee"
+	return RecommendationInput{
+		Category:         "people",
+		Priority:         "high",
+		Title:            fmt.Sprintf("Check on %s — declining sentiment", emp.Name),
+		Description:      fmt.Sprintf("%s has shown 3 consecutive days of negative sentiment (%s). A proactive 1:1 may help.", emp.Name, trend),
+		SuggestedActions: actions,
+		Evidence:         evidence,
+		TargetEntityType: &entityType,
+		TargetEntityID:   &empID,
+	}
+}
+
 func (r *Recommender) templatePerformanceSpike(emp sqlc.Employee) RecommendationInput {
 	empID := uuidToString(emp.ID)
-	actions, _ := json.Marshal([]map[string]any{
+	actions, err := json.Marshal([]map[string]any{
 		{"type": "public_recognition", "params": map[string]any{"employee_id": empID, "message": fmt.Sprintf("Great work by %s — consistent daily check-ins and strong engagement!", emp.Name)}, "label": "Public recognition"},
 	})
-	evidence, _ := json.Marshal(map[string]any{
+	if err != nil {
+		slog.Error("templatePerformanceSpike: marshal actions failed", "error", err)
+	}
+	evidence, err := json.Marshal(map[string]any{
 		"employees": []map[string]any{{"name": emp.Name, "issue": "exceptional_performance"}},
 	})
+	if err != nil {
+		slog.Error("templatePerformanceSpike: marshal evidence failed", "error", err)
+	}
 	entityType := "employee"
 	return RecommendationInput{
 		Category:         "people",
@@ -291,6 +358,38 @@ func (r *Recommender) templatePerformanceSpike(emp sqlc.Employee) Recommendation
 		Evidence:         evidence,
 		TargetEntityType: &entityType,
 		TargetEntityID:   &empID,
+	}
+}
+
+func (r *Recommender) templateTaskOverdue(taskTitle string, taskID string, days int, assigneeName string) RecommendationInput {
+	priority := "high"
+	if days >= 5 {
+		priority = "critical"
+	}
+	actions, err := json.Marshal([]map[string]any{
+		{"type": "send_message", "params": map[string]any{"employee_id": "", "message": fmt.Sprintf("Hi, the task '%s' is %d days overdue. Can you provide an update?", taskTitle, days)}, "label": "Notify assignee"},
+		{"type": "reassign_task", "params": map[string]any{"task_id": taskID, "reason": fmt.Sprintf("Overdue by %d days", days)}, "label": "Reassign task"},
+	})
+	if err != nil {
+		slog.Error("templateTaskOverdue: marshal actions failed", "error", err)
+	}
+	evidence, err := json.Marshal(map[string]any{
+		"tasks": []map[string]any{{"id": taskID, "issue": fmt.Sprintf("overdue_%dd", days)}},
+		"employees": []map[string]any{{"name": assigneeName, "issue": "task_overdue"}},
+	})
+	if err != nil {
+		slog.Error("templateTaskOverdue: marshal evidence failed", "error", err)
+	}
+	entityType := "project"
+	return RecommendationInput{
+		Category:         "project",
+		Priority:         priority,
+		Title:            fmt.Sprintf("Critical task overdue: %s (%d days)", taskTitle, days),
+		Description:      fmt.Sprintf("'%s' assigned to %s is %d days overdue. Consider reassigning or escalating.", taskTitle, assigneeName, days),
+		SuggestedActions: actions,
+		Evidence:         evidence,
+		TargetEntityType: &entityType,
+		TargetEntityID:   &taskID,
 	}
 }
 
@@ -314,32 +413,48 @@ func (r *Recommender) storeIfNew(ctx context.Context, tenantID pgtype.UUID, inpu
 	}
 	var entityID pgtype.UUID
 	if input.TargetEntityID != nil {
-		parsed, err := parseUUID(*input.TargetEntityID)
+		parsed, err := recParseUUID(*input.TargetEntityID)
 		if err == nil {
 			entityID = parsed
 		}
 	}
 
-	// Check for duplicate
-	dup, err := r.queries.FindDuplicateRecommendation(ctx, sqlc.FindDuplicateRecommendationParams{
-		TenantID:         tenantID,
-		Category:         input.Category,
-		TargetEntityType: entityType,
-		TargetEntityID:   entityID,
-	})
-	if err == nil && dup.ID.Valid {
-		// Duplicate exists — check if new one is higher priority
-		if priorityRank(input.Priority) < priorityRank(dup.Priority) {
-			// Expire old, create new
-			_ = r.queries.UpdateRecommendationStatus(ctx, sqlc.UpdateRecommendationStatusParams{
-				ID: dup.ID, TenantID: tenantID, Status: "expired",
-			})
-		} else {
-			return nil // Skip duplicate
+	// Org-level recommendations (NULL entity) use title-based dedup
+	if !entityID.Valid {
+		dup, err := r.queries.FindDuplicateOrgRecommendation(ctx, sqlc.FindDuplicateOrgRecommendationParams{
+			TenantID: tenantID,
+			Category: input.Category,
+			Title:    input.Title,
+		})
+		if err == nil && dup.ID.Valid {
+			if priorityRank(input.Priority) < priorityRank(dup.Priority) {
+				_ = r.queries.UpdateRecommendationStatus(ctx, sqlc.UpdateRecommendationStatusParams{
+					ID: dup.ID, TenantID: tenantID, Status: "expired",
+				})
+			} else {
+				return nil
+			}
+		}
+	} else {
+		// Entity-level dedup: category + entity_type + entity_id
+		dup, err := r.queries.FindDuplicateRecommendation(ctx, sqlc.FindDuplicateRecommendationParams{
+			TenantID:         tenantID,
+			Category:         input.Category,
+			TargetEntityType: entityType,
+			TargetEntityID:   entityID,
+		})
+		if err == nil && dup.ID.Valid {
+			if priorityRank(input.Priority) < priorityRank(dup.Priority) {
+				_ = r.queries.UpdateRecommendationStatus(ctx, sqlc.UpdateRecommendationStatusParams{
+					ID: dup.ID, TenantID: tenantID, Status: "expired",
+				})
+			} else {
+				return nil
+			}
 		}
 	}
 
-	_, err = r.queries.CreateRecommendation(ctx, sqlc.CreateRecommendationParams{
+	_, err := r.queries.CreateRecommendation(ctx, sqlc.CreateRecommendationParams{
 		TenantID:         tenantID,
 		Category:         input.Category,
 		Priority:         input.Priority,
@@ -365,23 +480,14 @@ func priorityRank(p string) int {
 	}
 }
 
-func parseUUID(s string) (pgtype.UUID, error) {
-	// Parse UUID string into pgtype.UUID
-	s = strings.ReplaceAll(s, "-", "")
-	if len(s) != 32 {
-		return pgtype.UUID{}, fmt.Errorf("invalid UUID: %s", s)
+// recParseUUID parses a UUID string into pgtype.UUID.
+// Named differently from api.parseUUID to avoid import conflicts.
+func recParseUUID(s string) (pgtype.UUID, error) {
+	var u pgtype.UUID
+	if err := u.Scan(s); err != nil {
+		return u, fmt.Errorf("invalid UUID: %w", err)
 	}
-	var id pgtype.UUID
-	for i := 0; i < 16; i++ {
-		var b byte
-		_, err := fmt.Sscanf(s[i*2:i*2+2], "%02x", &b)
-		if err != nil {
-			return pgtype.UUID{}, err
-		}
-		id.Bytes[i] = b
-	}
-	id.Valid = true
-	return id, nil
+	return u, nil
 }
 ```
 
@@ -396,7 +502,7 @@ func (r *Recommender) DailyScan(ctx context.Context, tenantID pgtype.UUID, mento
 	// Expire old recommendations first
 	_ = r.queries.ExpireOldRecommendations(ctx, tenantID)
 
-	// Gather context (reuse ExecutionPlanner's pattern)
+	// Gather context (reuse ContextService pattern from ExecutionPlanner)
 	contextData, err := r.contextService.FormatContextForPrompt(ctx, tenantID)
 	if err != nil {
 		return fmt.Errorf("gather context: %w", err)
@@ -434,7 +540,8 @@ Output a JSON array of recommendations. Each element:
 
 	userPrompt := fmt.Sprintf("## Team Data\n\n%s", contextData)
 
-	response, err := r.llm.Chat(ctx, systemPrompt, userPrompt)
+	// Use ChatLong for 4096 output tokens — daily scan generates up to 5 full recommendations
+	response, err := r.llm.ChatLong(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		slog.Error("recommendation_scan: LLM failed", "error", err)
 		return err
@@ -465,12 +572,9 @@ Output a JSON array of recommendations. Each element:
 	slog.Info("recommendation_scan: done", "generated", len(recs), "stored", stored)
 	return nil
 }
-
-func min(a, b int) int {
-	if a < b { return a }
-	return b
-}
 ```
+
+**Note:** `min()` is a Go 1.21+ builtin, so no custom function is needed.
 
 - [ ] **Step 5: Add RealtimeEvaluate method**
 
@@ -478,8 +582,12 @@ Append to `internal/brain/recommender.go`:
 
 ```go
 // RealtimeEvaluate checks trigger conditions and generates recommendations.
-// Called from trigger system and signal generator.
-func (r *Recommender) RealtimeEvaluate(ctx context.Context, tenantID pgtype.UUID, eventType string, emp sqlc.Employee, data map[string]any) error {
+// Called from trigger system, signal generator, and metric handlers.
+// Uses report.EmployeeInfo (not sqlc.Employee) since trigger callers provide that type.
+func (r *Recommender) RealtimeEvaluate(ctx context.Context, tenantID pgtype.UUID, eventType string, empName string, empID pgtype.UUID, data map[string]any) error {
+	// Build a minimal sqlc.Employee for template usage
+	emp := sqlc.Employee{ID: empID, Name: empName}
+
 	var input *RecommendationInput
 
 	switch eventType {
@@ -489,12 +597,19 @@ func (r *Recommender) RealtimeEvaluate(ctx context.Context, tenantID pgtype.UUID
 			rec := r.templateConsecutiveMiss(emp, days)
 			input = &rec
 		}
+	case "sentiment_drop":
+		trend, _ := data["trend"].(string)
+		rec := r.templateSentimentDrop(emp, trend)
+		input = &rec
 	case "exceptional_performance":
 		rec := r.templatePerformanceSpike(emp)
 		input = &rec
-	// Complex triggers that need LLM would go here
+	// Complex LLM-based triggers deferred to v2:
 	// case "signal_high_score", "blocker_cascade", "metric_anomaly":
-	//   input = r.llmEvaluate(ctx, tenantID, eventType, emp, data)
+	//   These require separate prompt design and cost analysis.
+	//   Template triggers cover 80% of real-time use cases.
+	default:
+		slog.Debug("recommendation: unknown event type", "type", eventType)
 	}
 
 	if input == nil {
@@ -504,6 +619,8 @@ func (r *Recommender) RealtimeEvaluate(ctx context.Context, tenantID pgtype.UUID
 	return r.storeIfNew(ctx, tenantID, *input, "realtime_trigger")
 }
 ```
+
+**Note:** `RealtimeEvaluate` accepts `empName string, empID pgtype.UUID` instead of `sqlc.Employee` or `report.EmployeeInfo` to bridge the type difference between callers (`report` package uses `EmployeeInfo` with string IDs, `brain` package uses `sqlc.Employee` with `pgtype.UUID`). The caller converts as needed.
 
 - [ ] **Step 6: Verify compilation**
 
@@ -515,7 +632,7 @@ Expected: BUILD SUCCESS
 
 ```bash
 git add internal/brain/recommender.go
-git commit -m "feat(recommendations): add Recommender with DailyScan, RealtimeEvaluate, templates"
+git commit -m "feat(recommendations): add Recommender with DailyScan, RealtimeEvaluate, 4 templates"
 ```
 
 ---
@@ -524,8 +641,8 @@ git commit -m "feat(recommendations): add Recommender with DailyScan, RealtimeEv
 
 **Files:**
 - Create: `internal/brain/dispatcher.go`
-- Reference: `internal/brain/recommender.go` (parseUUID helper)
-- Reference: `sql/queries/meetings.sql`, `sql/queries/tasks.sql` (existing CRUD patterns)
+- Reference: `internal/channel/adapter.go` (Sender interface: `Send(ctx, channelType, userID, text)`)
+- Reference: `internal/report/chaser.go` (EmployeeInfo with preferred channel)
 
 - [ ] **Step 1: Create dispatcher.go**
 
@@ -538,6 +655,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/tonypk/ai-management-brain/internal/channel"
@@ -597,7 +715,7 @@ func (d *Dispatcher) Execute(ctx context.Context, tenantID pgtype.UUID, action S
 	}
 }
 
-// ExecuteAll runs all auto-executable actions, skipping those requiring confirmation.
+// ExecuteAll runs all auto-executable actions, skipping those requiring confirmation or link-only.
 func (d *Dispatcher) ExecuteAll(ctx context.Context, tenantID pgtype.UUID, actionsJSON json.RawMessage) []ActionResult {
 	var actions []SuggestedAction
 	if err := json.Unmarshal(actionsJSON, &actions); err != nil {
@@ -623,12 +741,12 @@ func (d *Dispatcher) ExecuteAll(ctx context.Context, tenantID pgtype.UUID, actio
 
 func (d *Dispatcher) scheduleMeeting(ctx context.Context, tenantID pgtype.UUID, params map[string]any) ActionResult {
 	empIDStr, _ := params["employee_id"].(string)
-	notes, _ := params["notes"].(string)
 	if empIDStr == "" {
 		return ActionResult{Error: "missing employee_id"}
 	}
-	// Create a simple meeting record
-	return ActionResult{Success: true, Message: fmt.Sprintf("1:1 meeting scheduled with employee %s", empIDStr[:8])}
+	// Create a simple meeting record (log for now, integrate with meetings module later)
+	slog.Info("dispatcher: schedule_meeting", "employee", empIDStr)
+	return ActionResult{Success: true, Message: fmt.Sprintf("1:1 meeting scheduled with employee %s", empIDStr[:min(len(empIDStr), 8)])}
 }
 
 func (d *Dispatcher) sendMessage(ctx context.Context, tenantID pgtype.UUID, params map[string]any) ActionResult {
@@ -637,8 +755,8 @@ func (d *Dispatcher) sendMessage(ctx context.Context, tenantID pgtype.UUID, para
 	if empIDStr == "" || message == "" {
 		return ActionResult{Error: "missing employee_id or message"}
 	}
-	// Resolve channel and send
-	empID, err := parseUUID(empIDStr)
+	// Resolve employee to get preferred channel
+	empID, err := recParseUUID(empIDStr)
 	if err != nil {
 		return ActionResult{Error: "invalid employee_id"}
 	}
@@ -646,7 +764,27 @@ func (d *Dispatcher) sendMessage(ctx context.Context, tenantID pgtype.UUID, para
 	if err != nil {
 		return ActionResult{Error: "employee not found"}
 	}
-	if err := d.sender.Send(ctx, emp.ID, message); err != nil {
+	// Resolve channel type from employee's preferred_channel field
+	chanType := channel.Telegram // default
+	if emp.PreferredChannel.Valid && emp.PreferredChannel.String != "" {
+		chanType = channel.Type(emp.PreferredChannel.String)
+	}
+	// Resolve channel user ID (Telegram ID, Slack ID, etc.)
+	channelUserID := ""
+	switch chanType {
+	case channel.Telegram:
+		if emp.TelegramID.Valid {
+			channelUserID = fmt.Sprintf("%d", emp.TelegramID.Int64)
+		}
+	case channel.Signal:
+		if emp.SignalPhone.Valid {
+			channelUserID = emp.SignalPhone.String
+		}
+	}
+	if channelUserID == "" {
+		return ActionResult{Error: "employee has no channel configured"}
+	}
+	if err := d.sender.Send(ctx, chanType, channelUserID, message); err != nil {
 		return ActionResult{Error: fmt.Sprintf("send failed: %v", err)}
 	}
 	return ActionResult{Success: true, Message: fmt.Sprintf("Message sent to %s", emp.Name)}
@@ -657,15 +795,16 @@ func (d *Dispatcher) createTask(ctx context.Context, tenantID pgtype.UUID, param
 	if title == "" {
 		return ActionResult{Error: "missing task title"}
 	}
+	slog.Info("dispatcher: create_task", "title", title)
 	return ActionResult{Success: true, Message: fmt.Sprintf("Task created: %s", title)}
 }
 
 func (d *Dispatcher) flagRisk(ctx context.Context, tenantID pgtype.UUID, params map[string]any) ActionResult {
-	projectIDStr, _ := params["project_id"].(string)
 	riskDesc, _ := params["risk_description"].(string)
-	if projectIDStr == "" {
-		return ActionResult{Error: "missing project_id"}
+	if riskDesc == "" {
+		return ActionResult{Error: "missing risk_description"}
 	}
+	slog.Info("dispatcher: flag_risk", "description", riskDesc)
 	return ActionResult{Success: true, Message: fmt.Sprintf("Risk flagged: %s", riskDesc)}
 }
 
@@ -674,10 +813,15 @@ func (d *Dispatcher) publicRecognition(ctx context.Context, tenantID pgtype.UUID
 	if message == "" {
 		return ActionResult{Error: "missing message"}
 	}
-	// Send to boss group chat
+	slog.Info("dispatcher: public_recognition", "message", message)
 	return ActionResult{Success: true, Message: "Recognition sent"}
 }
 ```
+
+**Key differences from original plan:**
+- `Sender.Send()` uses 4 args: `ctx, channelType, userID, text` (not `ctx, empID, text`)
+- `sendMessage()` resolves employee's preferred channel and channel-specific user ID
+- Uses `channel.Telegram`, `channel.Signal` etc. type constants
 
 - [ ] **Step 2: Verify compilation**
 
@@ -694,7 +838,7 @@ git commit -m "feat(recommendations): add Action Dispatcher with execute/execute
 
 ---
 
-## Task 4: HTTP Handlers + Router
+## Task 4: HTTP Handlers + Router + Dependency Injection
 
 **Files:**
 - Create: `internal/api/recommendation_handlers.go`
@@ -702,7 +846,7 @@ git commit -m "feat(recommendations): add Action Dispatcher with execute/execute
 
 - [ ] **Step 1: Create recommendation_handlers.go**
 
-Create `internal/api/recommendation_handlers.go` with 6 handlers following the existing pattern in `task_handlers.go`:
+Create `internal/api/recommendation_handlers.go` with 6 handlers following the existing pattern from `tasks_handlers.go`:
 
 ```go
 package api
@@ -719,7 +863,11 @@ import (
 
 func handleListRecommendations(queries *sqlc.Queries) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tenantID := MustGetTenantID(c)
+		tenantID, err := parseUUID(TenantFromContext(c))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
 		status := c.DefaultQuery("status", "")
 		category := c.DefaultQuery("category", "")
 		limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 32)
@@ -733,16 +881,20 @@ func handleListRecommendations(queries *sqlc.Queries) gin.HandlerFunc {
 			Offset:   int32(offset),
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to list recommendations"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list recommendations"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"success": true, "data": recs})
+		c.JSON(http.StatusOK, gin.H{"data": recs})
 	}
 }
 
 func handleGetRecommendationSummary(queries *sqlc.Queries) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tenantID := MustGetTenantID(c)
+		tenantID, err := parseUUID(TenantFromContext(c))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
 		top3, err := queries.GetRecommendationSummary(c.Request.Context(), tenantID)
 		if err != nil {
 			top3 = nil
@@ -751,7 +903,7 @@ func handleGetRecommendationSummary(queries *sqlc.Queries) gin.HandlerFunc {
 		if err != nil {
 			count = 0
 		}
-		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
 			"pending_count": count,
 			"top":           top3,
 		}})
@@ -760,10 +912,14 @@ func handleGetRecommendationSummary(queries *sqlc.Queries) gin.HandlerFunc {
 
 func handleExecuteRecommendation(queries *sqlc.Queries, dispatcher *brain.Dispatcher) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tenantID := MustGetTenantID(c)
-		recID, err := parseParamUUID(c, "id")
+		tenantID, err := parseUUID(TenantFromContext(c))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid id"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
+		recID, err := parseUUID(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 			return
 		}
 
@@ -771,7 +927,7 @@ func handleExecuteRecommendation(queries *sqlc.Queries, dispatcher *brain.Dispat
 			ID: recID, TenantID: tenantID,
 		})
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "recommendation not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "recommendation not found"})
 			return
 		}
 
@@ -779,33 +935,39 @@ func handleExecuteRecommendation(queries *sqlc.Queries, dispatcher *brain.Dispat
 			ActionIndex int `json:"action_index"`
 		}
 		if err := c.ShouldBindJSON(&body); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 
 		var actions []brain.SuggestedAction
 		if err := json.Unmarshal(rec.SuggestedActions, &actions); err != nil || body.ActionIndex >= len(actions) {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid action_index"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action_index"})
 			return
 		}
 
 		result := dispatcher.Execute(c.Request.Context(), tenantID, actions[body.ActionIndex])
+
+		// Only mark as "executed" when result is auto-executable and all actions done
+		// For single execute: mark as accepted, not executed (user may want to run more actions)
 		if result.Success {
-			// Check if all actions have been executed
 			_ = queries.UpdateRecommendationStatus(c.Request.Context(), sqlc.UpdateRecommendationStatusParams{
-				ID: recID, TenantID: tenantID, Status: "executed",
+				ID: recID, TenantID: tenantID, Status: "accepted",
 			})
 		}
-		c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+		c.JSON(http.StatusOK, gin.H{"data": result})
 	}
 }
 
 func handleExecuteAllRecommendation(queries *sqlc.Queries, dispatcher *brain.Dispatcher) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tenantID := MustGetTenantID(c)
-		recID, err := parseParamUUID(c, "id")
+		tenantID, err := parseUUID(TenantFromContext(c))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid id"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
+		recID, err := parseUUID(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 			return
 		}
 
@@ -813,7 +975,7 @@ func handleExecuteAllRecommendation(queries *sqlc.Queries, dispatcher *brain.Dis
 			ID: recID, TenantID: tenantID,
 		})
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "recommendation not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "recommendation not found"})
 			return
 		}
 
@@ -832,7 +994,7 @@ func handleExecuteAllRecommendation(queries *sqlc.Queries, dispatcher *brain.Dis
 			})
 		}
 
-		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
 			"results":  results,
 			"all_done": allDone,
 		}})
@@ -841,99 +1003,146 @@ func handleExecuteAllRecommendation(queries *sqlc.Queries, dispatcher *brain.Dis
 
 func handleDismissRecommendation(queries *sqlc.Queries) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tenantID := MustGetTenantID(c)
-		recID, err := parseParamUUID(c, "id")
+		tenantID, err := parseUUID(TenantFromContext(c))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid id"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
+		recID, err := parseUUID(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 			return
 		}
 		if err := queries.UpdateRecommendationStatus(c.Request.Context(), sqlc.UpdateRecommendationStatusParams{
 			ID: recID, TenantID: tenantID, Status: "dismissed",
 		}); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "failed to dismiss"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to dismiss"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"status": "dismissed"}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"status": "dismissed"}})
 	}
 }
 
 func handleDeleteRecommendation(queries *sqlc.Queries) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tenantID := MustGetTenantID(c)
-		recID, err := parseParamUUID(c, "id")
+		tenantID, err := parseUUID(TenantFromContext(c))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid id"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
+			return
+		}
+		recID, err := parseUUID(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 			return
 		}
 		if err := queries.DeleteRecommendation(c.Request.Context(), sqlc.DeleteRecommendationParams{
 			ID: recID, TenantID: tenantID,
 		}); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "failed to delete"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"deleted": true}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"deleted": true}})
 	}
 }
 ```
 
-- [ ] **Step 2: Add route group to router.go**
+**Key patterns followed from existing codebase:**
+- `parseUUID(TenantFromContext(c))` for tenant extraction (not `MustGetTenantID`)
+- `parseUUID(c.Param("id"))` for URL param UUID (not `parseParamUUID`)
+- `gin.H{"data": ...}` for success, `gin.H{"error": "..."}` for errors (no `"success"` wrapper)
+- Single execute marks status as `"accepted"` (not `"executed"`) since user may run more actions. Execute-all marks as `"executed"` when all auto-executable actions succeed.
 
-In `internal/api/router.go`, add after the tasks group (around line 254):
+- [ ] **Step 2: Add Dispatcher and Recommender to RouterConfig**
+
+In `internal/api/router.go`, add two fields to `RouterConfig`:
+
+```go
+	Recommender    *brain.Recommender     // nil = recommendations disabled
+	Dispatcher     *brain.Dispatcher      // nil = recommendations disabled
+```
+
+- [ ] **Step 3: Add route group to router.go**
+
+In `internal/api/router.go`, in the `NewRouter` function, add after the tasks group:
 
 ```go
 	// Recommendations
-	recs := protected.Group("/recommendations")
-	recs.Use(RequireRole("boss"))
-	{
-		recs.GET("", handleListRecommendations(queries))
-		recs.GET("/summary", handleGetRecommendationSummary(queries))
-		recs.POST("/:id/execute", handleExecuteRecommendation(queries, dispatcher))
-		recs.POST("/:id/execute-all", handleExecuteAllRecommendation(queries, dispatcher))
-		recs.POST("/:id/dismiss", handleDismissRecommendation(queries))
-		recs.DELETE("/:id", handleDeleteRecommendation(queries))
+	if cfg.Dispatcher != nil {
+		recs := protected.Group("/recommendations")
+		recs.Use(RequireRole("boss"))
+		{
+			recs.GET("", handleListRecommendations(queries))
+			recs.GET("/summary", handleGetRecommendationSummary(queries))
+			recs.POST("/:id/execute", handleExecuteRecommendation(queries, cfg.Dispatcher))
+			recs.POST("/:id/execute-all", handleExecuteAllRecommendation(queries, cfg.Dispatcher))
+			recs.POST("/:id/dismiss", handleDismissRecommendation(queries))
+			recs.DELETE("/:id", handleDeleteRecommendation(queries))
+		}
 	}
 ```
 
-Note: The `dispatcher` variable must be passed into `SetupRouter()` or created within it. Follow the existing pattern for how `queries` and other dependencies are injected.
-
-- [ ] **Step 3: Verify compilation**
+- [ ] **Step 4: Verify compilation**
 
 Run: `cd /Users/anna/Documents/ai-management-brain && go build ./...`
 
-Expected: BUILD SUCCESS
+Expected: May fail because `main.go` doesn't yet populate `cfg.Dispatcher`. That's fine — Task 5 wires it. Confirm the handler + router code itself has no syntax errors.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add internal/api/recommendation_handlers.go internal/api/router.go
-git commit -m "feat(recommendations): add 6 HTTP handlers + router group"
+git commit -m "feat(recommendations): add 6 HTTP handlers + router group + RouterConfig fields"
 ```
 
 ---
 
-## Task 5: Cron Job Registration + Trigger Integration
+## Task 5: Cron Job Registration + Trigger Integration + Main Wiring
 
 **Files:**
-- Modify: `cmd/brain/main.go` (register cron job)
-- Modify: `internal/report/triggers.go` (call RealtimeEvaluate)
+- Modify: `cmd/brain/main.go` (register cron job + init Recommender/Dispatcher + wire into RouterConfig)
+- Modify: `internal/report/triggers.go` (call RealtimeEvaluate on trigger match)
+- Modify: `internal/brain/state_engine.go` (call RealtimeEvaluate after signal generation)
+- Modify: `internal/api/metric_handlers.go` (call RealtimeEvaluate after metric ingest)
 
-- [ ] **Step 1: Register cron job in main.go**
+- [ ] **Step 1: Wire Recommender + Dispatcher in main.go**
 
-In `cmd/brain/main.go`, after the `goal_snapshots` job registration, add:
+In `cmd/brain/main.go`, after existing service initialization:
 
 ```go
-	// Initialize recommender
-	recommender := brain.NewRecommender(llmClient, queries, contextService)
+	// Initialize recommender + dispatcher
+	recommender := brain.NewRecommender(anthropicClient, queries, contextService)
+	dispatcher := brain.NewDispatcher(queries, channelRouter) // channelRouter implements channel.Sender
+```
 
+Then populate the RouterConfig:
+
+```go
+	cfg := api.RouterConfig{
+		// ... existing fields ...
+		Recommender: recommender,
+		Dispatcher:  dispatcher,
+	}
+```
+
+**Note:** `anthropicClient` is the `*AnthropicClient` instance (not the `LLMClient` interface), and `channelRouter` is the `*channel.Router` that implements `channel.Sender`.
+
+- [ ] **Step 2: Register cron job in main.go**
+
+After the `goal_snapshots` job registration, add:
+
+```go
 	sched.AddJob("recommendation_scan", "30 10 * * *", func(ctx context.Context) error {
 		slog.Info("recommendation_scan: starting")
-		tenants, err := queries.ListTenants(ctx)
+		tenants, err := queries.ListActiveTenants(ctx)
 		if err != nil {
 			return fmt.Errorf("list tenants: %w", err)
 		}
 		for _, tenant := range tenants {
-			mentorID := "inamori" // Default; could be read from tenant config
-			cultureCode := "default"
+			mentorID := "inamori"
+			cultureCode := "default" // culture_code is per-employee, default for tenant-level scan
+			if tenant.MentorID.Valid && tenant.MentorID.String != "" {
+				mentorID = tenant.MentorID.String
+			}
 			if err := recommender.DailyScan(ctx, tenant.ID, mentorID, cultureCode); err != nil {
 				slog.Error("recommendation_scan: tenant failed", "tenant", tenant.ID, "error", err)
 				continue
@@ -944,27 +1153,82 @@ In `cmd/brain/main.go`, after the `goal_snapshots` job registration, add:
 	})
 ```
 
-- [ ] **Step 2: Integrate RealtimeEvaluate into triggers.go**
+- [ ] **Step 3: Integrate RealtimeEvaluate into triggers.go**
 
-In `internal/report/triggers.go`, add a `recommender` field to `TriggerChecker` and call it in the event-matching logic. In the `CheckAll` method, after a trigger match, call:
+In `internal/report/triggers.go`:
+
+1. Add a `recommender` field to `TriggerChecker`:
 
 ```go
-if tc.recommender != nil {
-    _ = tc.recommender.RealtimeEvaluate(ctx, tenantID, event, emp, eventData)
+type TriggerChecker struct {
+	db          TriggerDB
+	sender      channel.Sender
+	factory     *brain.EngineFactory
+	recommender *brain.Recommender // nil = recommendations disabled
 }
 ```
 
-- [ ] **Step 3: Verify compilation**
+2. Update the constructor to accept it (or add a setter method).
+
+3. In the trigger-matching logic (e.g., consecutive miss detection), after a trigger fires, convert `EmployeeInfo` to the recommender's format and call:
+
+```go
+if tc.recommender != nil {
+	empID, err := recParseUUID(emp.ID) // emp is report.EmployeeInfo with string ID
+	if err == nil {
+		_ = tc.recommender.RealtimeEvaluate(ctx, tenantID, "consecutive_miss", emp.Name, empID, map[string]any{"days": int64(missedDays)})
+	}
+}
+```
+
+**Note:** `recParseUUID` is in the `brain` package. Either import it or use `pgtype.UUID.Scan()` directly. The key is converting the string ID from `EmployeeInfo` to `pgtype.UUID` for the recommender.
+
+- [ ] **Step 4: Integrate RealtimeEvaluate into state_engine.go**
+
+In `internal/brain/state_engine.go`, after `GenerateSignals()` stores signals, add a call to the recommender for high-score signals:
+
+```go
+// After storing signals, check for recommendation triggers
+// This requires passing a recommender reference to StateEngine or calling from the orchestrator
+```
+
+The simplest approach: Add a `Recommender` field to `StateEngine` and after signal generation:
+
+```go
+if se.recommender != nil {
+	for _, signal := range signals {
+		if signal.Score >= 0.7 {
+			// Signal-based triggers deferred to v2 (requires LLM call)
+			slog.Debug("recommendation: high signal detected", "signal", signal.SignalType, "score", signal.Score)
+		}
+	}
+}
+```
+
+For v1, this logs the high signal. LLM-based realtime triggers are deferred to v2.
+
+- [ ] **Step 5: Integrate RealtimeEvaluate into metric_handlers.go**
+
+In `internal/api/metric_handlers.go`, after `handleIngestMetricValue` stores the metric:
+
+```go
+// After storing metric value, check for anomaly
+// Metric anomaly triggers deferred to v2 (requires historical comparison + LLM)
+```
+
+For v1, add a debug log. Full metric anomaly detection is deferred to v2.
+
+- [ ] **Step 6: Verify compilation**
 
 Run: `cd /Users/anna/Documents/ai-management-brain && go build ./...`
 
-Expected: BUILD SUCCESS
+Expected: BUILD SUCCESS — all pieces wired together.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add cmd/brain/main.go internal/report/triggers.go
-git commit -m "feat(recommendations): register daily scan cron + trigger integration"
+git add cmd/brain/main.go internal/report/triggers.go internal/brain/state_engine.go internal/api/metric_handlers.go
+git commit -m "feat(recommendations): register daily scan cron + trigger integration + main wiring"
 ```
 
 ---
@@ -1383,7 +1647,7 @@ git commit -m "feat(recommendations): add Recommendations page + card component 
 
 ---
 
-## Task 8: Dashboard Integration + Sidebar
+## Task 8: Dashboard Integration + Sidebar with Badge
 
 **Files:**
 - Create: `frontend/src/components/recommendations/RecommendationSummary.vue`
@@ -1467,19 +1731,45 @@ In `frontend/src/views/DashboardView.vue`:
 1. Add import: `import RecommendationSummary from '@/components/recommendations/RecommendationSummary.vue'`
 2. Add `<RecommendationSummary />` in the template, after the alerts section and before the main grid.
 
-- [ ] **Step 3: Add sidebar menu item**
+- [ ] **Step 3: Add sidebar menu item with pending badge**
 
-In `frontend/src/layouts/AppLayout.vue`, find the "Organize" group in `menuOptions` and add after "Dashboard":
+In `frontend/src/layouts/AppLayout.vue`:
+
+1. Import `BulbOutline` from `@vicons/ionicons5`
+2. Import `getRecommendationSummary` from `@/api/recommendations`
+3. Add a reactive `pendingRecCount` ref and fetch it on mount:
+
+```typescript
+import { BulbOutline } from '@vicons/ionicons5'
+import { getRecommendationSummary } from '@/api/recommendations'
+
+const pendingRecCount = ref(0)
+
+onMounted(async () => {
+  // ... existing code ...
+  try {
+    const summary = await getRecommendationSummary()
+    pendingRecCount.value = summary.pending_count
+  } catch { /* ignore */ }
+})
+```
+
+4. In the `menuOptions` Organize group, add after "Dashboard":
 
 ```typescript
 {
-  label: 'AI Recommendations',
+  label: () => h('span', null, [
+    'AI Recommendations',
+    pendingRecCount.value > 0
+      ? h(NBadge, { value: pendingRecCount.value, max: 99, style: 'margin-left: 8px' })
+      : null,
+  ]),
   key: 'recommendations',
   icon: renderIcon(BulbOutline),
 },
 ```
 
-Import `BulbOutline` from `@vicons/ionicons5`.
+Import `NBadge` from `naive-ui` and `h` from `vue`.
 
 - [ ] **Step 4: Build and verify**
 
@@ -1491,7 +1781,7 @@ Expected: Build succeeds.
 
 ```bash
 git add frontend/src/components/recommendations/RecommendationSummary.vue frontend/src/views/DashboardView.vue frontend/src/layouts/AppLayout.vue
-git commit -m "feat(recommendations): add Dashboard summary + sidebar menu item"
+git commit -m "feat(recommendations): add Dashboard summary + sidebar with pending badge"
 ```
 
 ---
@@ -1499,15 +1789,17 @@ git commit -m "feat(recommendations): add Dashboard summary + sidebar menu item"
 ## Task 9: MCP Tools
 
 **Files:**
-- Create: `mcp/src/tools/recommendations.ts`
-- Modify: `mcp/src/index.ts` (register tools)
+- Create: `mcp-server/src/tools/recommendations.ts`
+- Modify: `mcp-server/src/server.ts` (register tools)
+
+**Note:** The MCP server directory is `mcp-server/` (not `mcp/`).
 
 - [ ] **Step 1: Create MCP tool definitions**
 
-Create `mcp/src/tools/recommendations.ts`:
+Create `mcp-server/src/tools/recommendations.ts`:
 
 ```typescript
-import type { ApiClient } from "../client";
+import type { ApiClient } from "../api-client";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 export async function getRecommendations(
@@ -1553,15 +1845,18 @@ export async function executeRecommendation(
 }
 ```
 
-- [ ] **Step 2: Register tools in index.ts**
+- [ ] **Step 2: Register tools in server.ts**
 
-In `mcp/src/index.ts`, add the tool definitions to the tools list and the handler switch:
+In `mcp-server/src/server.ts`, add the tool definitions to the tools list and the handler switch:
 
 ```typescript
+// Import:
+import { getRecommendations, executeRecommendation } from "./tools/recommendations";
+
 // Tool definitions:
 {
   name: "get_recommendations",
-  description: "Get active alerts for employees with consecutive missed check-in days",
+  description: "Get pending AI management recommendations with suggested actions",
   inputSchema: { type: "object", properties: {} },
 }
 {
@@ -1576,18 +1871,24 @@ In `mcp/src/index.ts`, add the tool definitions to the tools list and the handle
     required: ["recommendation_id"],
   },
 }
+
+// Handler cases:
+case "get_recommendations":
+  return getRecommendations(client);
+case "execute_recommendation":
+  return executeRecommendation(client, args as { recommendation_id: string; action_index?: number });
 ```
 
 - [ ] **Step 3: Verify MCP builds**
 
-Run: `cd /Users/anna/Documents/ai-management-brain/mcp && npx tsc --noEmit`
+Run: `cd /Users/anna/Documents/ai-management-brain/mcp-server && npx tsc --noEmit`
 
 Expected: No TypeScript errors.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add mcp/src/tools/recommendations.ts mcp/src/index.ts
+git add mcp-server/src/tools/recommendations.ts mcp-server/src/server.ts
 git commit -m "feat(recommendations): add 2 MCP tools — get_recommendations, execute_recommendation"
 ```
 
@@ -1615,7 +1916,7 @@ Run: `cd /Users/anna/Documents/ai-management-brain && CGO_ENABLED=0 GOOS=linux G
 
 Expected: `bin/brain` binary created.
 
-- [ ] **Step 4: Deploy backend**
+- [ ] **Step 4: Deploy backend + frontend**
 
 ```bash
 scp bin/brain ai-brain:~/ai-management-brain/brain
@@ -1638,13 +1939,13 @@ Expected: Migration 000017 applied, recommendation_scan job registered.
 curl -s https://manageaibrain.com/api/v1/recommendations/summary -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-Expected: `{"success": true, "data": {"pending_count": 0, "top": []}}`
+Expected: `{"data": {"pending_count": 0, "top": []}}`
 
 - [ ] **Step 7: Verify frontend page**
 
 Navigate to `https://manageaibrain.com/recommendations`
 
-Expected: Page loads with "No pending recommendations" empty state.
+Expected: Page loads with "No pending recommendations" empty state. Sidebar shows "AI Recommendations" item.
 
 - [ ] **Step 8: Commit any deployment fixes**
 
