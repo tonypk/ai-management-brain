@@ -10,6 +10,7 @@ import type { Objective, KeyResult } from '@/types'
 
 const props = defineProps<{
   objective: Objective
+  employeeMap?: Record<string, string>
 }>()
 
 const emit = defineEmits<{
@@ -105,6 +106,7 @@ function handleDeleteObjective() {
 
     <div style="font-size: 12px; color: #888; margin-bottom: 8px">
       Key Results: {{ objective.key_results.length }}
+      <span v-if="objective.owner_id && employeeMap?.[objective.owner_id]"> · Owner: {{ employeeMap[objective.owner_id] }}</span>
     </div>
 
     <KeyResultList

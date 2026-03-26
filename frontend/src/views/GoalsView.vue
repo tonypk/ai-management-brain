@@ -11,6 +11,7 @@ import GoalDeviationChart from '@/components/goals/GoalDeviationChart.vue'
 import ObjectiveCard from '@/components/goals/ObjectiveCard.vue'
 import ObjectiveFormModal from '@/components/goals/ObjectiveFormModal.vue'
 import { usePlanningStore } from '@/stores/planning'
+import { listEmployees } from '@/api/employees'
 import type { Objective, GoalStatus } from '@/types'
 
 const store = usePlanningStore()
@@ -24,12 +25,19 @@ function currentCycleKey(): string {
 const selectedCycle = ref(currentCycleKey())
 const showObjectiveModal = ref(false)
 const editingObjective = ref<Objective | null>(null)
+const employeeMap = ref<Record<string, string>>({})
 
 const filteredObjectives = computed(() => store.objectivesByCycle(selectedCycle.value))
 const stats = computed(() => store.cycleStats(selectedCycle.value))
 
-// Load goals from API
-onMounted(() => store.loadGoals(selectedCycle.value))
+// Load goals + employees from API
+onMounted(async () => {
+  store.loadGoals(selectedCycle.value)
+  try {
+    const employees = await listEmployees()
+    employeeMap.value = Object.fromEntries(employees.map((e) => [e.id, e.name]))
+  } catch { /* ignore */ }
+})
 watch(selectedCycle, (cycle) => store.loadGoals(cycle))
 
 function handleNewObjective() {
@@ -42,12 +50,12 @@ function handleEditObjective(obj: Objective) {
   showObjectiveModal.value = true
 }
 
-async function handleObjectiveSubmit(data: { title: string; description: string; status: GoalStatus; cycle: string }) {
+async function handleObjectiveSubmit(data: { title: string; description: string; status: GoalStatus; cycle: string; owner_id: string | null }) {
   if (editingObjective.value) {
     await store.updateObjective(editingObjective.value.id, data)
     message.success('Objective updated')
   } else {
-    await store.addObjective(data.title, data.description, data.cycle, data.status)
+    await store.addObjective(data.title, data.description, data.cycle, data.status, data.owner_id)
     message.success('Objective created')
   }
 }
@@ -59,7 +67,7 @@ async function handleObjectiveSubmit(data: { title: string; description: string;
       <template #actions>
         <NButton type="primary" @click="handleNewObjective">
           <template #icon><NIcon :component="AddOutline" /></template>
-          New Objective
+          New Objective/OKR
         </NButton>
       </template>
     </PageHeader>
@@ -90,7 +98,7 @@ async function handleObjectiveSubmit(data: { title: string; description: string;
       <EmptyState v-if="!store.goalsLoading && filteredObjectives.length === 0" description="No objectives for this cycle" />
       <NGrid v-else :x-gap="16" :y-gap="16" cols="1 m:2" responsive="screen">
         <NGi v-for="obj in filteredObjectives" :key="obj.id">
-          <ObjectiveCard :objective="obj" @edit="handleEditObjective" />
+          <ObjectiveCard :objective="obj" :employee-map="employeeMap" @edit="handleEditObjective" />
         </NGi>
       </NGrid>
     </NSpin>
