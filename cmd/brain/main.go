@@ -1244,6 +1244,9 @@ func main() {
 
 	// Brain Layer v2: Context Service + State Engine + Execution Planner + Incentive Engine + Recommender
 	contextService := brain.NewContextService(queries)
+	if memStore != nil {
+		contextService.SetMemoryReader(memStore)
+	}
 	var stateEngine *brain.StateEngine
 	var execPlanner *brain.ExecutionPlanner
 	var incentiveEngine *brain.IncentiveEngine
@@ -1258,6 +1261,10 @@ func main() {
 		execPlanner = brain.NewExecutionPlanner(stateLLM, queries, contextService)
 		incentiveEngine = brain.NewIncentiveEngine(stateLLM, queries, contextService)
 		recommender = brain.NewRecommender(stateLLM, queries, contextService)
+		if memStore != nil {
+			memEval := brain.NewMemoryPatternEvaluator(memStore)
+			recommender.SetMemoryEvaluator(memEval)
+		}
 		slog.Info("brain layer v2 engines initialized (state + context + planner + incentive + recommender)")
 	}
 	// execPlanner and incentiveEngine are wired into RouterConfig below (Brain Layer v3)
@@ -1334,10 +1341,14 @@ func main() {
 	}
 	channelSender := channel.NewRouterSender(channelRouter)
 
-	// Create recommendation dispatcher (uses channel sender for action execution)
+	// Create recommendation dispatcher and feedback loop
 	var dispatcher *brain.Dispatcher
+	var recFeedback *brain.RecommendationFeedback
 	if recommender != nil {
 		dispatcher = brain.NewDispatcher(queries, channelSender)
+		if memStore != nil {
+			recFeedback = brain.NewRecommendationFeedback(memStore)
+		}
 		slog.Info("recommendation dispatcher initialized")
 	}
 
@@ -1747,12 +1758,23 @@ func main() {
 				slog.Warn("fetch report for memory extraction failed", "error", err)
 				return nil // non-fatal
 			}
-			return memEngine.ExtractFromReport(ctx, memory.ReportInput{
+			if err := memEngine.ExtractFromReport(ctx, memory.ReportInput{
 				TenantID:   event.TenantID,
 				EmployeeID: payload.EmployeeID,
 				ReportID:   reportID,
 				Content:    answersJSON,
-			})
+			}); err != nil {
+				return err
+			}
+			// Trigger memory-based recommendation evaluation
+			if recommender != nil {
+				var tenantUUID pgtype.UUID
+				_ = tenantUUID.Scan(event.TenantID)
+				var empUUID pgtype.UUID
+				_ = empUUID.Scan(payload.EmployeeID)
+				_ = recommender.RealtimeEvaluate(ctx, tenantUUID, "memory_extraction_complete", payload.EmployeeName, empUUID, nil)
+			}
+			return nil
 		})
 
 		eventBus.Subscribe(events.ChaseCompleted, func(ctx context.Context, event events.Event) error {
@@ -2329,6 +2351,7 @@ func main() {
 		ActionService: actionSvc,
 		Recommender:     recommender,
 		Dispatcher:      dispatcher,
+		RecFeedback:     recFeedback,
 		ContextService:  contextService,
 		ExecPlanner:     execPlanner,
 		IncentiveEngine: incentiveEngine,

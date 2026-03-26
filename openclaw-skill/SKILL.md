@@ -55,7 +55,7 @@ OpenClaw Runtime (user environment)
             ├── Execution Intelligence ← signals, risks, working memory
             ├── Communication Parser   ← check-ins → structured events
             ├── Incentive Engine       ← context-aware scoring
-            ├── AI Recommendation Engine ← proactive suggestions
+            ├── AI Recommendation Engine ← memory-driven proactive suggestions
             └── Sync Service           ← Notion/Sheets bidirectional sync
 ```
 

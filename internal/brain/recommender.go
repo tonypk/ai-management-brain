@@ -19,6 +19,12 @@ type Recommender struct {
 	llm            *AnthropicClient
 	queries        *sqlc.Queries
 	contextService *ContextService
+	memEval        *MemoryPatternEvaluator
+}
+
+// SetMemoryEvaluator injects the memory pattern evaluator after construction.
+func (r *Recommender) SetMemoryEvaluator(eval *MemoryPatternEvaluator) {
+	r.memEval = eval
 }
 
 // RecommendationInput holds data for a single recommendation to be created.
@@ -292,10 +298,12 @@ func (r *Recommender) DailyScan(ctx context.Context, tenantID pgtype.UUID, mento
 	}
 
 	systemPrompt := fmt.Sprintf(`You are an AI management advisor using the %s philosophy.
-Based on the following team data, generate up to 5 actionable management recommendations.
+Based on the following team data and employee memory insights, generate up to 5 actionable management recommendations.
 
 Rules:
 - Each recommendation must have clear data evidence
+- When memory_highlights are available, use employee behavioral patterns to generate deeper insights
+- Include relevant memory evidence in the "evidence" field as "memory_evidence" array
 - Each must include suggested_actions with valid action types
 - Valid action types: schedule_meeting, send_message, create_task, reassign_task, flag_risk, adjust_target, public_recognition, create_suggestion
 - Priority: critical (act now) > high (today) > medium (this week) > low (reference)
@@ -309,7 +317,7 @@ Output a JSON array of recommendations. Each element:
   "title": "short title",
   "description": "2-3 sentences explaining why and impact",
   "suggested_actions": [{"type": "action_type", "params": {...}, "label": "button text"}],
-  "evidence": {"signals": [{"name": "...", "value": 0.0}], "employees": [{"name": "...", "issue": "..."}], "metrics": [{"name": "...", "trend": "..."}], "tasks": [{"id": "...", "issue": "..."}]},
+  "evidence": {"signals": [...], "employees": [...], "metrics": [...], "tasks": [...], "memory_evidence": [{"date": "YYYY-MM-DD", "content": "memory text", "importance": 0.8}]},
   "target_entity_type": "employee|project|metric|goal|null",
   "target_entity_id": "uuid or null"
 }`, mentorID, strings.Join(pendingTitles, "; "), cultureCode)
@@ -377,10 +385,17 @@ func (r *Recommender) RealtimeEvaluate(ctx context.Context, tenantID pgtype.UUID
 	case "exceptional_performance":
 		rec := r.templatePerformanceSpike(emp)
 		input = &rec
-	// Complex LLM-based triggers deferred to v2:
-	// case "signal_high_score", "blocker_cascade", "metric_anomaly":
-	//   These require separate prompt design and cost analysis.
-	//   Template triggers cover 80% of real-time use cases.
+	case "memory_extraction_complete":
+		// After memory extraction, evaluate patterns and store any recommendations
+		if r.memEval != nil {
+			recs := r.memEval.EvaluateAfterExtraction(ctx, uuidToString(tenantID), uuidToString(empID), empName)
+			for _, rec := range recs {
+				if err := r.storeIfNew(ctx, tenantID, rec, "memory_trigger"); err != nil {
+					slog.Error("recommendation: memory trigger store failed", "title", rec.Title, "error", err)
+				}
+			}
+		}
+		return nil
 	default:
 		slog.Debug("recommendation: unknown event type", "type", eventType)
 	}

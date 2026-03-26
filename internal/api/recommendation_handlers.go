@@ -90,7 +90,7 @@ type executeRecommendationRequest struct {
 }
 
 // handleExecuteRecommendation executes a single action by index and marks the recommendation as "accepted".
-func handleExecuteRecommendation(q *sqlc.Queries, dispatcher *brain.Dispatcher) gin.HandlerFunc {
+func handleExecuteRecommendation(q *sqlc.Queries, dispatcher *brain.Dispatcher, feedback *brain.RecommendationFeedback) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tenantID, err := parseUUID(TenantFromContext(c))
 		if err != nil {
@@ -141,12 +141,17 @@ func handleExecuteRecommendation(q *sqlc.Queries, dispatcher *brain.Dispatcher) 
 			slog.Error("update recommendation status", "error", err)
 		}
 
+		// Record feedback as strategy_result memory
+		if feedback != nil {
+			feedback.RecordFeedback(c.Request.Context(), TenantFromContext(c), rec.Title, actions[req.ActionIndex].Type, "accepted")
+		}
+
 		c.JSON(http.StatusOK, gin.H{"data": result})
 	}
 }
 
 // handleExecuteAllRecommendation runs all auto-executable actions and marks as "executed" if all succeed.
-func handleExecuteAllRecommendation(q *sqlc.Queries, dispatcher *brain.Dispatcher) gin.HandlerFunc {
+func handleExecuteAllRecommendation(q *sqlc.Queries, dispatcher *brain.Dispatcher, feedback *brain.RecommendationFeedback) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tenantID, err := parseUUID(TenantFromContext(c))
 		if err != nil {
@@ -193,12 +198,17 @@ func handleExecuteAllRecommendation(q *sqlc.Queries, dispatcher *brain.Dispatche
 			slog.Error("update recommendation status", "error", err)
 		}
 
+		// Record feedback as strategy_result memory
+		if feedback != nil {
+			feedback.RecordFeedback(c.Request.Context(), TenantFromContext(c), rec.Title, "execute_all", status)
+		}
+
 		c.JSON(http.StatusOK, gin.H{"data": results})
 	}
 }
 
 // handleDismissRecommendation updates a recommendation status to "dismissed".
-func handleDismissRecommendation(q *sqlc.Queries) gin.HandlerFunc {
+func handleDismissRecommendation(q *sqlc.Queries, feedback *brain.RecommendationFeedback) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tenantID, err := parseUUID(TenantFromContext(c))
 		if err != nil {
@@ -212,6 +222,17 @@ func handleDismissRecommendation(q *sqlc.Queries) gin.HandlerFunc {
 			return
 		}
 
+		// Fetch title for feedback before status change
+		var recTitle string
+		if feedback != nil {
+			rec, err := q.GetRecommendation(c.Request.Context(), sqlc.GetRecommendationParams{
+				ID: recID, TenantID: tenantID,
+			})
+			if err == nil {
+				recTitle = rec.Title
+			}
+		}
+
 		if err := q.UpdateRecommendationStatus(c.Request.Context(), sqlc.UpdateRecommendationStatusParams{
 			ID:       recID,
 			TenantID: tenantID,
@@ -220,6 +241,10 @@ func handleDismissRecommendation(q *sqlc.Queries) gin.HandlerFunc {
 			slog.Error("dismiss recommendation", "error", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to dismiss recommendation"})
 			return
+		}
+
+		if feedback != nil && recTitle != "" {
+			feedback.RecordFeedback(c.Request.Context(), TenantFromContext(c), recTitle, "dismiss", "dismissed")
 		}
 
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"status": "dismissed"}})

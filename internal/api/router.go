@@ -36,8 +36,9 @@ type RouterConfig struct {
 	SeatService    *seats.SeatService      // nil = seats disabled
 	ActionService  *service.ActionService  // nil = action endpoints disabled
 	HalaOSMapper   halaosMapper            // nil = HalaOS dispatch disabled (wired in Task 14)
-	Recommender    *brain.Recommender     // nil = recommendation engine disabled
-	Dispatcher     *brain.Dispatcher      // nil = recommendation dispatch disabled
+	Recommender    *brain.Recommender              // nil = recommendation engine disabled
+	Dispatcher     *brain.Dispatcher               // nil = recommendation dispatch disabled
+	RecFeedback    *brain.RecommendationFeedback   // nil = feedback loop disabled
 	ContextService  *brain.ContextService  // nil = context features disabled
 	ExecPlanner     *brain.ExecutionPlanner // nil = planning disabled
 	IncentiveEngine *brain.IncentiveEngine  // nil = incentive calc disabled
@@ -265,9 +266,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			{
 				recs.GET("", handleListRecommendations(cfg.Queries))
 				recs.GET("/summary", handleGetRecommendationSummary(cfg.Queries))
-				recs.POST("/:id/execute", handleExecuteRecommendation(cfg.Queries, cfg.Dispatcher))
-				recs.POST("/:id/execute-all", handleExecuteAllRecommendation(cfg.Queries, cfg.Dispatcher))
-				recs.POST("/:id/dismiss", handleDismissRecommendation(cfg.Queries))
+				recs.POST("/:id/execute", handleExecuteRecommendation(cfg.Queries, cfg.Dispatcher, cfg.RecFeedback))
+				recs.POST("/:id/execute-all", handleExecuteAllRecommendation(cfg.Queries, cfg.Dispatcher, cfg.RecFeedback))
+				recs.POST("/:id/dismiss", handleDismissRecommendation(cfg.Queries, cfg.RecFeedback))
 				recs.DELETE("/:id", handleDeleteRecommendation(cfg.Queries))
 			}
 		}

@@ -1,8 +1,8 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "6.0.0"
-description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, AI recommendation engine, bidirectional Notion/Sheets sync. Works instantly after install. Connect manageaibrain.com MCP for full team automation: 33 MCP tools, auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, AI recommendations, data sync to Notion/Sheets, 23+ platform messaging. Integrates with OpenClaw MCP connectors to build a company context layer — the foundation for all management intelligence."
+version: "6.1.0"
+description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, memory-driven AI recommendation engine, bidirectional Notion/Sheets sync. Works instantly after install. Connect manageaibrain.com MCP for full team automation: 33 MCP tools, auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, memory-driven AI recommendations, data sync to Notion/Sheets, 23+ platform messaging. v6.1: Memory engine feeds employee behavioral patterns into recommendations — stress detection, repeated blockers, growth signals, engagement drops. Recommendation outcomes become strategy memories for continuous learning."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
@@ -42,7 +42,7 @@ Everything in Advisor Mode, plus:
 - **Bidirectional Notion/Sheets sync**: tasks, goals, projects, metrics synced every 30 minutes with conflict resolution
 - **23+ messaging platforms**: Telegram, Slack, Lark, Signal, and more via OpenClaw
 - **OpenClaw connector integration**: storage tools (Notion/Sheets), dev tools (GitHub/Linear/Calendar), communication tools (Slack/Discord/Lark) feed data into the company context layer
-- **AI Recommendation Engine**: daily scans + real-time triggers generate prioritized management suggestions with one-click actions
+- **AI Recommendation Engine**: daily scans (enriched with employee memory patterns) + real-time triggers (sentiment, memory-based stress/blocker/growth/engagement patterns) generate prioritized management suggestions with one-click actions and feedback-driven learning
 - **Web Dashboard**: real-time analytics at [manageaibrain.com](https://manageaibrain.com) — 20+ pages including Dashboard, Company State, KPI Metrics, Projects, Tasks, Incentives, Recommendations, Goals, Reviews, Skills, Training, Career Paths
 
 ## Install

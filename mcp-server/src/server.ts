@@ -395,7 +395,7 @@ export function createServer(): McpServer {
 
   server.tool(
     "get_recommendations",
-    "Get pending AI management recommendations with suggested actions. Each recommendation includes a title, description, priority, category, evidence data, and executable actions. Use this to show the boss what the AI has noticed and suggested.",
+    "Get pending AI management recommendations with suggested actions. Recommendations are generated from daily AI scans (enriched with employee memory patterns) and real-time triggers (check-in sentiment, memory-based stress/blocker/growth patterns). Each includes title, description, priority, category, evidence (including memory_evidence), and executable actions.",
     {},
     async () => {
       const client = makeClient();
