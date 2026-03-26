@@ -38,3 +38,4 @@ export type {
   CommunicationEvent, ExecutionSignal, WorkingMemorySnapshot,
   CompanyState, Workflow, ReportingLine,
 } from './state'
+export type { SyncConfig, SyncLog, ConfigureSyncRequest } from './sync'
