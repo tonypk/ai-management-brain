@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "5.1.0"
+version: "5.1.1"
 description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, AI recommendation engine. Works instantly after install. Connect manageaibrain.com MCP for full team automation: auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, AI recommendations, 23+ platform messaging. Integrates with OpenClaw MCP connectors (Notion, Jira, GitHub, Slack, etc.) to build a company context layer — the foundation for all management intelligence."
 user-invocable: true
 emoji: "🤖"
@@ -11,9 +11,9 @@ metadata:
     optional:
       env:
         - name: "BOSS_AI_AGENT_API_KEY"
-          description: "Optional. Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics dashboards. Only relevant in Team Operations Mode. API key sent as auth header only."
+          description: "Optional. Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics dashboards. Separate from MCP authentication. Only relevant in Team Operations Mode."
         - name: "MANAGEMENT_BRAIN_API_KEY"
-          description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility."
+          description: "Required for Team Operations Mode. Authenticates all 24 MCP tool calls to manageaibrain.com/mcp. Without this key, only Advisor Mode (offline) is available."
       config:
         - "~/.openclaw/skills/boss-ai-agent/config.json"
 ---
@@ -39,7 +39,7 @@ If MCP becomes available mid-session (user connects it), announce the mode upgra
 
 ## OpenClaw Integration Architecture
 
-Boss AI Agent is designed as the **brain layer** that sits on top of OpenClaw's MCP connector ecosystem. The skill itself does NOT integrate directly with external tools — OpenClaw handles all tool connections. The skill consumes the data these connectors provide.
+Boss AI Agent is designed as the **brain layer** that sits on top of OpenClaw's MCP connector ecosystem. The skill connects to its own backend (`manageaibrain.com/mcp`) for team data processing, while third-party tool integrations (Notion, Jira, GitHub, etc.) are handled by OpenClaw's MCP connectors — the skill does not store or manage tokens for these external services.
 
 ```
 OpenClaw Runtime (user environment)
@@ -95,10 +95,10 @@ External tool data flows through the brain in stages:
 
 All Advisor Mode permissions, plus:
 
-- **MCP tools**: All 24 MCP tools are hosted on `manageaibrain.com/mcp`. Tool parameters (e.g. employee name, discussion topic, report period) are sent to the cloud server for processing. 18 tools are read-only queries; 4 write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) actively send messages to employees via Telegram/Slack/Lark/Signal — use with intent; 2 recommendation tools (`get_recommendations`, `execute_recommendation`) manage AI-generated management suggestions.
+- **MCP tools** (requires `MANAGEMENT_BRAIN_API_KEY`): All 24 MCP tools are hosted on `manageaibrain.com/mcp`. The API key authenticates all MCP requests. Tool parameters (e.g. employee name, discussion topic, report period) are sent to the cloud server for processing. 18 tools are read-only queries; 4 write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) actively send messages to employees via Telegram/Slack/Lark/Signal — use with intent; 2 recommendation tools (`get_recommendations`, `execute_recommendation`) manage AI-generated management suggestions.
 - **Cron jobs**: registers up to 5 recurring jobs via OpenClaw's cron API. Solo founder mode (team=0) only registers 2 jobs. See [Cron Job Management](#cron-job-management) for details.
-- **External services** (GitHub, Linear, Jira, Notion): accessed through OpenClaw's configured integrations — the skill does NOT store or manage tokens for these services.
-- **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill additionally makes read-only GET requests to `manageaibrain.com/api/v1/` for extended mentor configs and analytics dashboards.
+- **Third-party tools** (GitHub, Linear, Jira, Notion): accessed through OpenClaw's MCP connectors that the user installs separately — the skill does NOT store or manage tokens for these services. Data from these connectors enriches the company context layer on `manageaibrain.com`.
+- **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill additionally makes read-only GET requests to `manageaibrain.com/api/v1/` for extended mentor configs and analytics dashboards. This is separate from the MCP connection.
 
 ## Data Flow
 
@@ -121,9 +121,9 @@ No network communication. All mentor knowledge is embedded in this skill file.
 | OpenClaw Connectors → Brain | Storage data (Notion pages, Jira tasks, Sheets), dev data (GitHub PRs, commits), messages (Slack, Discord) | Via OpenClaw's MCP connectors → parsed into management events |
 | Skill → Local disk | `config.json` with full team settings | Single file, user-editable |
 
-**What goes to the cloud**: MCP tool parameters (employee names, discussion topics, message content) are processed on `manageaibrain.com`. The server stores team data in PostgreSQL.
+**What goes to the cloud**: MCP tool parameters (employee names, discussion topics, message content) are sent to `manageaibrain.com` for processing. The server stores team data in PostgreSQL. The MCP connection uses the `MANAGEMENT_BRAIN_API_KEY` for authentication — without this key, MCP tools return an error.
 
-**What stays local**: `config.json`, chat history, memory, and any files on your machine.
+**What stays local**: `config.json` (mentor preferences, cron schedules), Claude Code chat history, and memory files. These local files are never transmitted to `manageaibrain.com`.
 
 **Important — persistent behavior** (Team Operations Mode only): This mode registers up to 5 cron jobs that run autonomously. Combined with 4 write tools that can send messages to employees, misconfiguration could result in unintended messages. Review cron schedules in `config.json` before activating. Use `cron list` to audit and `cron remove` to disable.
 

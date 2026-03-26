@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "5.1.0"
+version: "5.1.1"
 description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, AI recommendation engine. Works instantly after install. Connect manageaibrain.com MCP for full team automation: auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, AI recommendations, 23+ platform messaging. Integrates with OpenClaw MCP connectors (Notion, Jira, GitHub, Slack, etc.) to build a company context layer — the foundation for all management intelligence."
 user-invocable: true
 emoji: "🤖"
@@ -11,9 +11,9 @@ metadata:
     optional:
       env:
         - name: "BOSS_AI_AGENT_API_KEY"
-          description: "Optional. Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics. Only relevant in Team Operations Mode."
+          description: "Optional. Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics. Separate from MCP authentication."
         - name: "MANAGEMENT_BRAIN_API_KEY"
-          description: "Legacy fallback for BOSS_AI_AGENT_API_KEY. Accepted for backward compatibility."
+          description: "Required for Team Operations Mode. Authenticates all 24 MCP tool calls to manageaibrain.com/mcp. Without this key, only Advisor Mode is available."
       config:
         - "~/.openclaw/skills/boss-ai-agent/config.json"
 ---
@@ -78,13 +78,13 @@ The skill auto-detects which mode to use based on whether MCP tools are availabl
 
 **Advisor Mode**: AI uses embedded mentor frameworks (decision matrices, culture packs, scenario templates) to answer management questions directly. No network communication — everything runs from the skill instructions.
 
-**Team Operations Mode**: AI connects to `manageaibrain.com/mcp` for real team operations. Tool parameters (employee names, discussion topics, message content) are sent to the cloud server for processing. Write tools deliver messages to employees via connected platforms. Local files (`config.json`, chat history, memory) are never sent to the server.
+**Team Operations Mode**: AI connects to `manageaibrain.com/mcp` (requires `MANAGEMENT_BRAIN_API_KEY`) for real team operations. Tool parameters (employee names, discussion topics, message content) are sent to the cloud server for processing. Write tools deliver messages to employees via connected platforms. Local files (`config.json`, chat history, memory) stay on your machine and are not transmitted to the server.
 
 **Persistent behavior** (Team Operations only): Registers up to 5 cron jobs that run autonomously — including jobs that send messages to employees. Review schedules in `config.json` before activating. Manage with `cron list` / `cron remove`.
 
 ## OpenClaw Integration Architecture
 
-Boss AI Agent is the **brain layer** — it works with OpenClaw's MCP connector ecosystem to build a complete management intelligence system.
+Boss AI Agent is the **brain layer** — it connects to its own backend (`manageaibrain.com/mcp`) for team data processing, while third-party tool integrations are handled by OpenClaw's MCP connectors.
 
 ```
 OpenClaw Runtime (user environment)
@@ -107,7 +107,7 @@ OpenClaw Runtime (user environment)
 - Dev connectors (GitHub/Linear) → PR activity, commit patterns, CI status feed into execution signals
 - Communication connectors (Telegram/Slack/Discord/Lark) → employee messages are parsed into structured management events
 
-**Key principle**: the skill does NOT manage tokens for external tools — OpenClaw handles all tool connections. The skill consumes the data and builds management intelligence on top.
+**Key principle**: the skill does NOT manage tokens for third-party tools (Notion, GitHub, etc.) — OpenClaw handles those connections. The skill connects to its own `manageaibrain.com/mcp` backend (authenticated via `MANAGEMENT_BRAIN_API_KEY`) and consumes third-party connector data to build management intelligence.
 
 ## Mentors
 
