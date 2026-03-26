@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { h, computed } from 'vue'
+import { h, ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NLayout, NLayoutSider, NLayoutContent, NMenu, NButton, NIcon, type MenuOption } from 'naive-ui'
+import { NLayout, NLayoutSider, NLayoutContent, NMenu, NButton, NIcon, NBadge, type MenuOption } from 'naive-ui'
 import {
   GridOutline as DashboardIcon,
   AlertCircleOutline as AlertIcon,
@@ -28,7 +28,9 @@ import {
   CheckboxOutline as TasksIcon,
   TrophyOutline as IncentivesIcon,
   PulseOutline as StateIcon,
+  FlashOutline as RecommendationsIcon,
 } from '@vicons/ionicons5'
+import { getRecommendationSummary } from '@/api/recommendations'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 
@@ -36,6 +38,15 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
+
+const pendingRecCount = ref(0)
+
+onMounted(async () => {
+  try {
+    const summary = await getRecommendationSummary()
+    pendingRecCount.value = summary.pending_count
+  } catch { /* ignore */ }
+})
 
 const activeKey = computed(() => {
   const path = route.path
@@ -81,6 +92,16 @@ const menuOptions: MenuOption[] = [
   { type: 'group', label: 'Analyze', key: 'analyze-group', children: [
     { label: 'AI Insights', key: 'insights', icon: renderIcon(InsightsIcon) },
     { label: 'Weekly Digest', key: 'digest', icon: renderIcon(DigestIcon) },
+    {
+      label: () => h('span', { style: 'display: flex; align-items: center; gap: 6px' }, [
+        'AI Recommendations',
+        pendingRecCount.value > 0
+          ? h(NBadge, { value: pendingRecCount.value, max: 99 })
+          : null,
+      ]),
+      key: 'recommendations',
+      icon: renderIcon(RecommendationsIcon),
+    },
   ]},
   { type: 'group', label: 'Configure', key: 'configure-group', children: [
     { label: 'Settings', key: 'settings', icon: renderIcon(SettingsIcon) },

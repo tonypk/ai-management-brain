@@ -14,6 +14,7 @@ import SubmissionTrendChart from '@/components/dashboard/SubmissionTrendChart.vu
 import SentimentHeatmap from '@/components/dashboard/SentimentHeatmap.vue'
 import AlertPanel from '@/components/dashboard/AlertPanel.vue'
 import EmployeeActivityTable from '@/components/dashboard/EmployeeActivityTable.vue'
+import RecommendationSummary from '@/components/recommendations/RecommendationSummary.vue'
 import { getDashboard, getAnalyticsOverview, getEmployeeActivity } from '@/api/dashboard'
 import { getAlerts, getCheckinStatus } from '@/api/alerts'
 import type { DashboardStats, AnalyticsOverview, EmployeeActivity, Alert, CheckinStatus } from '@/types'
@@ -99,6 +100,11 @@ onMounted(async () => {
           <AlertPanel :alerts="alerts" />
         </NGi>
       </NGrid>
+
+      <!-- Row 3.5: AI Recommendations summary -->
+      <div style="margin-top: 16px">
+        <RecommendationSummary />
+      </div>
 
       <!-- Row 4: Sentiment heatmap -->
       <div style="margin-top: 16px">
