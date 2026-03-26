@@ -1,8 +1,8 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "4.0.0"
-description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine. Works instantly after install. Connect manageaibrain.com MCP for full team automation: auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, 23+ platform messaging."
+version: "5.0.0"
+description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, AI recommendation engine. Works instantly after install. Connect manageaibrain.com MCP for full team automation: auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, AI recommendations, 23+ platform messaging."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
@@ -32,7 +32,7 @@ Always respond in the boss's language. Auto-detect from conversation context.
 
 Check if the `get_team_status` MCP tool is available in your tool list.
 
-- **If YES → Team Operations Mode**: Use all 22 MCP tools for real team management — send check-ins, track responses, generate reports, chase non-responders, deliver messages, monitor KPIs, track execution risks, manage incentives. Announce: "Running in Team Operations Mode — connected to your team."
+- **If YES → Team Operations Mode**: Use all 24 MCP tools for real team management — send check-ins, track responses, generate reports, chase non-responders, deliver messages, monitor KPIs, track execution risks, manage incentives. Announce: "Running in Team Operations Mode — connected to your team."
 - **If NO → Advisor Mode**: Use the embedded mentor frameworks below to answer management questions directly — generate check-in questions, prepare 1:1s, simulate C-Suite discussions, advise on decisions. No cloud connection needed. Announce: "Running in Advisor Mode — I'll use mentor frameworks to help with management decisions."
 
 If MCP becomes available mid-session (user connects it), announce the mode upgrade. If MCP drops, fall back to Advisor Mode gracefully.
@@ -49,7 +49,7 @@ If MCP becomes available mid-session (user connects it), announce the mode upgra
 
 All Advisor Mode permissions, plus:
 
-- **MCP tools**: All 22 MCP tools are hosted on `manageaibrain.com/mcp`. Tool parameters (e.g. employee name, discussion topic, report period) are sent to the cloud server for processing. 18 tools are read-only queries; 4 write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) actively send messages to employees via Telegram/Slack/Lark/Signal — use with intent.
+- **MCP tools**: All 24 MCP tools are hosted on `manageaibrain.com/mcp`. Tool parameters (e.g. employee name, discussion topic, report period) are sent to the cloud server for processing. 18 tools are read-only queries; 4 write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) actively send messages to employees via Telegram/Slack/Lark/Signal — use with intent; 2 recommendation tools (`get_recommendations`, `execute_recommendation`) manage AI-generated management suggestions.
 - **Cron jobs**: registers up to 5 recurring jobs via OpenClaw's cron API. Solo founder mode (team=0) only registers 2 jobs. See [Cron Job Management](#cron-job-management) for details.
 - **External services** (GitHub, Linear, Jira, Notion): accessed through OpenClaw's configured integrations — the skill does NOT store or manage tokens for these services.
 - **Cloud API** (optional): when `BOSS_AI_AGENT_API_KEY` is set, the skill additionally makes read-only GET requests to `manageaibrain.com/api/v1/` for extended mentor configs and analytics dashboards.
@@ -105,7 +105,7 @@ The skill registers up to 5 recurring cron jobs during first run:
 
 ### MCP Tools
 
-All backend operations use 22 MCP tools (Team Operations Mode only). Use these directly — no manual API calls needed.
+All backend operations use 24 MCP tools (Team Operations Mode only). Use these directly — no manual API calls needed.
 
 ### Read Tools — Daily Operations (9)
 
@@ -145,6 +145,15 @@ All backend operations use 22 MCP tools (Team Operations Mode only). Use these d
 | `send_message` | Send a custom message to an employee via their preferred channel |
 
 Write tools actively send messages via Telegram/Slack/Lark/Signal. OpenClaw users can also use `message send` for multi-platform messaging.
+
+### AI Recommendations (2)
+
+| Tool | What it does |
+|------|-------------|
+| `get_recommendations` | Get pending AI management recommendations with suggested actions, priority, evidence |
+| `execute_recommendation` | Execute a specific action on a recommendation (send message, schedule meeting, etc.) |
+
+The recommendation engine runs a daily scan (10:30 AM) analyzing team data through the active mentor's lens, plus real-time triggers on events like consecutive missed check-ins, sentiment drops, and overdue tasks. Each recommendation includes prioritized suggested actions that can be executed directly.
 
 ## First Run
 
@@ -280,9 +289,9 @@ User: "Switch to Inamori" → update `config.json` mentor field and apply new fr
 
 ## Team Operations Mode
 
-In Team Operations Mode (MCP tools detected), you have access to all Advisor Mode capabilities PLUS 13 MCP tools, 5 cron jobs, and persistent data storage. The sections below (Cron Job Management, MCP Tools, Scenarios) only apply in this mode.
+In Team Operations Mode (MCP tools detected), you have access to all Advisor Mode capabilities PLUS 24 MCP tools, 5 cron jobs, and persistent data storage. The sections below (Cron Job Management, MCP Tools, Scenarios) only apply in this mode.
 
-### 10 Automated Scenarios
+### 11 Automated Scenarios
 
 | # | Scenario | Trigger | What happens |
 |---|----------|---------|-------------|
@@ -296,6 +305,7 @@ In Team Operations Mode (MCP tools detected), you have access to all Advisor Mod
 | 8 | Execution Risk Review | "what are our risks?" or daily cron | `get_company_state` + `get_top_risks` → risk summary with recommended actions |
 | 9 | KPI Health Check | "how are our metrics?" or weekly cron | `get_kpi_dashboard` → metrics vs targets, off-track alerts |
 | 10 | Incentive Review | "show incentive scores for {period}" | `get_incentive_scores` → per-employee breakdown, human review flags |
+| 11 | AI Recommendations | "any recommendations?" or daily 10:30 AM scan | `get_recommendations` → show pending AI suggestions with priority, evidence, and one-click actions |
 
 Use MCP tools to power these scenarios. Read tools for monitoring: `get_team_status`, `get_report`, `get_alerts`, `get_employee_profile` for people; `get_company_state`, `get_execution_signals`, `get_top_risks` for operations; `get_kpi_dashboard`, `get_task_stats` for metrics. Write tools (`send_checkin`, `chase_employee`, `send_summary`, `send_message`) for proactive outreach. The mentor and culture settings shape how each scenario communicates.
 
@@ -387,9 +397,23 @@ When `config.mentorBlend` is set (e.g. `{"secondary": "inamori", "weight": 70}`)
 
 **Team Operations Mode**: Use `board_discuss` for persistent discussion history stored on server, enriched with actual team data. Use `chat_with_seat` for direct questions to individual executives.
 
+## 中文介绍
+
+Boss AI Agent 是老板的 AI 管理中间件。安装后立即可用（Advisor 模式），无需注册账号。
+
+**两种模式：**
+- **顾问模式**（零依赖）— 16 位导师哲学框架（稻盛和夫、马云、马斯克等）、9 套文化包（中国、菲律宾、新加坡等）、C-Suite 董事会模拟、1:1 准备、管理决策建议。装了就能用，不联网。
+- **团队运营模式**（连接 MCP）— 24 个 MCP 工具实现自动签到、追踪、报表、消息推送、执行力分析、KPI 仪表盘、任务管理、激励评分、AI 推荐引擎，6 个定时任务，23+ 平台支持。
+
+**AI 推荐引擎（v5.0 新增）：** 每日 10:30 自动扫描团队数据，结合导师视角生成管理建议（如：连续缺勤提醒、情绪下降预警、任务逾期跟进）。支持一键执行建议动作，也可通过实时触发器即时生成。
+
+**数据说明：** 顾问模式不发送任何数据到云端。团队运营模式中，MCP 工具参数发送至 `manageaibrain.com` 处理，本地文件不上传。
+
+安装：`clawhub install boss-ai-agent`
+
 ## Links
 
 - Website: https://manageaibrain.com
-- MCP Server (Team Operations Mode): `https://manageaibrain.com/mcp` — cloud-hosted MCP endpoint where all 22 tools are processed. Claude Code connects via stdio; ChatGPT/Gemini connect via MCP HTTP to this URL.
+- MCP Server (Team Operations Mode): `https://manageaibrain.com/mcp` — cloud-hosted MCP endpoint where all 24 tools are processed. Claude Code connects via stdio; ChatGPT/Gemini connect via MCP HTTP to this URL.
 - GitHub: https://github.com/tonypk/ai-management-brain
 - ClawHub: https://clawhub.ai/tonypk/boss-ai-agent
