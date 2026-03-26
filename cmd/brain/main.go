@@ -1242,11 +1242,12 @@ func main() {
 		slog.Info("onboarding service initialized")
 	}
 
-	// Brain Layer v2: Context Service + State Engine + Execution Planner + Incentive Engine
+	// Brain Layer v2: Context Service + State Engine + Execution Planner + Incentive Engine + Recommender
 	contextService := brain.NewContextService(queries)
 	var stateEngine *brain.StateEngine
 	var execPlanner *brain.ExecutionPlanner
 	var incentiveEngine *brain.IncentiveEngine
+	var recommender *brain.Recommender
 	if cfg.AnthropicKey != "" {
 		stateLLM, err := brain.NewAnthropicClient(cfg.AnthropicKey)
 		if err != nil {
@@ -1256,7 +1257,8 @@ func main() {
 		stateEngine = brain.NewStateEngine(stateLLM, queries)
 		execPlanner = brain.NewExecutionPlanner(stateLLM, queries, contextService)
 		incentiveEngine = brain.NewIncentiveEngine(stateLLM, queries, contextService)
-		slog.Info("brain layer v2 engines initialized (state + context + planner + incentive)")
+		recommender = brain.NewRecommender(stateLLM, queries, contextService)
+		slog.Info("brain layer v2 engines initialized (state + context + planner + incentive + recommender)")
 	}
 	_ = execPlanner // will be used in Phase 4 MCP tools
 
@@ -1332,6 +1334,13 @@ func main() {
 	}
 	channelSender := channel.NewRouterSender(channelRouter)
 
+	// Create recommendation dispatcher (uses channel sender for action execution)
+	var dispatcher *brain.Dispatcher
+	if recommender != nil {
+		dispatcher = brain.NewDispatcher(queries, channelSender)
+		slog.Info("recommendation dispatcher initialized")
+	}
+
 	// Create event bus
 	eventBus := events.NewBus(rdb)
 
@@ -1341,6 +1350,9 @@ func main() {
 	chaser.SetEventBus(eventBus)
 	summarizer := report.NewSummarizer(reportDB, llmService)
 	triggerChecker := report.NewTriggerChecker(reportDB, channelSender, engineFactory)
+	if recommender != nil {
+		triggerChecker.SetRecommender(recommender)
+	}
 	actionExecutor := report.NewActionExecutor(reportDB, channelSender, llmService, engineFactory)
 	alertChecker := report.NewAlertChecker(reportDB, channelSender)
 	analyzer := report.NewAnalyzer(reportDB, llmService)
@@ -2220,6 +2232,32 @@ func main() {
 		}
 	}
 
+	// Recommendation daily scan job
+	if recommender != nil {
+		if err := sched.AddJob("recommendation_scan", "30 10 * * *", func(ctx context.Context) error {
+			slog.Info("recommendation_scan: starting")
+			tenants, err := queries.ListActiveTenants(ctx)
+			if err != nil {
+				return fmt.Errorf("list tenants: %w", err)
+			}
+			for _, tenant := range tenants {
+				mentorID := tenant.MentorID
+				if mentorID == "" {
+					mentorID = "inamori"
+				}
+				if err := recommender.DailyScan(ctx, tenant.ID, mentorID, "default"); err != nil {
+					slog.Error("recommendation_scan: tenant failed", "tenant", formatPgUUID(tenant.ID), "error", err)
+					continue
+				}
+			}
+			return nil
+		}); err != nil {
+			slog.Error("failed to register recommendation_scan job", "error", err)
+		} else {
+			slog.Info("recommendation_scan job registered", "schedule", "daily 10:30")
+		}
+	}
+
 	// Create AI Role Manager (requires LLM + scheduler)
 	var roleManager *roles.Manager
 	if cfg.AnthropicKey != "" {
@@ -2289,6 +2327,8 @@ func main() {
 		Scheduler:     sched,
 		SeatService:   seatSvc,
 		ActionService: actionSvc,
+		Recommender:   recommender,
+		Dispatcher:    dispatcher,
 	})
 
 	// Health check (public, outside /api/v1)

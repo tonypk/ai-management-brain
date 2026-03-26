@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/tonypk/ai-management-brain/internal/brain"
 	"github.com/tonypk/ai-management-brain/internal/channel"
 )
@@ -28,14 +30,20 @@ type TriggerResult struct {
 
 // TriggerChecker detects events and executes trigger rules from mentor config.
 type TriggerChecker struct {
-	db      TriggerDB
-	sender  channel.Sender
-	factory *brain.EngineFactory
+	db          TriggerDB
+	sender      channel.Sender
+	factory     *brain.EngineFactory
+	recommender *brain.Recommender
 }
 
 // NewTriggerChecker creates a new trigger checker.
 func NewTriggerChecker(db TriggerDB, sender channel.Sender, factory *brain.EngineFactory) *TriggerChecker {
 	return &TriggerChecker{db: db, sender: sender, factory: factory}
+}
+
+// SetRecommender sets the recommender for realtime recommendation generation on trigger matches.
+func (t *TriggerChecker) SetRecommender(r *brain.Recommender) {
+	t.recommender = r
 }
 
 // CheckAll runs all trigger rules for the tenant's employees.
@@ -91,6 +99,19 @@ func (t *TriggerChecker) CheckAll(ctx context.Context, tenantID, mentorID string
 			}
 
 			results = append(results, result)
+
+			// Generate AI recommendation for the triggered event
+			if t.recommender != nil {
+				var tenantUUID pgtype.UUID
+				if err := tenantUUID.Scan(tenantID); err == nil {
+					var empUUID pgtype.UUID
+					_ = empUUID.Scan(emp.ID)
+					data := map[string]any{"trigger_event": trigger.Event}
+					if err := t.recommender.RealtimeEvaluate(ctx, tenantUUID, trigger.Event, emp.Name, empUUID, data); err != nil {
+						slog.Error("trigger recommendation", "employee", emp.Name, "event", trigger.Event, "error", err)
+					}
+				}
+			}
 		}
 	}
 
