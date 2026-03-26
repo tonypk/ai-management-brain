@@ -145,6 +145,49 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			goals.GET("/:id/snapshots", handleListSnapshots(cfg.Queries))
 		}
 
+		// Performance Reviews
+		reviews := protected.Group("/reviews")
+		reviews.Use(RequireRole("boss"))
+		{
+			reviews.GET("/cycles", handleListReviewCycles(cfg.Queries))
+			reviews.POST("/cycles", handleCreateReviewCycle(cfg.Queries))
+			reviews.PUT("/cycles/:id", handleUpdateReviewCycle(cfg.Queries))
+			reviews.DELETE("/cycles/:id", handleDeleteReviewCycle(cfg.Queries))
+			reviews.GET("/cycles/:id/reviews", handleListReviewsByCycle(cfg.Queries))
+			reviews.POST("/cycles/:id/reviews", handleCreateReview(cfg.Queries))
+			reviews.PUT("/cycles/:id/reviews/:review_id", handleUpdateReview(cfg.Queries))
+		}
+
+		// 1:1 Meetings
+		meetings := protected.Group("/meetings")
+		meetings.Use(RequireRole("boss"))
+		{
+			meetings.GET("", handleListMeetings(cfg.Queries))
+			meetings.GET("/:id", handleGetMeeting(cfg.Queries))
+			meetings.POST("", handleCreateMeeting(cfg.Queries))
+			meetings.PUT("/:id", handleUpdateMeeting(cfg.Queries))
+			meetings.DELETE("/:id", handleDeleteMeeting(cfg.Queries))
+			meetings.GET("/:id/actions", handleListActionItems(cfg.Queries))
+			meetings.POST("/:id/actions", handleCreateActionItem(cfg.Queries))
+			meetings.PUT("/:id/actions/:ai_id", handleUpdateActionItem(cfg.Queries))
+			meetings.DELETE("/:id/actions/:ai_id", handleDeleteActionItem(cfg.Queries))
+			meetings.GET("/actions/open", handleListOpenActionItems(cfg.Queries))
+		}
+
+		// Skills
+		skills := protected.Group("/skills")
+		skills.Use(RequireRole("boss"))
+		{
+			skills.GET("", handleListSkills(cfg.Queries))
+			skills.POST("", handleCreateSkill(cfg.Queries))
+			skills.PUT("/:id", handleUpdateSkill(cfg.Queries))
+			skills.DELETE("/:id", handleDeleteSkill(cfg.Queries))
+			skills.GET("/matrix", handleGetSkillMatrix(cfg.Queries))
+			skills.GET("/employees/:emp_id", handleListEmployeeSkills(cfg.Queries))
+			skills.POST("/employees/:emp_id", handleSetEmployeeSkill(cfg.Queries))
+			skills.DELETE("/employees/:emp_id/:skill_id", handleDeleteEmployeeSkill(cfg.Queries))
+		}
+
 		// Memory routes (optional — requires memory engine)
 		if cfg.MemoryStore != nil {
 			memories := protected.Group("/memories")

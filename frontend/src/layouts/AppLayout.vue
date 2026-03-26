@@ -18,6 +18,9 @@ import {
   RibbonOutline as GoalsIcon,
   BulbOutline as InsightsIcon,
   NewspaperOutline as DigestIcon,
+  StarOutline as ReviewsIcon,
+  CalendarOutline as MeetingsIcon,
+  HammerOutline as SkillsIcon,
 } from '@vicons/ionicons5'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
@@ -47,12 +50,15 @@ const menuOptions: MenuOption[] = [
   { type: 'group', label: 'Organize', key: 'organize-group', children: [
     { label: 'Team Members', key: 'employees', icon: renderIcon(PeopleIcon) },
     { label: 'Organization', key: 'organization', icon: renderIcon(OrgIcon) },
+    { label: 'Skill Inventory', key: 'skills', icon: renderIcon(SkillsIcon) },
     { label: 'Mentor', key: 'mentor', icon: renderIcon(MentorIcon) },
     { label: 'C-Suite Board', key: 'seats', icon: renderIcon(SeatsIcon) },
   ]},
   { type: 'group', label: 'Lead', key: 'lead-group', children: [
     { label: 'Sentiment Map', key: 'sentiment', icon: renderIcon(SentimentIcon) },
     { label: '1:1 Coaching', key: 'coaching', icon: renderIcon(CoachingIcon) },
+    { label: '1:1 Meetings', key: 'meetings', icon: renderIcon(MeetingsIcon) },
+    { label: 'Reviews', key: 'reviews', icon: renderIcon(ReviewsIcon) },
   ]},
   { type: 'group', label: 'Plan', key: 'plan-group', children: [
     { label: 'Board Records', key: 'board-records', icon: renderIcon(BoardRecordsIcon) },

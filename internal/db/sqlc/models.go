@@ -80,6 +80,16 @@ type Employee struct {
 	OrgUnitID        pgtype.UUID        `json:"org_unit_id"`
 }
 
+type EmployeeSkill struct {
+	ID         pgtype.UUID        `json:"id"`
+	EmployeeID pgtype.UUID        `json:"employee_id"`
+	SkillID    pgtype.UUID        `json:"skill_id"`
+	Level      int16              `json:"level"`
+	Notes      string             `json:"notes"`
+	AssessedAt pgtype.Timestamptz `json:"assessed_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 type Goal struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
@@ -122,6 +132,31 @@ type KeyResult struct {
 	DueDate      pgtype.Date        `json:"due_date"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Meeting struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	EmployeeID  pgtype.UUID        `json:"employee_id"`
+	ManagerID   pgtype.UUID        `json:"manager_id"`
+	MeetingDate pgtype.Date        `json:"meeting_date"`
+	DurationMin int16              `json:"duration_min"`
+	Notes       string             `json:"notes"`
+	Mood        string             `json:"mood"`
+	FollowUp    string             `json:"follow_up"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MeetingActionItem struct {
+	ID         pgtype.UUID        `json:"id"`
+	MeetingID  pgtype.UUID        `json:"meeting_id"`
+	Title      string             `json:"title"`
+	AssigneeID pgtype.UUID        `json:"assignee_id"`
+	Status     string             `json:"status"`
+	DueDate    pgtype.Date        `json:"due_date"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Memory struct {
@@ -194,6 +229,24 @@ type Organization struct {
 	CulturePreferences   []byte             `json:"culture_preferences"`
 }
 
+type PerformanceReview struct {
+	ID             pgtype.UUID        `json:"id"`
+	CycleID        pgtype.UUID        `json:"cycle_id"`
+	EmployeeID     pgtype.UUID        `json:"employee_id"`
+	ReviewerID     pgtype.UUID        `json:"reviewer_id"`
+	Status         string             `json:"status"`
+	SelfRating     pgtype.Int2        `json:"self_rating"`
+	ManagerRating  pgtype.Int2        `json:"manager_rating"`
+	SelfSummary    string             `json:"self_summary"`
+	ManagerSummary string             `json:"manager_summary"`
+	Strengths      string             `json:"strengths"`
+	Improvements   string             `json:"improvements"`
+	SubmittedAt    pgtype.Timestamptz `json:"submitted_at"`
+	AcknowledgedAt pgtype.Timestamptz `json:"acknowledged_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Report struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
@@ -206,6 +259,18 @@ type Report struct {
 	Channel     string             `json:"channel"`
 }
 
+type ReviewCycle struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	Title     string             `json:"title"`
+	Period    string             `json:"period"`
+	Status    string             `json:"status"`
+	StartDate pgtype.Date        `json:"start_date"`
+	EndDate   pgtype.Date        `json:"end_date"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Seat struct {
 	ID        pgtype.UUID        `json:"id"`
 	TenantID  pgtype.UUID        `json:"tenant_id"`
@@ -216,6 +281,15 @@ type Seat struct {
 	IsActive  pgtype.Bool        `json:"is_active"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Skill struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	Name        string             `json:"name"`
+	Category    string             `json:"category"`
+	Description string             `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type Summary struct {

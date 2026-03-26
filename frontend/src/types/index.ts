@@ -20,3 +20,6 @@ export type {
 export type {
   InsightRecord, DigestPeriod, DigestRecord, InsightsStorage, DigestsStorage,
 } from './insights'
+export type { ReviewCycle, ReviewCycleStatus, PerformanceReview, ReviewStatus } from './reviews'
+export type { Meeting, MeetingMood, ActionItem, ActionItemStatus, OpenActionItem } from './meetings'
+export type { Skill, EmployeeSkill, SkillMatrixEntry } from './skills'
