@@ -26,6 +26,10 @@ export class ApiClient {
     return this.request<T>("POST", path, body);
   }
 
+  async put<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    return this.request<T>("PUT", path, body);
+  }
+
   private async request<T>(
     method: string,
     path: string,

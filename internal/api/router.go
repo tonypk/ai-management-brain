@@ -38,6 +38,9 @@ type RouterConfig struct {
 	HalaOSMapper   halaosMapper            // nil = HalaOS dispatch disabled (wired in Task 14)
 	Recommender    *brain.Recommender     // nil = recommendation engine disabled
 	Dispatcher     *brain.Dispatcher      // nil = recommendation dispatch disabled
+	ContextService  *brain.ContextService  // nil = context features disabled
+	ExecPlanner     *brain.ExecutionPlanner // nil = planning disabled
+	IncentiveEngine *brain.IncentiveEngine  // nil = incentive calc disabled
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -411,6 +414,14 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		mcpAPI.GET("/openclaw/tasks/overdue", handleListOverdueTasks(cfg.Queries))
 		mcpAPI.GET("/openclaw/tasks/stats", handleCountTasksByStatus(cfg.Queries))
 		mcpAPI.GET("/openclaw/incentives/scores", handleListIncentiveScores(cfg.Queries))
+
+		// Brain Layer v3 (new MCP-accessible endpoints)
+		mcpAPI.GET("/openclaw/context", handleGetCompanyContext(cfg.ContextService))
+		mcpAPI.PUT("/openclaw/context", handleUpdateContext(cfg.Queries))
+		mcpAPI.POST("/openclaw/execution-plan", handleCreateExecutionPlan(cfg.ExecPlanner))
+		mcpAPI.POST("/openclaw/incentives/calculate", handleCalculateIncentives(cfg.IncentiveEngine))
+		mcpAPI.GET("/openclaw/goals", handleListGoals(cfg.Queries))
+		mcpAPI.POST("/openclaw/kpis/:id/values", handleIngestMetricValue(cfg.Queries))
 	}
 
 	// Webhook endpoints (signature-verified, no JWT)

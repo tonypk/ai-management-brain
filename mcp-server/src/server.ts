@@ -23,6 +23,11 @@ import {
   getTaskStats,
   getIncentiveScores,
 } from "./tools/brain.js";
+import { getCompanyContext, updateContext } from "./tools/context.js";
+import { getGoalState } from "./tools/goals.js";
+import { createExecutionPlan } from "./tools/planning.js";
+import { ingestMetric } from "./tools/metrics-write.js";
+import { calculateIncentives } from "./tools/incentives-calc.js";
 
 const NO_KEY_MSG =
   "Please set MANAGEMENT_BRAIN_API_KEY environment variable.";
@@ -411,6 +416,127 @@ export function createServer(): McpServer {
       if (!client)
         return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
       return executeRecommendation(client, { recommendation_id, action_index });
+    },
+  );
+
+  // --- Group 7: Brain Layer v3 — Context, Goals, Planning, Metrics, Incentives ---
+
+  server.tool(
+    "get_company_context",
+    "Get the complete company context: organization profile, strategic priorities, key risks, team composition, active goals, KPI metrics, top execution risks, and HR insights. This is the foundation for all management reasoning — call this before making recommendations.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getCompanyContext(client);
+    },
+  );
+
+  server.tool(
+    "update_context",
+    "Update company context: strategic priorities, key risks, or management style weights. Use this during onboarding or when the boss shares new strategic information. Only the fields provided will be updated; omitted fields are left unchanged.",
+    {
+      updates: z
+        .object({
+          strategic_priorities: z
+            .array(z.string())
+            .optional()
+            .describe("List of strategic priorities, e.g. ['Increase ARR by 30%', 'Launch APAC']"),
+          key_risks: z
+            .array(z.string())
+            .optional()
+            .describe("List of key risks, e.g. ['Key person dependency on Alice', 'Cash runway < 6 months']"),
+          management_style_weights: z
+            .record(z.string(), z.number())
+            .optional()
+            .describe("Management style weight map, e.g. { 'inamori': 0.7, 'grove': 0.3 }"),
+        })
+        .describe("Fields to update on the organization context"),
+    },
+    async ({ updates }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return updateContext(client, updates as Record<string, unknown>);
+    },
+  );
+
+  server.tool(
+    "get_goal_state",
+    "Get OKR and KPI progress: all goals with linked key results, current metric values vs targets, completion percentages, and owners. Use this to understand strategic alignment and goal health.",
+    {
+      cycle: z
+        .string()
+        .describe(
+          "Goal cycle identifier, e.g. '2026-Q1' or '2026-H1'. Required by the API.",
+        ),
+    },
+    async ({ cycle }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getGoalState(client, cycle);
+    },
+  );
+
+  server.tool(
+    "create_execution_plan",
+    "Generate a prioritized action plan based on current company context, goals, signals, and metrics. Returns recommended next actions with owners, priorities, deadlines, and evidence-based reasoning. Requires ANTHROPIC_API_KEY on the server. Use this for proactive management planning.",
+    {
+      focus_area: z
+        .string()
+        .optional()
+        .describe(
+          "Optional focus area to narrow the plan: 'risks', 'goals', 'tasks', or 'overall' (default)",
+        ),
+    },
+    async ({ focus_area }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return createExecutionPlan(client, { focus_area });
+    },
+  );
+
+  server.tool(
+    "ingest_metric",
+    "Record a KPI data point. Use this to import metric values from external sources (spreadsheets, reports, dashboards). Specify the metric UUID and the observed value.",
+    {
+      metric_id: z.string().describe("Metric UUID (from get_kpi_dashboard)"),
+      value: z.number().describe("The observed numeric value"),
+      observed_at: z
+        .string()
+        .optional()
+        .describe("ISO 8601 timestamp of when the value was observed, defaults to now"),
+      source: z
+        .string()
+        .optional()
+        .describe("Data source label, e.g. 'sheets', 'manual', 'api'"),
+    },
+    async ({ metric_id, value, observed_at, source }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return ingestMetric(client, { metric_id, value, observed_at, source });
+    },
+  );
+
+  server.tool(
+    "calculate_incentives",
+    "Calculate incentive scores for all active employees in a given period using active incentive rules, execution data, goal attribution, and communication quality. Returns per-employee scores with breakdowns and human-review flags. Requires ANTHROPIC_API_KEY on the server.",
+    {
+      period: z
+        .string()
+        .describe(
+          "Period in YYYY-MM format, e.g. '2026-03' for March 2026",
+        ),
+    },
+    async ({ period }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return calculateIncentives(client, { period });
     },
   );
 

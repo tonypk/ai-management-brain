@@ -1260,7 +1260,7 @@ func main() {
 		recommender = brain.NewRecommender(stateLLM, queries, contextService)
 		slog.Info("brain layer v2 engines initialized (state + context + planner + incentive + recommender)")
 	}
-	_ = execPlanner // will be used in Phase 4 MCP tools
+	// execPlanner and incentiveEngine are wired into RouterConfig below (Brain Layer v3)
 
 	// Create report collector with default questions (overridden per-remind)
 	defaultEngine, _ := engineFactory.ForTenant("inamori", "default")
@@ -2327,8 +2327,11 @@ func main() {
 		Scheduler:     sched,
 		SeatService:   seatSvc,
 		ActionService: actionSvc,
-		Recommender:   recommender,
-		Dispatcher:    dispatcher,
+		Recommender:     recommender,
+		Dispatcher:      dispatcher,
+		ContextService:  contextService,
+		ExecPlanner:     execPlanner,
+		IncentiveEngine: incentiveEngine,
 	})
 
 	// Health check (public, outside /api/v1)

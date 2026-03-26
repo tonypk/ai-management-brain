@@ -11,6 +11,15 @@ UPDATE organizations SET management_plan = $2, plan_version = plan_version + 1, 
 -- name: UpdateOrganizationStatus :exec
 UPDATE organizations SET status = $2, updated_at = now() WHERE tenant_id = $1;
 
+-- name: UpdateOrganizationContext :exec
+UPDATE organizations
+SET
+    strategic_priorities = COALESCE($2, strategic_priorities),
+    key_risks            = COALESCE($3, key_risks),
+    management_style_weights = COALESCE($4, management_style_weights),
+    updated_at           = now()
+WHERE tenant_id = $1;
+
 -- name: DeleteOrganization :exec
 DELETE FROM organizations WHERE tenant_id = $1;
 

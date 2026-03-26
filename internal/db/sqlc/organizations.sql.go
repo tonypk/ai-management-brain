@@ -69,6 +69,35 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 	return i, err
 }
 
+const updateOrganizationContext = `-- name: UpdateOrganizationContext :exec
+UPDATE organizations
+SET
+    strategic_priorities = COALESCE($2, strategic_priorities),
+    key_risks            = COALESCE($3, key_risks),
+    management_style_weights = COALESCE($4, management_style_weights),
+    updated_at           = now()
+WHERE tenant_id = $1
+`
+
+// UpdateOrganizationContextParams holds optional JSON patches for context fields.
+// A nil slice/bytes value means "keep existing" (COALESCE in SQL).
+type UpdateOrganizationContextParams struct {
+	TenantID               pgtype.UUID `json:"tenant_id"`
+	StrategicPriorities    []byte      `json:"strategic_priorities"`
+	KeyRisks               []byte      `json:"key_risks"`
+	ManagementStyleWeights []byte      `json:"management_style_weights"`
+}
+
+func (q *Queries) UpdateOrganizationContext(ctx context.Context, arg UpdateOrganizationContextParams) error {
+	_, err := q.db.Exec(ctx, updateOrganizationContext,
+		arg.TenantID,
+		arg.StrategicPriorities,
+		arg.KeyRisks,
+		arg.ManagementStyleWeights,
+	)
+	return err
+}
+
 const deleteOrganization = `-- name: DeleteOrganization :exec
 DELETE FROM organizations WHERE tenant_id = $1
 `
