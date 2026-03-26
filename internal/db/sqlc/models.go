@@ -415,6 +415,25 @@ type Project struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Recommendation struct {
+	ID               pgtype.UUID        `json:"id"`
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	Category         string             `json:"category"`
+	Priority         string             `json:"priority"`
+	Title            string             `json:"title"`
+	Description      string             `json:"description"`
+	SuggestedActions []byte             `json:"suggested_actions"`
+	Evidence         []byte             `json:"evidence"`
+	Source           string             `json:"source"`
+	Status           string             `json:"status"`
+	TargetEntityType pgtype.Text        `json:"target_entity_type"`
+	TargetEntityID   pgtype.UUID        `json:"target_entity_id"`
+	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	ReviewedAt       pgtype.Timestamptz `json:"reviewed_at"`
+	ExecutedAt       pgtype.Timestamptz `json:"executed_at"`
+}
+
 type Report struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
