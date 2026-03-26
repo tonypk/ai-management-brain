@@ -28,7 +28,7 @@ LIMIT $3;
 -- name: GetTopRisks :many
 SELECT * FROM execution_signals
 WHERE tenant_id = $1
-  AND signal_type IN ('slow_response', 'missed_deadline', 'overloaded', 'blocker_risk', 'declining')
+  AND signal_type IN ('slow_response', 'missed_deadline', 'overloaded', 'blocker_risk', 'declining', 'flight_risk', 'burnout_risk', 'team_health', 'org_health')
   AND generated_at >= $2
 ORDER BY score DESC
 LIMIT $3;

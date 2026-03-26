@@ -114,7 +114,7 @@ func (q *Queries) GetSignalsBySubject(ctx context.Context, arg GetSignalsBySubje
 const getTopRisks = `-- name: GetTopRisks :many
 SELECT id, tenant_id, subject_type, subject_id, signal_type, score, reasons, time_window, generated_at FROM execution_signals
 WHERE tenant_id = $1
-  AND signal_type IN ('slow_response', 'missed_deadline', 'overloaded', 'blocker_risk', 'declining')
+  AND signal_type IN ('slow_response', 'missed_deadline', 'overloaded', 'blocker_risk', 'declining', 'flight_risk', 'burnout_risk', 'team_health', 'org_health')
   AND generated_at >= $2
 ORDER BY score DESC
 LIMIT $3
