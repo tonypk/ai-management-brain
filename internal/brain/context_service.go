@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	sqlc "github.com/tonypk/ai-management-brain/internal/db/sqlc"
@@ -22,11 +23,21 @@ func NewContextService(queries *sqlc.Queries) *ContextService {
 
 // CompanyContext holds the aggregated company context.
 type CompanyContext struct {
-	Organization *OrgContext     `json:"organization,omitempty"`
-	Goals        []GoalContext   `json:"goals,omitempty"`
-	Metrics      []MetricContext `json:"metrics,omitempty"`
-	TopRisks     []RiskContext   `json:"top_risks,omitempty"`
-	TeamSize     int             `json:"team_size"`
+	Organization *OrgContext      `json:"organization,omitempty"`
+	Goals        []GoalContext    `json:"goals,omitempty"`
+	Metrics      []MetricContext  `json:"metrics,omitempty"`
+	TopRisks     []RiskContext    `json:"top_risks,omitempty"`
+	TeamSize     int              `json:"team_size"`
+	HRInsights   *HRInsightsContext `json:"hr_insights,omitempty"`
+}
+
+// HRInsightsContext holds aggregated HR signal insights from HalaOS.
+type HRInsightsContext struct {
+	HighRiskEmployees int     `json:"high_risk_employees,omitempty"`
+	HighBurnoutCount  int     `json:"high_burnout_count,omitempty"`
+	AvgTeamHealth     float64 `json:"avg_team_health,omitempty"`
+	ActiveBlindSpots  int     `json:"active_blindspots,omitempty"`
+	RecentAnomalies   int     `json:"recent_anomalies,omitempty"`
 }
 
 // OrgContext holds organization-level context.
@@ -146,6 +157,62 @@ func (cs *ContextService) GetCompanyContext(ctx context.Context, tenantID pgtype
 				Reasons:    reasons,
 			})
 		}
+	}
+
+	// HalaOS HR Insights (only populated if HalaOS signals exist)
+	hrInsights := &HRInsightsContext{}
+	thirtyDaysAgo := pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -30), Valid: true}
+	sevenDaysAgo := pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -7), Valid: true}
+
+	var minScore70 pgtype.Numeric
+	_ = minScore70.Scan("70")
+
+	// Count high-risk employees (flight_risk score >= 70)
+	highRisk, err := cs.queries.CountHighRiskSignals(ctx, sqlc.CountHighRiskSignalsParams{
+		TenantID:    tenantID,
+		SignalType:  "flight_risk",
+		Column3:     minScore70,
+		GeneratedAt: thirtyDaysAgo,
+	})
+	if err == nil {
+		hrInsights.HighRiskEmployees = int(highRisk)
+	}
+
+	// Count high-burnout employees (burnout_risk score >= 70)
+	highBurnout, err := cs.queries.CountHighRiskSignals(ctx, sqlc.CountHighRiskSignalsParams{
+		TenantID:    tenantID,
+		SignalType:  "burnout_risk",
+		Column3:     minScore70,
+		GeneratedAt: thirtyDaysAgo,
+	})
+	if err == nil {
+		hrInsights.HighBurnoutCount = int(highBurnout)
+	}
+
+	// Count active blindspots (last 30 days)
+	blindspots, err := cs.queries.CountRecentCommunicationEvents(ctx, sqlc.CountRecentCommunicationEventsParams{
+		TenantID:   tenantID,
+		EventType:  "blindspot_detected",
+		OccurredAt: thirtyDaysAgo,
+	})
+	if err == nil {
+		hrInsights.ActiveBlindSpots = int(blindspots)
+	}
+
+	// Count recent anomalies (last 7 days)
+	anomalies, err := cs.queries.CountRecentCommunicationEvents(ctx, sqlc.CountRecentCommunicationEventsParams{
+		TenantID:   tenantID,
+		EventType:  "attendance_anomaly",
+		OccurredAt: sevenDaysAgo,
+	})
+	if err == nil {
+		hrInsights.RecentAnomalies = int(anomalies)
+	}
+
+	// Only attach HRInsights if at least one field is non-zero
+	if hrInsights.HighRiskEmployees > 0 || hrInsights.HighBurnoutCount > 0 ||
+		hrInsights.ActiveBlindSpots > 0 || hrInsights.RecentAnomalies > 0 {
+		result.HRInsights = hrInsights
 	}
 
 	return result, nil
