@@ -11,6 +11,7 @@ import {
   sendSummary,
   sendMessage,
 } from "./tools/actions.js";
+import { getRecommendations, executeRecommendation } from "./tools/recommendations.js";
 import {
   getCompanyState,
   getExecutionSignals,
@@ -381,6 +382,35 @@ export function createServer(): McpServer {
       if (!client)
         return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
       return getIncentiveScores(client, period);
+    },
+  );
+
+  // --- Group: AI Recommendations ---
+
+  server.tool(
+    "get_recommendations",
+    "Get pending AI management recommendations with suggested actions. Each recommendation includes a title, description, priority, category, evidence data, and executable actions. Use this to show the boss what the AI has noticed and suggested.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getRecommendations(client);
+    },
+  );
+
+  server.tool(
+    "execute_recommendation",
+    "Execute a specific action on an AI recommendation. Takes a recommendation ID and optional action index (defaults to the first action). Returns the execution result including success status and any messages.",
+    {
+      recommendation_id: z.string().describe("The recommendation UUID to execute"),
+      action_index: z.number().optional().describe("Index of the action to execute (default 0)"),
+    },
+    async ({ recommendation_id, action_index }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return executeRecommendation(client, { recommendation_id, action_index });
     },
   );
 
