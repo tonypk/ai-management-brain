@@ -1,8 +1,8 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "5.1.1"
-description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, AI recommendation engine. Works instantly after install. Connect manageaibrain.com MCP for full team automation: auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, AI recommendations, 23+ platform messaging. Integrates with OpenClaw MCP connectors (Notion, Jira, GitHub, Slack, etc.) to build a company context layer — the foundation for all management intelligence."
+version: "6.0.0"
+description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, AI recommendation engine, bidirectional Notion/Sheets sync. Works instantly after install. Connect manageaibrain.com MCP for full team automation: 33 MCP tools, auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, AI recommendations, data sync to Notion/Sheets, 23+ platform messaging. Integrates with OpenClaw MCP connectors to build a company context layer — the foundation for all management intelligence."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
@@ -13,7 +13,7 @@ metadata:
         - name: "BOSS_AI_AGENT_API_KEY"
           description: "Optional. Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics. Separate from MCP authentication."
         - name: "MANAGEMENT_BRAIN_API_KEY"
-          description: "Required for Team Operations Mode. Authenticates all 24 MCP tool calls to manageaibrain.com/mcp. Without this key, only Advisor Mode is available."
+          description: "Required for Team Operations Mode. Authenticates all 33 MCP tool calls to manageaibrain.com/mcp. Without this key, only Advisor Mode is available."
       config:
         - "~/.openclaw/skills/boss-ai-agent/config.json"
 ---
@@ -36,11 +36,12 @@ Your AI management advisor — works instantly after install, no account needed.
 
 Everything in Advisor Mode, plus:
 
-- **24 MCP tools**: real team queries, execution intelligence, AI recommendations, and message delivery via `manageaibrain.com/mcp`
-- **11 automated scenarios**: daily check-in cycle, project health patrol, smart briefing, 1:1 meeting prep, signal scanning, knowledge base, emergency response, execution risk review, KPI health check, incentive review, AI recommendations
-- **6 cron jobs**: automated check-ins, chases, summaries, briefings, signal scans, daily recommendation scan
+- **33 MCP tools**: real team queries, execution intelligence, AI recommendations, brain context, data sync, and message delivery via `manageaibrain.com/mcp`
+- **12 automated scenarios**: daily check-in cycle, project health patrol, smart briefing, 1:1 meeting prep, signal scanning, knowledge base, emergency response, execution risk review, KPI health check, incentive review, AI recommendations, data sync
+- **6 cron jobs**: automated check-ins, chases, summaries, briefings, signal scans, data sync
+- **Bidirectional Notion/Sheets sync**: tasks, goals, projects, metrics synced every 30 minutes with conflict resolution
 - **23+ messaging platforms**: Telegram, Slack, Lark, Signal, and more via OpenClaw
-- **OpenClaw connector integration**: storage tools (Notion/Jira/Sheets), dev tools (GitHub/Linear/Calendar), communication tools (Slack/Discord/Lark) feed data into the company context layer
+- **OpenClaw connector integration**: storage tools (Notion/Sheets), dev tools (GitHub/Linear/Calendar), communication tools (Slack/Discord/Lark) feed data into the company context layer
 - **AI Recommendation Engine**: daily scans + real-time triggers generate prioritized management suggestions with one-click actions
 - **Web Dashboard**: real-time analytics at [manageaibrain.com](https://manageaibrain.com) — 20+ pages including Dashboard, Company State, KPI Metrics, Projects, Tasks, Incentives, Recommendations, Goals, Reviews, Skills, Training, Career Paths
 
@@ -89,17 +90,19 @@ Boss AI Agent is the **brain layer** — it connects to its own backend (`manage
 ```
 OpenClaw Runtime (user environment)
   ├── MCP Connectors (user self-installs)
-  │    ├── Storage: Notion / Jira / Google Sheets
+  │    ├── Storage: Notion / Google Sheets  ←── bidirectional sync targets
   │    ├── Development: GitHub / Linear / Calendar
   │    └── Communication: Telegram / Slack / Discord / Lark
   │
-  └── Boss AI Agent Skill (brain layer)
+  └── Boss AI Agent Skill (brain layer + sync orchestrator)
        └── manageaibrain.com API
+            ├── 33 MCP tools (daily ops + intelligence + sync)
             ├── Company Context Layer  ← foundation
             ├── Execution Intelligence ← signals + risks
             ├── Communication Parser   ← messages → events
             ├── Incentive Engine       ← context-aware scoring
-            └── AI Recommendations     ← proactive suggestions
+            ├── AI Recommendations     ← proactive suggestions
+            └── Sync Service           ← Notion/Sheets bidirectional sync
 ```
 
 **Company Context Layer** is the foundation — all intelligence engines depend on it:
@@ -150,7 +153,7 @@ Convene 6 AI executives for cross-functional strategic analysis:
 
 ## MCP Tools (Team Operations Mode)
 
-24 tools accessible via MCP:
+33 tools accessible via MCP:
 
 ### Read Tools — Daily Operations (9)
 
@@ -180,6 +183,14 @@ Convene 6 AI executives for cross-functional strategic analysis:
 | `get_task_stats` | Task status breakdown: todo, in_progress, done, blocked |
 | `get_incentive_scores` | Per-employee incentive scores with breakdowns |
 
+### Read Tools — Brain Context (3)
+
+| Tool | Description |
+|------|-------------|
+| `get_company_context` | Complete company context: org profile, priorities, risks, team, HR insights |
+| `get_goal_state` | OKR/KPI progress: goals, key results, metric values vs targets |
+| `create_execution_plan` | Generate prioritized action plan based on context, goals, signals |
+
 ### Write Tools (4 — sends messages)
 
 | Tool | Description |
@@ -189,12 +200,28 @@ Convene 6 AI executives for cross-functional strategic analysis:
 | `send_summary` | Generate and send daily summary |
 | `send_message` | Send custom message to an employee |
 
+### Write Tools — Context (3)
+
+| Tool | Description |
+|------|-------------|
+| `ingest_metric` | Record a KPI data point from external sources |
+| `update_context` | Update strategic priorities, key risks, management style weights |
+| `calculate_incentives` | Calculate incentive scores for all employees in a period |
+
 ### AI Recommendations (2)
 
 | Tool | Description |
 |------|-------------|
 | `get_recommendations` | Get pending AI management suggestions with priority, evidence, actions |
 | `execute_recommendation` | Execute a suggested action (send message, schedule meeting, etc.) |
+
+### Sync Tools (3 — bidirectional Notion/Sheets sync)
+
+| Tool | Description |
+|------|-------------|
+| `get_sync_manifest` | Get data changes since last sync for push to Notion/Sheets |
+| `report_sync_result` | Report sync completion with stats and pulled items |
+| `configure_sync` | Configure sync: storage type, entity types, frequency |
 
 **MCP endpoint**: `https://manageaibrain.com/mcp`
 
@@ -214,18 +241,16 @@ Boss AI Agent 是老板的 AI 管理中间件。安装后立即可用（Advisor 
 
 **两种模式：**
 - **顾问模式**（零依赖）— 16 位导师哲学框架（稻盛和夫、马云、马斯克等）、9 套文化包（中国、菲律宾、新加坡等）、C-Suite 董事会模拟、1:1 准备、管理决策建议。装了就能用，不联网。
-- **团队运营模式**（连接 MCP）— 24 个 MCP 工具实现自动签到、追踪、报表、消息推送、执行力分析、KPI 仪表盘、任务管理、激励评分、AI 推荐引擎，6 个定时任务，23+ 平台支持。
+- **团队运营模式**（连接 MCP）— 33 个 MCP 工具实现自动签到、追踪、报表、消息推送、执行力分析、KPI 仪表盘、任务管理、激励评分、AI 推荐引擎、Notion/Sheets 双向同步，6 个定时任务，23+ 平台支持。
 
-**OpenClaw 集成架构（v5.1 新增）：** Boss AI Agent 作为"大脑层"，与 OpenClaw MCP 连接器配合使用：
-- **储存工具**（Notion / Jira / Sheets）→ 项目、任务、文档自动汇入公司上下文
+**OpenClaw 集成架构：** Boss AI Agent 作为"大脑层 + 同步编排器"，与 OpenClaw MCP 连接器配合使用：
+- **储存工具**（Notion / Google Sheets）→ 双向同步目标，任务/目标/项目/指标自动同步
 - **开发工具**（GitHub / Linear / Calendar）→ PR、提交、CI 状态转化为执行力信号
 - **沟通工具**（Telegram / Slack / Discord / Lark）→ 员工消息解析为结构化管理事件
 
-**公司上下文层**是所有智能引擎的地基，执行力分析、AI 推荐、激励评分都依赖它。
+**双向数据同步（v6.0 新增）：** 支持与 Notion 和 Google Sheets 双向同步。工作时间每 30 分钟自动同步，支持冲突检测和解决。
 
-**AI 推荐引擎（v5.0 新增）：** 每日 10:30 自动扫描团队数据，结合导师视角生成管理建议（如：连续缺勤提醒、情绪下降预警、任务逾期跟进）。支持一键执行建议动作，也可通过实时触发器即时生成。
-
-**数据说明：** 顾问模式不发送任何数据到云端。团队运营模式中，MCP 工具参数发送至 `manageaibrain.com` 处理。外部工具通过 OpenClaw 连接器访问，Skill 不管理令牌。
+**数据说明：** 顾问模式不发送任何数据到云端。团队运营模式中，MCP 工具参数发送至 `manageaibrain.com` 处理。同步通过 OpenClaw 连接器访问 Notion/Sheets，Skill 不直接管理令牌。
 
 安装：`clawhub install boss-ai-agent`
 
