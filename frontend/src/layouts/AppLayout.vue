@@ -8,6 +8,16 @@ import {
   DocumentTextOutline as ReportIcon,
   SettingsOutline as SettingsIcon,
   LogOutOutline as LogoutIcon,
+  PeopleOutline as PeopleIcon,
+  SchoolOutline as MentorIcon,
+  BusinessOutline as SeatsIcon,
+  GitNetworkOutline as OrgIcon,
+  MapOutline as SentimentIcon,
+  ChatbubblesOutline as CoachingIcon,
+  ClipboardOutline as BoardRecordsIcon,
+  RibbonOutline as GoalsIcon,
+  BulbOutline as InsightsIcon,
+  NewspaperOutline as DigestIcon,
 } from '@vicons/ionicons5'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
@@ -20,6 +30,7 @@ const themeStore = useThemeStore()
 const activeKey = computed(() => {
   const path = route.path
   if (path === '/') return 'dashboard'
+  if (path.startsWith('/employees/')) return 'sentiment'
   return path.slice(1)
 })
 
@@ -28,10 +39,32 @@ function renderIcon(icon: typeof DashboardIcon) {
 }
 
 const menuOptions: MenuOption[] = [
-  { label: 'Dashboard', key: 'dashboard', icon: renderIcon(DashboardIcon) },
-  { label: 'Alerts', key: 'alerts', icon: renderIcon(AlertIcon) },
-  { label: 'Reports', key: 'reports', icon: renderIcon(ReportIcon) },
-  { label: 'Settings', key: 'settings', icon: renderIcon(SettingsIcon) },
+  { type: 'group', label: 'Observe', key: 'observe-group', children: [
+    { label: 'Dashboard', key: 'dashboard', icon: renderIcon(DashboardIcon) },
+    { label: 'Alerts', key: 'alerts', icon: renderIcon(AlertIcon) },
+    { label: 'Reports', key: 'reports', icon: renderIcon(ReportIcon) },
+  ]},
+  { type: 'group', label: 'Organize', key: 'organize-group', children: [
+    { label: 'Team Members', key: 'employees', icon: renderIcon(PeopleIcon) },
+    { label: 'Organization', key: 'organization', icon: renderIcon(OrgIcon) },
+    { label: 'Mentor', key: 'mentor', icon: renderIcon(MentorIcon) },
+    { label: 'C-Suite Board', key: 'seats', icon: renderIcon(SeatsIcon) },
+  ]},
+  { type: 'group', label: 'Lead', key: 'lead-group', children: [
+    { label: 'Sentiment Map', key: 'sentiment', icon: renderIcon(SentimentIcon) },
+    { label: '1:1 Coaching', key: 'coaching', icon: renderIcon(CoachingIcon) },
+  ]},
+  { type: 'group', label: 'Plan', key: 'plan-group', children: [
+    { label: 'Board Records', key: 'board-records', icon: renderIcon(BoardRecordsIcon) },
+    { label: 'Goals & KPIs', key: 'goals', icon: renderIcon(GoalsIcon) },
+  ]},
+  { type: 'group', label: 'Analyze', key: 'analyze-group', children: [
+    { label: 'AI Insights', key: 'insights', icon: renderIcon(InsightsIcon) },
+    { label: 'Weekly Digest', key: 'digest', icon: renderIcon(DigestIcon) },
+  ]},
+  { type: 'group', label: 'Configure', key: 'configure-group', children: [
+    { label: 'Settings', key: 'settings', icon: renderIcon(SettingsIcon) },
+  ]},
 ]
 
 function handleMenuUpdate(key: string): void {

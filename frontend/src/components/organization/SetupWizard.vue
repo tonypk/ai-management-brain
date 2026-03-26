@@ -97,12 +97,12 @@ async function handleRetry() {
 
     <NSpin :show="loading">
       <template v-if="currentStep === 1">
-        <NAlert v-if="error" type="error" style="margin-bottom: 16px; max-width: 640px" closable @close="error = ''">
+        <NAlert v-if="error" type="error" style="margin-bottom: 8px; max-width: 640px" closable @close="error = ''">
           {{ error }}
-          <template #action>
-            <NButton size="small" @click="handleRetry">Retry</NButton>
-          </template>
         </NAlert>
+        <NSpace v-if="error" style="margin-bottom: 16px">
+          <NButton size="small" @click="handleRetry">Retry</NButton>
+        </NSpace>
         <CompanyProfileForm @submit="handleProfileSubmit" />
       </template>
 
