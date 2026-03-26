@@ -27,6 +27,11 @@ export type { TrainingProgram, TrainingProgramStatus, TrainingEnrollment, Enroll
 export type { CareerLevel, CareerPath } from './career'
 export type { Metric, MetricWithValue, MetricValue } from './metrics'
 export type { Project } from './projects'
+export type {
+  RecommendationCategory, RecommendationPriority, RecommendationStatus,
+  SuggestedAction, EvidenceSignal, EvidenceEmployee, EvidenceMetric, EvidenceTask, Evidence,
+  Recommendation, RecommendationSummary, ActionResult, ExecuteAllResult,
+} from './recommendation'
 export type { Task, TaskStats } from './tasks'
 export type { IncentiveRule, IncentiveScore } from './incentives'
 export type {
