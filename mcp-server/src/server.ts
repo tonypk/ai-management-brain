@@ -29,6 +29,17 @@ import { createExecutionPlan } from "./tools/planning.js";
 import { ingestMetric } from "./tools/metrics-write.js";
 import { calculateIncentives } from "./tools/incentives-calc.js";
 import { getSyncManifest, reportSyncResult, configureSync } from "./tools/sync.js";
+import {
+  startConsultingEngagement,
+  answerConsultingQuestion,
+  listConsultingEngagements,
+  getConsultingEngagement,
+  reviewConsultingAction,
+  executeConsultingActions,
+  checkConsultingProgress,
+  closeConsultingEngagement,
+  listConsultingActions,
+} from "./tools/consulting.js";
 
 const NO_KEY_MSG =
   "Please set MANAGEMENT_BRAIN_API_KEY environment variable.";
@@ -644,6 +655,156 @@ export function createServer(): McpServer {
           isError: true,
         };
       return configureSync(client, params);
+    },
+  );
+
+  // --- Group 9: AI Consulting Engine ---
+
+  server.tool(
+    "start_consulting",
+    "Start a new AI management consulting engagement. Describe a business problem and the AI consultant will classify its complexity, assign a category, and begin a structured diagnostic conversation. Like hiring McKinsey — the AI asks focused questions to diagnose root causes before recommending actions.",
+    {
+      problem: z
+        .string()
+        .min(1)
+        .max(4000)
+        .describe(
+          "The business problem or challenge to consult on, e.g. 'Our sales team is underperforming this quarter' or 'We need to restructure the engineering organization for scale'",
+        ),
+      mentor_id: z
+        .string()
+        .optional()
+        .describe("Optional mentor to shape the consulting style (inamori, dalio, grove, musk, etc.)"),
+      culture_code: z
+        .string()
+        .optional()
+        .describe("Optional culture code (default, philippines, singapore, etc.)"),
+    },
+    async ({ problem, mentor_id, culture_code }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return startConsultingEngagement(client, { problem, mentor_id, culture_code });
+    },
+  );
+
+  server.tool(
+    "answer_consulting_question",
+    "Answer a diagnostic question from the AI consultant during an active consulting engagement. The consultant will either ask the next question or, when enough information is gathered, automatically generate a root cause analysis and action plan.",
+    {
+      engagement_id: z.string().describe("The consulting engagement UUID"),
+      answer: z
+        .string()
+        .min(1)
+        .max(4000)
+        .describe("Your answer to the consultant's diagnostic question"),
+    },
+    async ({ engagement_id, answer }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return answerConsultingQuestion(client, { engagement_id, answer });
+    },
+  );
+
+  server.tool(
+    "list_consulting_engagements",
+    "List all consulting engagements (active and closed). Shows engagement title, tier, category, current phase, and progress percentage.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return listConsultingEngagements(client);
+    },
+  );
+
+  server.tool(
+    "get_consulting_engagement",
+    "Get full details of a specific consulting engagement including diagnosis data, analysis, plan, and progress.",
+    {
+      engagement_id: z.string().describe("The consulting engagement UUID"),
+    },
+    async ({ engagement_id }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getConsultingEngagement(client, { engagement_id });
+    },
+  );
+
+  server.tool(
+    "review_consulting_action",
+    "Approve or reject a specific action in a consulting engagement's action plan. Each action must be individually reviewed before it can be executed.",
+    {
+      action_id: z.string().describe("The engagement action UUID to review"),
+      approved: z
+        .boolean()
+        .describe("true to approve the action, false to reject it"),
+    },
+    async ({ action_id, approved }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return reviewConsultingAction(client, { action_id, approved });
+    },
+  );
+
+  server.tool(
+    "execute_consulting_actions",
+    "Execute all approved actions for a consulting engagement. This dispatches the actions (create tasks, schedule meetings, send messages, flag risks) and moves the engagement to tracking phase.",
+    {
+      engagement_id: z
+        .string()
+        .describe("The consulting engagement UUID whose approved actions to execute"),
+    },
+    async ({ engagement_id }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return executeConsultingActions(client, { engagement_id });
+    },
+  );
+
+  server.tool(
+    "check_consulting_progress",
+    "Check progress on an active consulting engagement. Returns a progress report with completion percentage, what's on track, what's at risk, and recommended next steps.",
+    {
+      engagement_id: z.string().describe("The consulting engagement UUID"),
+    },
+    async ({ engagement_id }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return checkConsultingProgress(client, { engagement_id });
+    },
+  );
+
+  server.tool(
+    "close_consulting_engagement",
+    "Close a consulting engagement with a retrospective. Generates an effectiveness assessment, lessons learned, and stores insights as organizational memory for future engagements.",
+    {
+      engagement_id: z.string().describe("The consulting engagement UUID to close"),
+    },
+    async ({ engagement_id }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return closeConsultingEngagement(client, { engagement_id });
+    },
+  );
+
+  server.tool(
+    "list_consulting_actions",
+    "List all actions for a consulting engagement with their current status (pending, approved, rejected, done, failed) and linked task/meeting IDs.",
+    {
+      engagement_id: z.string().describe("The consulting engagement UUID"),
+    },
+    async ({ engagement_id }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return listConsultingActions(client, { engagement_id });
     },
   );
 

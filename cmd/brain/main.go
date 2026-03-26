@@ -2386,6 +2386,40 @@ func main() {
 		}
 	}
 
+	// Engagement tracker: check active consulting engagements and send progress reports
+	if consultingEngine != nil {
+		if err := sched.AddJob("engagement_tracker", "0 11 * * *", func(ctx context.Context) error {
+			slog.Info("engagement_tracker: starting")
+			engagements, err := queries.ListEngagementsForTracking(ctx)
+			if err != nil {
+				return fmt.Errorf("list engagements for tracking: %w", err)
+			}
+			if len(engagements) == 0 {
+				slog.Info("engagement_tracker: no active engagements to track")
+				return nil
+			}
+			for _, eng := range engagements {
+				report, err := consultingEngine.CheckProgress(ctx, eng.ID)
+				if err != nil {
+					slog.Error("engagement_tracker: check progress failed",
+						"engagement_id", formatPgUUID(eng.ID), "error", err)
+					continue
+				}
+				msg := fmt.Sprintf("Consulting Update: %s\n\n%s", eng.Title, report)
+				if err := tgBot.SendMessage(cfg.BossTelegramID, msg); err != nil {
+					slog.Error("engagement_tracker: send report failed",
+						"engagement_id", formatPgUUID(eng.ID), "error", err)
+				}
+			}
+			slog.Info("engagement_tracker: completed", "engagements_checked", len(engagements))
+			return nil
+		}); err != nil {
+			slog.Error("failed to register engagement_tracker job", "error", err)
+		} else {
+			slog.Info("engagement_tracker job registered", "schedule", "daily 11:00")
+		}
+	}
+
 	// Create AI Role Manager (requires LLM + scheduler)
 	var roleManager *roles.Manager
 	if cfg.AnthropicKey != "" {
