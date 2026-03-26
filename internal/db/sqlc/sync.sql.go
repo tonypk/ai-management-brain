@@ -11,6 +11,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const completeSyncLog = `-- name: CompleteSyncLog :exec
+UPDATE sync_logs SET
+  completed_at = now(),
+  status = $2,
+  items_pushed = $3,
+  items_pulled = $4,
+  conflicts = $5,
+  errors = $6,
+  summary = $7
+WHERE id = $1
+`
+
+type CompleteSyncLogParams struct {
+	ID          pgtype.UUID `json:"id"`
+	Status      string      `json:"status"`
+	ItemsPushed int32       `json:"items_pushed"`
+	ItemsPulled int32       `json:"items_pulled"`
+	Conflicts   int32       `json:"conflicts"`
+	Errors      []byte      `json:"errors"`
+	Summary     pgtype.Text `json:"summary"`
+}
+
+func (q *Queries) CompleteSyncLog(ctx context.Context, arg CompleteSyncLogParams) error {
+	_, err := q.db.Exec(ctx, completeSyncLog,
+		arg.ID,
+		arg.Status,
+		arg.ItemsPushed,
+		arg.ItemsPulled,
+		arg.Conflicts,
+		arg.Errors,
+		arg.Summary,
+	)
+	return err
+}
+
 const createSyncConfig = `-- name: CreateSyncConfig :one
 INSERT INTO sync_configs (tenant_id, storage_type, is_enabled, entity_types, sync_frequency_minutes, config)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -56,6 +91,245 @@ func (q *Queries) CreateSyncConfig(ctx context.Context, arg CreateSyncConfigPara
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const createSyncLog = `-- name: CreateSyncLog :one
+INSERT INTO sync_logs (tenant_id, sync_config_id, direction)
+VALUES ($1, $2, $3)
+RETURNING id, tenant_id, sync_config_id, direction, started_at, completed_at, status, items_pushed, items_pulled, conflicts, errors, summary
+`
+
+type CreateSyncLogParams struct {
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SyncConfigID pgtype.UUID `json:"sync_config_id"`
+	Direction    string      `json:"direction"`
+}
+
+func (q *Queries) CreateSyncLog(ctx context.Context, arg CreateSyncLogParams) (SyncLog, error) {
+	row := q.db.QueryRow(ctx, createSyncLog, arg.TenantID, arg.SyncConfigID, arg.Direction)
+	var i SyncLog
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.SyncConfigID,
+		&i.Direction,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.Status,
+		&i.ItemsPushed,
+		&i.ItemsPulled,
+		&i.Conflicts,
+		&i.Errors,
+		&i.Summary,
+	)
+	return i, err
+}
+
+const getChangedGoals = `-- name: GetChangedGoals :many
+SELECT id, title, level, goal_type, status, external_id, external_source, updated_at
+FROM goals
+WHERE tenant_id = $1 AND updated_at > $2
+ORDER BY updated_at DESC
+`
+
+type GetChangedGoalsParams struct {
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type GetChangedGoalsRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Title          string             `json:"title"`
+	Level          string             `json:"level"`
+	GoalType       string             `json:"goal_type"`
+	Status         string             `json:"status"`
+	ExternalID     pgtype.Text        `json:"external_id"`
+	ExternalSource pgtype.Text        `json:"external_source"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetChangedGoals(ctx context.Context, arg GetChangedGoalsParams) ([]GetChangedGoalsRow, error) {
+	rows, err := q.db.Query(ctx, getChangedGoals, arg.TenantID, arg.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetChangedGoalsRow{}
+	for rows.Next() {
+		var i GetChangedGoalsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Level,
+			&i.GoalType,
+			&i.Status,
+			&i.ExternalID,
+			&i.ExternalSource,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getChangedMetrics = `-- name: GetChangedMetrics :many
+SELECT id, name, unit, target_value, external_id, external_source, updated_at
+FROM metrics
+WHERE tenant_id = $1 AND updated_at > $2
+ORDER BY updated_at DESC
+`
+
+type GetChangedMetricsParams struct {
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type GetChangedMetricsRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Name           string             `json:"name"`
+	Unit           pgtype.Text        `json:"unit"`
+	TargetValue    pgtype.Numeric     `json:"target_value"`
+	ExternalID     pgtype.Text        `json:"external_id"`
+	ExternalSource pgtype.Text        `json:"external_source"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetChangedMetrics(ctx context.Context, arg GetChangedMetricsParams) ([]GetChangedMetricsRow, error) {
+	rows, err := q.db.Query(ctx, getChangedMetrics, arg.TenantID, arg.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetChangedMetricsRow{}
+	for rows.Next() {
+		var i GetChangedMetricsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Unit,
+			&i.TargetValue,
+			&i.ExternalID,
+			&i.ExternalSource,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getChangedProjects = `-- name: GetChangedProjects :many
+SELECT id, name, status, priority, external_id, external_source, updated_at
+FROM projects
+WHERE tenant_id = $1 AND updated_at > $2
+ORDER BY updated_at DESC
+`
+
+type GetChangedProjectsParams struct {
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type GetChangedProjectsRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Name           string             `json:"name"`
+	Status         string             `json:"status"`
+	Priority       string             `json:"priority"`
+	ExternalID     pgtype.Text        `json:"external_id"`
+	ExternalSource pgtype.Text        `json:"external_source"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetChangedProjects(ctx context.Context, arg GetChangedProjectsParams) ([]GetChangedProjectsRow, error) {
+	rows, err := q.db.Query(ctx, getChangedProjects, arg.TenantID, arg.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetChangedProjectsRow{}
+	for rows.Next() {
+		var i GetChangedProjectsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Status,
+			&i.Priority,
+			&i.ExternalID,
+			&i.ExternalSource,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getChangedTasks = `-- name: GetChangedTasks :many
+SELECT t.id, t.title, t.status, t.priority, e.name AS assignee_name, t.due_at AS due_date, t.external_id, t.external_source, t.updated_at
+FROM tasks t
+LEFT JOIN employees e ON t.owner_id = e.id
+WHERE t.tenant_id = $1 AND t.updated_at > $2
+ORDER BY updated_at DESC
+`
+
+type GetChangedTasksParams struct {
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type GetChangedTasksRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Title          string             `json:"title"`
+	Status         string             `json:"status"`
+	Priority       string             `json:"priority"`
+	AssigneeName   pgtype.Text        `json:"assignee_name"`
+	DueDate        pgtype.Timestamptz `json:"due_date"`
+	ExternalID     pgtype.Text        `json:"external_id"`
+	ExternalSource pgtype.Text        `json:"external_source"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetChangedTasks(ctx context.Context, arg GetChangedTasksParams) ([]GetChangedTasksRow, error) {
+	rows, err := q.db.Query(ctx, getChangedTasks, arg.TenantID, arg.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetChangedTasksRow{}
+	for rows.Next() {
+		var i GetChangedTasksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Status,
+			&i.Priority,
+			&i.AssigneeName,
+			&i.DueDate,
+			&i.ExternalID,
+			&i.ExternalSource,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getSyncConfig = `-- name: GetSyncConfig :one
@@ -122,93 +396,6 @@ func (q *Queries) ListSyncConfigs(ctx context.Context, tenantID pgtype.UUID) ([]
 	return items, nil
 }
 
-const updateLastSync = `-- name: UpdateLastSync :exec
-UPDATE sync_configs SET last_sync_at = $2, last_sync_status = $3, updated_at = now()
-WHERE id = $1
-`
-
-type UpdateLastSyncParams struct {
-	ID             pgtype.UUID        `json:"id"`
-	LastSyncAt     pgtype.Timestamptz `json:"last_sync_at"`
-	LastSyncStatus pgtype.Text        `json:"last_sync_status"`
-}
-
-func (q *Queries) UpdateLastSync(ctx context.Context, arg UpdateLastSyncParams) error {
-	_, err := q.db.Exec(ctx, updateLastSync, arg.ID, arg.LastSyncAt, arg.LastSyncStatus)
-	return err
-}
-
-const createSyncLog = `-- name: CreateSyncLog :one
-INSERT INTO sync_logs (tenant_id, sync_config_id, direction)
-VALUES ($1, $2, $3)
-RETURNING id, tenant_id, sync_config_id, direction, started_at, completed_at, status, items_pushed, items_pulled, conflicts, errors, summary
-`
-
-type CreateSyncLogParams struct {
-	TenantID     pgtype.UUID `json:"tenant_id"`
-	SyncConfigID pgtype.UUID `json:"sync_config_id"`
-	Direction    string      `json:"direction"`
-}
-
-func (q *Queries) CreateSyncLog(ctx context.Context, arg CreateSyncLogParams) (SyncLog, error) {
-	row := q.db.QueryRow(ctx, createSyncLog,
-		arg.TenantID,
-		arg.SyncConfigID,
-		arg.Direction,
-	)
-	var i SyncLog
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.SyncConfigID,
-		&i.Direction,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.Status,
-		&i.ItemsPushed,
-		&i.ItemsPulled,
-		&i.Conflicts,
-		&i.Errors,
-		&i.Summary,
-	)
-	return i, err
-}
-
-const completeSyncLog = `-- name: CompleteSyncLog :exec
-UPDATE sync_logs SET
-  completed_at = now(),
-  status = $2,
-  items_pushed = $3,
-  items_pulled = $4,
-  conflicts = $5,
-  errors = $6,
-  summary = $7
-WHERE id = $1
-`
-
-type CompleteSyncLogParams struct {
-	ID          pgtype.UUID `json:"id"`
-	Status      string      `json:"status"`
-	ItemsPushed int32       `json:"items_pushed"`
-	ItemsPulled int32       `json:"items_pulled"`
-	Conflicts   int32       `json:"conflicts"`
-	Errors      []byte      `json:"errors"`
-	Summary     pgtype.Text `json:"summary"`
-}
-
-func (q *Queries) CompleteSyncLog(ctx context.Context, arg CompleteSyncLogParams) error {
-	_, err := q.db.Exec(ctx, completeSyncLog,
-		arg.ID,
-		arg.Status,
-		arg.ItemsPushed,
-		arg.ItemsPulled,
-		arg.Conflicts,
-		arg.Errors,
-		arg.Summary,
-	)
-	return err
-}
-
 const listSyncLogs = `-- name: ListSyncLogs :many
 SELECT id, tenant_id, sync_config_id, direction, started_at, completed_at, status, items_pushed, items_pulled, conflicts, errors, summary FROM sync_logs WHERE sync_config_id = $1 ORDER BY started_at DESC LIMIT $2
 `
@@ -251,210 +438,18 @@ func (q *Queries) ListSyncLogs(ctx context.Context, arg ListSyncLogsParams) ([]S
 	return items, nil
 }
 
-const getChangedTasks = `-- name: GetChangedTasks :many
-SELECT id, title, status, priority, assignee_name, due_date, external_id, external_source, updated_at
-FROM tasks
-WHERE tenant_id = $1 AND updated_at > $2
-ORDER BY updated_at DESC
+const updateLastSync = `-- name: UpdateLastSync :exec
+UPDATE sync_configs SET last_sync_at = $2, last_sync_status = $3, updated_at = now()
+WHERE id = $1
 `
 
-type GetChangedTasksParams struct {
-	TenantID  pgtype.UUID        `json:"tenant_id"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-type GetChangedTasksRow struct {
+type UpdateLastSyncParams struct {
 	ID             pgtype.UUID        `json:"id"`
-	Title          string             `json:"title"`
-	Status         string             `json:"status"`
-	Priority       string             `json:"priority"`
-	AssigneeName   pgtype.Text        `json:"assignee_name"`
-	DueDate        pgtype.Timestamptz `json:"due_date"`
-	ExternalID     pgtype.Text        `json:"external_id"`
-	ExternalSource pgtype.Text        `json:"external_source"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	LastSyncAt     pgtype.Timestamptz `json:"last_sync_at"`
+	LastSyncStatus pgtype.Text        `json:"last_sync_status"`
 }
 
-func (q *Queries) GetChangedTasks(ctx context.Context, arg GetChangedTasksParams) ([]GetChangedTasksRow, error) {
-	rows, err := q.db.Query(ctx, getChangedTasks, arg.TenantID, arg.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetChangedTasksRow{}
-	for rows.Next() {
-		var i GetChangedTasksRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Title,
-			&i.Status,
-			&i.Priority,
-			&i.AssigneeName,
-			&i.DueDate,
-			&i.ExternalID,
-			&i.ExternalSource,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getChangedGoals = `-- name: GetChangedGoals :many
-SELECT id, title, level, goal_type, status, external_id, external_source, updated_at
-FROM goals
-WHERE tenant_id = $1 AND updated_at > $2
-ORDER BY updated_at DESC
-`
-
-type GetChangedGoalsParams struct {
-	TenantID  pgtype.UUID        `json:"tenant_id"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-type GetChangedGoalsRow struct {
-	ID             pgtype.UUID        `json:"id"`
-	Title          string             `json:"title"`
-	Level          string             `json:"level"`
-	GoalType       string             `json:"goal_type"`
-	Status         string             `json:"status"`
-	ExternalID     pgtype.Text        `json:"external_id"`
-	ExternalSource pgtype.Text        `json:"external_source"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) GetChangedGoals(ctx context.Context, arg GetChangedGoalsParams) ([]GetChangedGoalsRow, error) {
-	rows, err := q.db.Query(ctx, getChangedGoals, arg.TenantID, arg.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetChangedGoalsRow{}
-	for rows.Next() {
-		var i GetChangedGoalsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Title,
-			&i.Level,
-			&i.GoalType,
-			&i.Status,
-			&i.ExternalID,
-			&i.ExternalSource,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getChangedProjects = `-- name: GetChangedProjects :many
-SELECT id, name, status, priority, external_id, external_source, updated_at
-FROM projects
-WHERE tenant_id = $1 AND updated_at > $2
-ORDER BY updated_at DESC
-`
-
-type GetChangedProjectsParams struct {
-	TenantID  pgtype.UUID        `json:"tenant_id"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-type GetChangedProjectsRow struct {
-	ID             pgtype.UUID        `json:"id"`
-	Name           string             `json:"name"`
-	Status         string             `json:"status"`
-	Priority       string             `json:"priority"`
-	ExternalID     pgtype.Text        `json:"external_id"`
-	ExternalSource pgtype.Text        `json:"external_source"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) GetChangedProjects(ctx context.Context, arg GetChangedProjectsParams) ([]GetChangedProjectsRow, error) {
-	rows, err := q.db.Query(ctx, getChangedProjects, arg.TenantID, arg.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetChangedProjectsRow{}
-	for rows.Next() {
-		var i GetChangedProjectsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Status,
-			&i.Priority,
-			&i.ExternalID,
-			&i.ExternalSource,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getChangedMetrics = `-- name: GetChangedMetrics :many
-SELECT id, name, unit, current_value, target_value, external_id, external_source, updated_at
-FROM metrics
-WHERE tenant_id = $1 AND updated_at > $2
-ORDER BY updated_at DESC
-`
-
-type GetChangedMetricsParams struct {
-	TenantID  pgtype.UUID        `json:"tenant_id"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-type GetChangedMetricsRow struct {
-	ID             pgtype.UUID        `json:"id"`
-	Name           string             `json:"name"`
-	Unit           pgtype.Text        `json:"unit"`
-	CurrentValue   pgtype.Numeric     `json:"current_value"`
-	TargetValue    pgtype.Numeric     `json:"target_value"`
-	ExternalID     pgtype.Text        `json:"external_id"`
-	ExternalSource pgtype.Text        `json:"external_source"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) GetChangedMetrics(ctx context.Context, arg GetChangedMetricsParams) ([]GetChangedMetricsRow, error) {
-	rows, err := q.db.Query(ctx, getChangedMetrics, arg.TenantID, arg.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetChangedMetricsRow{}
-	for rows.Next() {
-		var i GetChangedMetricsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Unit,
-			&i.CurrentValue,
-			&i.TargetValue,
-			&i.ExternalID,
-			&i.ExternalSource,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) UpdateLastSync(ctx context.Context, arg UpdateLastSyncParams) error {
+	_, err := q.db.Exec(ctx, updateLastSync, arg.ID, arg.LastSyncAt, arg.LastSyncStatus)
+	return err
 }

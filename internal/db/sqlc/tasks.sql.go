@@ -47,7 +47,7 @@ INSERT INTO tasks (tenant_id, project_id, goal_id, key_result_id, title,
   description, owner_id, owner_team_id, status, priority, due_at,
   source_system, source_ref, created_by_agent)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-RETURNING id, tenant_id, project_id, goal_id, key_result_id, title, description, owner_id, owner_team_id, status, priority, due_at, source_system, source_ref, created_by_agent, created_at, updated_at
+RETURNING id, tenant_id, project_id, goal_id, key_result_id, title, description, owner_id, owner_team_id, status, priority, due_at, source_system, source_ref, created_by_agent, created_at, updated_at, external_id, external_source, external_url
 `
 
 type CreateTaskParams struct {
@@ -103,6 +103,9 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		&i.CreatedByAgent,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
+		&i.ExternalSource,
+		&i.ExternalUrl,
 	)
 	return i, err
 }
@@ -117,7 +120,7 @@ func (q *Queries) DeleteTask(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, tenant_id, project_id, goal_id, key_result_id, title, description, owner_id, owner_team_id, status, priority, due_at, source_system, source_ref, created_by_agent, created_at, updated_at FROM tasks WHERE id = $1
+SELECT id, tenant_id, project_id, goal_id, key_result_id, title, description, owner_id, owner_team_id, status, priority, due_at, source_system, source_ref, created_by_agent, created_at, updated_at, external_id, external_source, external_url FROM tasks WHERE id = $1
 `
 
 func (q *Queries) GetTask(ctx context.Context, id pgtype.UUID) (Task, error) {
@@ -141,12 +144,15 @@ func (q *Queries) GetTask(ctx context.Context, id pgtype.UUID) (Task, error) {
 		&i.CreatedByAgent,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
+		&i.ExternalSource,
+		&i.ExternalUrl,
 	)
 	return i, err
 }
 
 const listOverdueTasks = `-- name: ListOverdueTasks :many
-SELECT t.id, t.tenant_id, t.project_id, t.goal_id, t.key_result_id, t.title, t.description, t.owner_id, t.owner_team_id, t.status, t.priority, t.due_at, t.source_system, t.source_ref, t.created_by_agent, t.created_at, t.updated_at, e.name AS owner_name
+SELECT t.id, t.tenant_id, t.project_id, t.goal_id, t.key_result_id, t.title, t.description, t.owner_id, t.owner_team_id, t.status, t.priority, t.due_at, t.source_system, t.source_ref, t.created_by_agent, t.created_at, t.updated_at, t.external_id, t.external_source, t.external_url, e.name AS owner_name
 FROM tasks t
 LEFT JOIN employees e ON t.owner_id = e.id
 WHERE t.tenant_id = $1
@@ -173,6 +179,9 @@ type ListOverdueTasksRow struct {
 	CreatedByAgent bool               `json:"created_by_agent"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ExternalID     pgtype.Text        `json:"external_id"`
+	ExternalSource pgtype.Text        `json:"external_source"`
+	ExternalUrl    pgtype.Text        `json:"external_url"`
 	OwnerName      pgtype.Text        `json:"owner_name"`
 }
 
@@ -203,6 +212,9 @@ func (q *Queries) ListOverdueTasks(ctx context.Context, tenantID pgtype.UUID) ([
 			&i.CreatedByAgent,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ExternalID,
+			&i.ExternalSource,
+			&i.ExternalUrl,
 			&i.OwnerName,
 		); err != nil {
 			return nil, err
@@ -216,7 +228,7 @@ func (q *Queries) ListOverdueTasks(ctx context.Context, tenantID pgtype.UUID) ([
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT t.id, t.tenant_id, t.project_id, t.goal_id, t.key_result_id, t.title, t.description, t.owner_id, t.owner_team_id, t.status, t.priority, t.due_at, t.source_system, t.source_ref, t.created_by_agent, t.created_at, t.updated_at,
+SELECT t.id, t.tenant_id, t.project_id, t.goal_id, t.key_result_id, t.title, t.description, t.owner_id, t.owner_team_id, t.status, t.priority, t.due_at, t.source_system, t.source_ref, t.created_by_agent, t.created_at, t.updated_at, t.external_id, t.external_source, t.external_url,
   e.name AS owner_name,
   p.name AS project_name
 FROM tasks t
@@ -252,6 +264,9 @@ type ListTasksRow struct {
 	CreatedByAgent bool               `json:"created_by_agent"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ExternalID     pgtype.Text        `json:"external_id"`
+	ExternalSource pgtype.Text        `json:"external_source"`
+	ExternalUrl    pgtype.Text        `json:"external_url"`
 	OwnerName      pgtype.Text        `json:"owner_name"`
 	ProjectName    pgtype.Text        `json:"project_name"`
 }
@@ -283,6 +298,9 @@ func (q *Queries) ListTasks(ctx context.Context, tenantID pgtype.UUID) ([]ListTa
 			&i.CreatedByAgent,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ExternalID,
+			&i.ExternalSource,
+			&i.ExternalUrl,
 			&i.OwnerName,
 			&i.ProjectName,
 		); err != nil {
@@ -297,7 +315,7 @@ func (q *Queries) ListTasks(ctx context.Context, tenantID pgtype.UUID) ([]ListTa
 }
 
 const listTasksByOwner = `-- name: ListTasksByOwner :many
-SELECT id, tenant_id, project_id, goal_id, key_result_id, title, description, owner_id, owner_team_id, status, priority, due_at, source_system, source_ref, created_by_agent, created_at, updated_at FROM tasks
+SELECT id, tenant_id, project_id, goal_id, key_result_id, title, description, owner_id, owner_team_id, status, priority, due_at, source_system, source_ref, created_by_agent, created_at, updated_at, external_id, external_source, external_url FROM tasks
 WHERE owner_id = $1 AND status NOT IN ('done', 'cancelled')
 ORDER BY due_at NULLS LAST
 `
@@ -329,6 +347,9 @@ func (q *Queries) ListTasksByOwner(ctx context.Context, ownerID pgtype.UUID) ([]
 			&i.CreatedByAgent,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ExternalID,
+			&i.ExternalSource,
+			&i.ExternalUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -345,7 +366,7 @@ UPDATE tasks SET
   title = $2, status = $3, priority = $4, owner_id = $5,
   due_at = $6, description = $7, updated_at = now()
 WHERE id = $1
-RETURNING id, tenant_id, project_id, goal_id, key_result_id, title, description, owner_id, owner_team_id, status, priority, due_at, source_system, source_ref, created_by_agent, created_at, updated_at
+RETURNING id, tenant_id, project_id, goal_id, key_result_id, title, description, owner_id, owner_team_id, status, priority, due_at, source_system, source_ref, created_by_agent, created_at, updated_at, external_id, external_source, external_url
 `
 
 type UpdateTaskParams struct {
@@ -387,6 +408,9 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 		&i.CreatedByAgent,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
+		&i.ExternalSource,
+		&i.ExternalUrl,
 	)
 	return i, err
 }

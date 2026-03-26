@@ -16,7 +16,7 @@ INSERT INTO projects (tenant_id, name, description, owner_id, owner_team_id,
   status, priority, linked_goal_ids, linked_metric_ids, source_system, source_ref,
   start_date, due_date)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, tenant_id, name, description, owner_id, owner_team_id, status, priority, linked_goal_ids, linked_metric_ids, blockers, source_system, source_ref, start_date, due_date, created_at, updated_at
+RETURNING id, tenant_id, name, description, owner_id, owner_team_id, status, priority, linked_goal_ids, linked_metric_ids, blockers, source_system, source_ref, start_date, due_date, created_at, updated_at, external_id, external_source, external_url
 `
 
 type CreateProjectParams struct {
@@ -70,6 +70,9 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.DueDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
+		&i.ExternalSource,
+		&i.ExternalUrl,
 	)
 	return i, err
 }
@@ -84,7 +87,7 @@ func (q *Queries) DeleteProject(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, tenant_id, name, description, owner_id, owner_team_id, status, priority, linked_goal_ids, linked_metric_ids, blockers, source_system, source_ref, start_date, due_date, created_at, updated_at FROM projects WHERE id = $1
+SELECT id, tenant_id, name, description, owner_id, owner_team_id, status, priority, linked_goal_ids, linked_metric_ids, blockers, source_system, source_ref, start_date, due_date, created_at, updated_at, external_id, external_source, external_url FROM projects WHERE id = $1
 `
 
 func (q *Queries) GetProject(ctx context.Context, id pgtype.UUID) (Project, error) {
@@ -108,12 +111,15 @@ func (q *Queries) GetProject(ctx context.Context, id pgtype.UUID) (Project, erro
 		&i.DueDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
+		&i.ExternalSource,
+		&i.ExternalUrl,
 	)
 	return i, err
 }
 
 const listBlockedProjects = `-- name: ListBlockedProjects :many
-SELECT id, tenant_id, name, description, owner_id, owner_team_id, status, priority, linked_goal_ids, linked_metric_ids, blockers, source_system, source_ref, start_date, due_date, created_at, updated_at FROM projects
+SELECT id, tenant_id, name, description, owner_id, owner_team_id, status, priority, linked_goal_ids, linked_metric_ids, blockers, source_system, source_ref, start_date, due_date, created_at, updated_at, external_id, external_source, external_url FROM projects
 WHERE tenant_id = $1 AND status = 'blocked'
 ORDER BY priority, created_at
 `
@@ -145,6 +151,9 @@ func (q *Queries) ListBlockedProjects(ctx context.Context, tenantID pgtype.UUID)
 			&i.DueDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ExternalID,
+			&i.ExternalSource,
+			&i.ExternalUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -157,7 +166,7 @@ func (q *Queries) ListBlockedProjects(ctx context.Context, tenantID pgtype.UUID)
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT p.id, p.tenant_id, p.name, p.description, p.owner_id, p.owner_team_id, p.status, p.priority, p.linked_goal_ids, p.linked_metric_ids, p.blockers, p.source_system, p.source_ref, p.start_date, p.due_date, p.created_at, p.updated_at,
+SELECT p.id, p.tenant_id, p.name, p.description, p.owner_id, p.owner_team_id, p.status, p.priority, p.linked_goal_ids, p.linked_metric_ids, p.blockers, p.source_system, p.source_ref, p.start_date, p.due_date, p.created_at, p.updated_at, p.external_id, p.external_source, p.external_url,
   e.name AS owner_name,
   ou.name AS team_name
 FROM projects p
@@ -185,6 +194,9 @@ type ListProjectsRow struct {
 	DueDate         pgtype.Date        `json:"due_date"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ExternalID      pgtype.Text        `json:"external_id"`
+	ExternalSource  pgtype.Text        `json:"external_source"`
+	ExternalUrl     pgtype.Text        `json:"external_url"`
 	OwnerName       pgtype.Text        `json:"owner_name"`
 	TeamName        pgtype.Text        `json:"team_name"`
 }
@@ -216,6 +228,9 @@ func (q *Queries) ListProjects(ctx context.Context, tenantID pgtype.UUID) ([]Lis
 			&i.DueDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ExternalID,
+			&i.ExternalSource,
+			&i.ExternalUrl,
 			&i.OwnerName,
 			&i.TeamName,
 		); err != nil {
@@ -234,7 +249,7 @@ UPDATE projects SET
   name = $2, description = $3, status = $4, priority = $5,
   owner_id = $6, blockers = $7, due_date = $8, updated_at = now()
 WHERE id = $1
-RETURNING id, tenant_id, name, description, owner_id, owner_team_id, status, priority, linked_goal_ids, linked_metric_ids, blockers, source_system, source_ref, start_date, due_date, created_at, updated_at
+RETURNING id, tenant_id, name, description, owner_id, owner_team_id, status, priority, linked_goal_ids, linked_metric_ids, blockers, source_system, source_ref, start_date, due_date, created_at, updated_at, external_id, external_source, external_url
 `
 
 type UpdateProjectParams struct {
@@ -278,6 +293,9 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.DueDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
+		&i.ExternalSource,
+		&i.ExternalUrl,
 	)
 	return i, err
 }

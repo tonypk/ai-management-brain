@@ -15,7 +15,7 @@ const createMetric = `-- name: CreateMetric :one
 INSERT INTO metrics (tenant_id, name, display_name, formula, unit, source,
   refresh_frequency, target_value, alert_threshold, owner_id, owner_team_id, tags)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, tenant_id, name, display_name, formula, unit, source, refresh_frequency, target_value, alert_threshold, owner_id, owner_team_id, tags, is_active, created_at, updated_at
+RETURNING id, tenant_id, name, display_name, formula, unit, source, refresh_frequency, target_value, alert_threshold, owner_id, owner_team_id, tags, is_active, created_at, updated_at, external_id, external_source, external_url
 `
 
 type CreateMetricParams struct {
@@ -66,6 +66,9 @@ func (q *Queries) CreateMetric(ctx context.Context, arg CreateMetricParams) (Met
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
+		&i.ExternalSource,
+		&i.ExternalUrl,
 	)
 	return i, err
 }
@@ -102,7 +105,7 @@ func (q *Queries) GetLatestMetricValue(ctx context.Context, metricID pgtype.UUID
 }
 
 const getMetric = `-- name: GetMetric :one
-SELECT id, tenant_id, name, display_name, formula, unit, source, refresh_frequency, target_value, alert_threshold, owner_id, owner_team_id, tags, is_active, created_at, updated_at FROM metrics WHERE id = $1
+SELECT id, tenant_id, name, display_name, formula, unit, source, refresh_frequency, target_value, alert_threshold, owner_id, owner_team_id, tags, is_active, created_at, updated_at, external_id, external_source, external_url FROM metrics WHERE id = $1
 `
 
 func (q *Queries) GetMetric(ctx context.Context, id pgtype.UUID) (Metric, error) {
@@ -125,6 +128,9 @@ func (q *Queries) GetMetric(ctx context.Context, id pgtype.UUID) (Metric, error)
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
+		&i.ExternalSource,
+		&i.ExternalUrl,
 	)
 	return i, err
 }
@@ -282,7 +288,7 @@ func (q *Queries) ListMetricValues(ctx context.Context, arg ListMetricValuesPara
 }
 
 const listMetrics = `-- name: ListMetrics :many
-SELECT id, tenant_id, name, display_name, formula, unit, source, refresh_frequency, target_value, alert_threshold, owner_id, owner_team_id, tags, is_active, created_at, updated_at FROM metrics
+SELECT id, tenant_id, name, display_name, formula, unit, source, refresh_frequency, target_value, alert_threshold, owner_id, owner_team_id, tags, is_active, created_at, updated_at, external_id, external_source, external_url FROM metrics
 WHERE tenant_id = $1 AND is_active = true
 ORDER BY name
 `
@@ -313,6 +319,9 @@ func (q *Queries) ListMetrics(ctx context.Context, tenantID pgtype.UUID) ([]Metr
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ExternalID,
+			&i.ExternalSource,
+			&i.ExternalUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -330,7 +339,7 @@ UPDATE metrics SET
   target_value = $6, alert_threshold = $7, owner_id = $8,
   tags = $9, updated_at = now()
 WHERE id = $1
-RETURNING id, tenant_id, name, display_name, formula, unit, source, refresh_frequency, target_value, alert_threshold, owner_id, owner_team_id, tags, is_active, created_at, updated_at
+RETURNING id, tenant_id, name, display_name, formula, unit, source, refresh_frequency, target_value, alert_threshold, owner_id, owner_team_id, tags, is_active, created_at, updated_at, external_id, external_source, external_url
 `
 
 type UpdateMetricParams struct {
@@ -375,6 +384,9 @@ func (q *Queries) UpdateMetric(ctx context.Context, arg UpdateMetricParams) (Met
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
+		&i.ExternalSource,
+		&i.ExternalUrl,
 	)
 	return i, err
 }

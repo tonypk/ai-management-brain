@@ -136,6 +136,48 @@ type EmployeeSkill struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
+type Engagement struct {
+	ID                 pgtype.UUID        `json:"id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	Title              string             `json:"title"`
+	ProblemStatement   string             `json:"problem_statement"`
+	Tier               string             `json:"tier"`
+	Category           pgtype.Text        `json:"category"`
+	Phase              string             `json:"phase"`
+	DiagnosisQuestions []byte             `json:"diagnosis_questions"`
+	DiagnosisAnswers   []byte             `json:"diagnosis_answers"`
+	DiagnosisData      []byte             `json:"diagnosis_data"`
+	Analysis           []byte             `json:"analysis"`
+	Plan               []byte             `json:"plan"`
+	ProgressPct        pgtype.Numeric     `json:"progress_pct"`
+	NextCheckAt        pgtype.Timestamptz `json:"next_check_at"`
+	MentorID           pgtype.Text        `json:"mentor_id"`
+	CultureCode        pgtype.Text        `json:"culture_code"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ClosedAt           pgtype.Timestamptz `json:"closed_at"`
+}
+
+type EngagementAction struct {
+	ID              pgtype.UUID        `json:"id"`
+	EngagementID    pgtype.UUID        `json:"engagement_id"`
+	ActionType      string             `json:"action_type"`
+	Title           string             `json:"title"`
+	Description     pgtype.Text        `json:"description"`
+	Params          []byte             `json:"params"`
+	OwnerName       pgtype.Text        `json:"owner_name"`
+	Priority        pgtype.Text        `json:"priority"`
+	DueAt           pgtype.Timestamptz `json:"due_at"`
+	Status          string             `json:"status"`
+	ApprovedAt      pgtype.Timestamptz `json:"approved_at"`
+	ExecutedAt      pgtype.Timestamptz `json:"executed_at"`
+	Result          []byte             `json:"result"`
+	LinkedTaskID    pgtype.UUID        `json:"linked_task_id"`
+	LinkedMeetingID pgtype.UUID        `json:"linked_meeting_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ExecutionSignal struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
@@ -149,19 +191,22 @@ type ExecutionSignal struct {
 }
 
 type Goal struct {
-	ID           pgtype.UUID        `json:"id"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	OwnerID      pgtype.UUID        `json:"owner_id"`
-	Title        string             `json:"title"`
-	Description  string             `json:"description"`
-	Status       string             `json:"status"`
-	Cycle        string             `json:"cycle"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	Level        string             `json:"level"`
-	GoalType     string             `json:"goal_type"`
-	SourceSystem pgtype.Text        `json:"source_system"`
-	SourceRef    pgtype.Text        `json:"source_ref"`
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	OwnerID        pgtype.UUID        `json:"owner_id"`
+	Title          string             `json:"title"`
+	Description    string             `json:"description"`
+	Status         string             `json:"status"`
+	Cycle          string             `json:"cycle"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	Level          string             `json:"level"`
+	GoalType       string             `json:"goal_type"`
+	SourceSystem   pgtype.Text        `json:"source_system"`
+	SourceRef      pgtype.Text        `json:"source_ref"`
+	ExternalID     pgtype.Text        `json:"external_id"`
+	ExternalSource pgtype.Text        `json:"external_source"`
+	ExternalUrl    pgtype.Text        `json:"external_url"`
 }
 
 type GoalSnapshot struct {
@@ -311,6 +356,9 @@ type Metric struct {
 	IsActive         bool               `json:"is_active"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ExternalID       pgtype.Text        `json:"external_id"`
+	ExternalSource   pgtype.Text        `json:"external_source"`
+	ExternalUrl      pgtype.Text        `json:"external_url"`
 }
 
 type MetricValue struct {
@@ -413,6 +461,9 @@ type Project struct {
 	DueDate         pgtype.Date        `json:"due_date"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ExternalID      pgtype.Text        `json:"external_id"`
+	ExternalSource  pgtype.Text        `json:"external_source"`
+	ExternalUrl     pgtype.Text        `json:"external_url"`
 }
 
 type Recommendation struct {
@@ -488,6 +539,17 @@ type Skill struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type Summary struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	SummaryDate    pgtype.Date        `json:"summary_date"`
+	Content        string             `json:"content"`
+	SubmissionRate float64            `json:"submission_rate"`
+	BlockersCount  int32              `json:"blockers_count"`
+	KeyMetrics     []byte             `json:"key_metrics"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type SyncConfig struct {
 	ID                   pgtype.UUID        `json:"id"`
 	TenantID             pgtype.UUID        `json:"tenant_id"`
@@ -517,17 +579,6 @@ type SyncLog struct {
 	Summary      pgtype.Text        `json:"summary"`
 }
 
-type Summary struct {
-	ID             pgtype.UUID        `json:"id"`
-	TenantID       pgtype.UUID        `json:"tenant_id"`
-	SummaryDate    pgtype.Date        `json:"summary_date"`
-	Content        string             `json:"content"`
-	SubmissionRate float64            `json:"submission_rate"`
-	BlockersCount  int32              `json:"blockers_count"`
-	KeyMetrics     []byte             `json:"key_metrics"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-}
-
 type Task struct {
 	ID             pgtype.UUID        `json:"id"`
 	TenantID       pgtype.UUID        `json:"tenant_id"`
@@ -546,6 +597,9 @@ type Task struct {
 	CreatedByAgent bool               `json:"created_by_agent"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ExternalID     pgtype.Text        `json:"external_id"`
+	ExternalSource pgtype.Text        `json:"external_source"`
+	ExternalUrl    pgtype.Text        `json:"external_url"`
 }
 
 type Tenant struct {

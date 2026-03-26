@@ -39,9 +39,10 @@ WHERE id = $1;
 SELECT * FROM sync_logs WHERE sync_config_id = $1 ORDER BY started_at DESC LIMIT $2;
 
 -- name: GetChangedTasks :many
-SELECT id, title, status, priority, assignee_name, due_date, external_id, external_source, updated_at
-FROM tasks
-WHERE tenant_id = $1 AND updated_at > $2
+SELECT t.id, t.title, t.status, t.priority, e.name AS assignee_name, t.due_at AS due_date, t.external_id, t.external_source, t.updated_at
+FROM tasks t
+LEFT JOIN employees e ON t.owner_id = e.id
+WHERE t.tenant_id = $1 AND t.updated_at > $2
 ORDER BY updated_at DESC;
 
 -- name: GetChangedGoals :many
@@ -57,7 +58,7 @@ WHERE tenant_id = $1 AND updated_at > $2
 ORDER BY updated_at DESC;
 
 -- name: GetChangedMetrics :many
-SELECT id, name, unit, current_value, target_value, external_id, external_source, updated_at
+SELECT id, name, unit, target_value, external_id, external_source, updated_at
 FROM metrics
 WHERE tenant_id = $1 AND updated_at > $2
 ORDER BY updated_at DESC;
