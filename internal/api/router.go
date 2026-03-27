@@ -55,9 +55,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	r.Use(metrics.Middleware())
 	r.GET("/__metrics", metrics.Handler())
 
-	// Rate limiting (60 req/min per IP)
+	// Rate limiting (120 req/min per IP — SPA makes many parallel API calls)
 	if cfg.Redis != nil {
-		r.Use(RateLimitMiddleware(cfg.Redis, 60, time.Minute))
+		r.Use(RateLimitMiddleware(cfg.Redis, 120, time.Minute))
 	}
 
 	// Public routes
