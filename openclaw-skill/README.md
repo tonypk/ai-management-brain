@@ -10,10 +10,10 @@ metadata:
   openclaw:
     optional:
       env:
-        - name: "BOSS_AI_AGENT_API_KEY"
-          description: "Optional. Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics. Separate from MCP authentication."
         - name: "MANAGEMENT_BRAIN_API_KEY"
-          description: "Required for Team Operations Mode. Authenticates all 33 MCP tool calls to manageaibrain.com/mcp. Without this key, only Advisor Mode is available."
+          description: "Enables Team Operations Mode — 33 MCP tools, 6 cron jobs, message delivery to employees, bidirectional Notion/Sheets sync. Without this key the skill runs in Advisor Mode only (offline, zero network). Authenticates all MCP calls to manageaibrain.com/mcp. Scoped to one company; each API key maps to exactly one organization. Audit via web dashboard at manageaibrain.com."
+        - name: "BOSS_AI_AGENT_API_KEY"
+          description: "Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics dashboards. Separate from MCP authentication. Falls back to MANAGEMENT_BRAIN_API_KEY if not set. Only relevant in Team Operations Mode."
       config:
         - "~/.openclaw/skills/boss-ai-agent/config.json"
 ---
@@ -81,7 +81,7 @@ The skill auto-detects which mode to use based on whether MCP tools are availabl
 
 **Team Operations Mode**: AI connects to `manageaibrain.com/mcp` (requires `MANAGEMENT_BRAIN_API_KEY`) for real team operations. Tool parameters (employee names, discussion topics, message content) are sent to the cloud server for processing. Write tools deliver messages to employees via connected platforms. Local files (`config.json`, chat history, memory) stay on your machine and are not transmitted to the server.
 
-**Persistent behavior** (Team Operations only): Registers up to 5 cron jobs that run autonomously — including jobs that send messages to employees. Review schedules in `config.json` before activating. Manage with `cron list` / `cron remove`.
+**Persistent behavior** (Team Operations only): Registers up to 6 cron jobs that run autonomously — including jobs that send messages to employees. Solo founder mode (team=0) only registers 3 (briefing, signalScan, sync). Review schedules in `config.json` before activating. Manage with `cron list` / `cron remove`.
 
 ## OpenClaw Integration Architecture
 

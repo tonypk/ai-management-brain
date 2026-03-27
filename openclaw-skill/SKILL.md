@@ -10,10 +10,10 @@ metadata:
   openclaw:
     optional:
       env:
-        - name: "BOSS_AI_AGENT_API_KEY"
-          description: "Optional. Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics dashboards. Separate from MCP authentication. Only relevant in Team Operations Mode."
         - name: "MANAGEMENT_BRAIN_API_KEY"
-          description: "Required for Team Operations Mode. Authenticates all 33 MCP tool calls to manageaibrain.com/mcp. Without this key, only Advisor Mode (offline) is available."
+          description: "Enables Team Operations Mode — 33 MCP tools, 6 cron jobs, message delivery to employees, bidirectional Notion/Sheets sync. Without this key the skill runs in Advisor Mode only (offline, zero network). Authenticates all MCP calls to manageaibrain.com/mcp. Scoped to one company; each API key maps to exactly one organization. Audit via web dashboard at manageaibrain.com."
+        - name: "BOSS_AI_AGENT_API_KEY"
+          description: "Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics dashboards. Separate from MCP authentication. Falls back to MANAGEMENT_BRAIN_API_KEY if not set. Only relevant in Team Operations Mode."
       config:
         - "~/.openclaw/skills/boss-ai-agent/config.json"
 ---
