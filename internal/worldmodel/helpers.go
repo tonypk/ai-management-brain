@@ -2,6 +2,7 @@ package worldmodel
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -35,4 +36,8 @@ func numericToFloat(n pgtype.Numeric) float64 {
 
 func textFromString(s string) pgtype.Text {
 	return pgtype.Text{String: s, Valid: true}
+}
+
+func pgTimestamptz(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: t, Valid: true}
 }
