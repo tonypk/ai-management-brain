@@ -1,19 +1,21 @@
 <script setup lang="ts">
-import { NDataTable, NTag, NProgress } from 'naive-ui'
+import { NDataTable, NTag, NProgress, type DataTableColumn } from 'naive-ui'
 import { computed, h } from 'vue'
 import type { SkillRow } from '@/api/worldmodel'
 
 const props = defineProps<{ skills: SkillRow[] }>()
 
-const columns = [
+type TagType = 'success' | 'info' | 'warning' | 'error' | 'default'
+const proficiencyColors: Record<string, TagType> = { expert: 'success', high: 'info', medium: 'warning', low: 'error' }
+
+const columns: DataTableColumn<SkillRow>[] = [
   { title: 'Employee', key: 'employee_name', sorter: 'default' },
   { title: 'Skill', key: 'skill_name', sorter: 'default' },
   {
     title: 'Proficiency',
     key: 'proficiency',
     render: (row: SkillRow) => {
-      const colors: Record<string, string> = { expert: 'success', high: 'info', medium: 'warning', low: 'error' }
-      return h(NTag, { type: colors[row.proficiency] || 'default', size: 'small' }, () => row.proficiency)
+      return h(NTag, { type: proficiencyColors[row.proficiency] || 'default', size: 'small' }, () => row.proficiency)
     },
   },
   {

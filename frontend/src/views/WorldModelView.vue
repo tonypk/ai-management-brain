@@ -28,10 +28,10 @@ onMounted(async () => {
       getWorldModelBlockers(),
       getWorldModelInsights(),
     ])
-    overview.value = o.data
-    skills.value = s.data || []
-    blockers.value = b.data || []
-    insights.value = i.data || []
+    overview.value = o
+    skills.value = s || []
+    blockers.value = b || []
+    insights.value = i || []
   } finally {
     loading.value = false
   }

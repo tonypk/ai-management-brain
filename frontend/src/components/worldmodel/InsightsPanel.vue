@@ -4,7 +4,8 @@ import type { InsightRow } from '@/api/worldmodel'
 
 defineProps<{ insights: InsightRow[] }>()
 
-const dimensionColors: Record<string, string> = {
+type TagType = 'error' | 'success' | 'info' | 'warning' | 'default'
+const dimensionColors: Record<string, TagType> = {
   risk: 'error',
   opportunity: 'success',
   rhythm: 'info',
