@@ -29,6 +29,11 @@ type ChatLLMClient interface {
 	ChatWithHistory(ctx context.Context, systemPrompt string, history []ChatMessage, userMessage string) (string, error)
 }
 
+// FastLLMClient extends LLMClient with a fast/cheap model for extraction.
+type FastLLMClient interface {
+	ChatFast(ctx context.Context, systemPrompt, userPrompt string) (string, error)
+}
+
 // ReportData holds one employee's report for summary generation.
 type ReportData struct {
 	EmployeeName string
@@ -70,14 +75,18 @@ func NewAnthropicClient(apiKey string) (*AnthropicClient, error) {
 
 // chatWithTokens sends a message to Claude with a configurable max token limit.
 func (a *AnthropicClient) chatWithTokens(ctx context.Context, systemPrompt, userPrompt string, maxTokens int64) (string, error) {
+	return a.chatWithModel(ctx, a.model, systemPrompt, userPrompt, maxTokens)
+}
+
+// chatWithModel sends a message with configurable model and max tokens.
+func (a *AnthropicClient) chatWithModel(ctx context.Context, model anthropic.Model, systemPrompt, userPrompt string, maxTokens int64) (string, error) {
 	start := time.Now()
 	var lastErr error
 
-	// Retry up to 3 times with exponential backoff for transient errors.
 	backoffs := []time.Duration{1 * time.Second, 4 * time.Second, 16 * time.Second}
 	for attempt := 0; attempt <= 2; attempt++ {
 		resp, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
-			Model:     a.model,
+			Model:     model,
 			MaxTokens: maxTokens,
 			System: []anthropic.TextBlockParam{
 				{Text: systemPrompt},
@@ -87,43 +96,30 @@ func (a *AnthropicClient) chatWithTokens(ctx context.Context, systemPrompt, user
 			},
 		})
 		if err != nil {
-			// Check for auth errors — do NOT retry.
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "401") || strings.Contains(errMsg, "403") ||
 				strings.Contains(errMsg, "authentication") || strings.Contains(errMsg, "unauthorized") {
 				return "", &AuthError{Msg: errMsg}
 			}
-
 			lastErr = err
-			slog.Warn("LLM API call failed",
-				"attempt", attempt+1,
-				"error", err,
-				"duration", time.Since(start),
-			)
-
+			slog.Warn("LLM API call failed", "attempt", attempt+1, "model", model, "error", err, "duration", time.Since(start))
 			if attempt < 2 {
 				time.Sleep(backoffs[attempt])
 			}
 			continue
 		}
 
-		// Extract text from response content blocks.
 		var result string
 		for _, block := range resp.Content {
 			if block.Type == "text" {
 				result += block.Text
 			}
 		}
-
-		slog.Info("LLM API call succeeded",
-			"duration", time.Since(start),
-			"input_tokens", resp.Usage.InputTokens,
-			"output_tokens", resp.Usage.OutputTokens,
-		)
+		slog.Info("LLM API call succeeded", "model", model, "duration", time.Since(start), "input_tokens", resp.Usage.InputTokens, "output_tokens", resp.Usage.OutputTokens)
 		return result, nil
 	}
 
-	return "", fmt.Errorf("LLM API failed after 3 attempts: %w", lastErr)
+	return "", fmt.Errorf("LLM API failed after 3 attempts (model=%s): %w", model, lastErr)
 }
 
 // Chat sends a message to Claude and returns the response.
@@ -134,6 +130,11 @@ func (a *AnthropicClient) Chat(ctx context.Context, systemPrompt, userPrompt str
 // ChatLong sends a message to Claude with higher token limit for complex generation.
 func (a *AnthropicClient) ChatLong(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	return a.chatWithTokens(ctx, systemPrompt, userPrompt, 4096)
+}
+
+// ChatFast sends a message using Haiku for high-volume extraction.
+func (a *AnthropicClient) ChatFast(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	return a.chatWithModel(ctx, "claude-haiku-4-5-20251001", systemPrompt, userPrompt, 1024)
 }
 
 // ChatWithHistory sends a multi-turn conversation to Claude and returns the response.
@@ -207,6 +208,18 @@ type LLMService struct {
 // NewLLMService creates a new LLM service wrapping the given client.
 func NewLLMService(client LLMClient) *LLMService {
 	return &LLMService{client: client}
+}
+
+// Client returns the underlying LLMClient.
+func (s *LLMService) Client() LLMClient { return s.client }
+
+// ExtractWithFastModel calls the fast model for World Model extraction.
+func (s *LLMService) ExtractWithFastModel(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	if fc, ok := s.client.(FastLLMClient); ok {
+		return fc.ChatFast(ctx, systemPrompt, userPrompt)
+	}
+	// Fallback to standard model
+	return s.client.Chat(ctx, systemPrompt, userPrompt)
 }
 
 // GenerateChaseMessage generates a personalized chase message.
