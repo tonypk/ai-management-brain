@@ -11,7 +11,10 @@ import {
   sendSummary,
   sendMessage,
 } from "./tools/actions.js";
-import { getRecommendations, executeRecommendation } from "./tools/recommendations.js";
+import {
+  getRecommendations,
+  executeRecommendation,
+} from "./tools/recommendations.js";
 import {
   getCompanyState,
   getExecutionSignals,
@@ -28,7 +31,11 @@ import { getGoalState } from "./tools/goals.js";
 import { createExecutionPlan } from "./tools/planning.js";
 import { ingestMetric } from "./tools/metrics-write.js";
 import { calculateIncentives } from "./tools/incentives-calc.js";
-import { getSyncManifest, reportSyncResult, configureSync } from "./tools/sync.js";
+import {
+  getSyncManifest,
+  reportSyncResult,
+  configureSync,
+} from "./tools/sync.js";
 import {
   startConsultingEngagement,
   answerConsultingQuestion,
@@ -40,9 +47,9 @@ import {
   closeConsultingEngagement,
   listConsultingActions,
 } from "./tools/consulting.js";
+import { getWorldModel, getEmployeeWorldModel } from "./tools/worldmodel.js";
 
-const NO_KEY_MSG =
-  "Please set MANAGEMENT_BRAIN_API_KEY environment variable.";
+const NO_KEY_MSG = "Please set MANAGEMENT_BRAIN_API_KEY environment variable.";
 
 function makeClient(): ApiClient | null {
   const apiKey = process.env.MANAGEMENT_BRAIN_API_KEY ?? "";
@@ -78,7 +85,9 @@ export function createServer(): McpServer {
     {
       period: z
         .enum(["weekly", "monthly"])
-        .describe("Time period: 'weekly' for last 7 days, 'monthly' for last 30 days"),
+        .describe(
+          "Time period: 'weekly' for last 7 days, 'monthly' for last 30 days",
+        ),
     },
     async ({ period }) => {
       const client = makeClient();
@@ -160,7 +169,9 @@ export function createServer(): McpServer {
     {
       seat_type: z
         .string()
-        .describe("The C-Suite role to consult: ceo, cfo, cmo, cto, chro, or coo"),
+        .describe(
+          "The C-Suite role to consult: ceo, cfo, cmo, cto, chro, or coo",
+        ),
       message: z
         .string()
         .min(1)
@@ -390,9 +401,7 @@ export function createServer(): McpServer {
     {
       period: z
         .string()
-        .describe(
-          "Period in YYYY-MM format, e.g. '2026-03' for March 2026",
-        ),
+        .describe("Period in YYYY-MM format, e.g. '2026-03' for March 2026"),
     },
     async ({ period }) => {
       const client = makeClient();
@@ -420,8 +429,13 @@ export function createServer(): McpServer {
     "execute_recommendation",
     "Execute a specific action on an AI recommendation. Takes a recommendation ID and optional action index (defaults to the first action). Returns the execution result including success status and any messages.",
     {
-      recommendation_id: z.string().describe("The recommendation UUID to execute"),
-      action_index: z.number().optional().describe("Index of the action to execute (default 0)"),
+      recommendation_id: z
+        .string()
+        .describe("The recommendation UUID to execute"),
+      action_index: z
+        .number()
+        .optional()
+        .describe("Index of the action to execute (default 0)"),
     },
     async ({ recommendation_id, action_index }) => {
       const client = makeClient();
@@ -454,15 +468,21 @@ export function createServer(): McpServer {
           strategic_priorities: z
             .array(z.string())
             .optional()
-            .describe("List of strategic priorities, e.g. ['Increase ARR by 30%', 'Launch APAC']"),
+            .describe(
+              "List of strategic priorities, e.g. ['Increase ARR by 30%', 'Launch APAC']",
+            ),
           key_risks: z
             .array(z.string())
             .optional()
-            .describe("List of key risks, e.g. ['Key person dependency on Alice', 'Cash runway < 6 months']"),
+            .describe(
+              "List of key risks, e.g. ['Key person dependency on Alice', 'Cash runway < 6 months']",
+            ),
           management_style_weights: z
             .record(z.string(), z.number())
             .optional()
-            .describe("Management style weight map, e.g. { 'inamori': 0.7, 'grove': 0.3 }"),
+            .describe(
+              "Management style weight map, e.g. { 'inamori': 0.7, 'grove': 0.3 }",
+            ),
         })
         .describe("Fields to update on the organization context"),
     },
@@ -520,7 +540,9 @@ export function createServer(): McpServer {
       observed_at: z
         .string()
         .optional()
-        .describe("ISO 8601 timestamp of when the value was observed, defaults to now"),
+        .describe(
+          "ISO 8601 timestamp of when the value was observed, defaults to now",
+        ),
       source: z
         .string()
         .optional()
@@ -540,9 +562,7 @@ export function createServer(): McpServer {
     {
       period: z
         .string()
-        .describe(
-          "Period in YYYY-MM format, e.g. '2026-03' for March 2026",
-        ),
+        .describe("Period in YYYY-MM format, e.g. '2026-03' for March 2026"),
     },
     async ({ period }) => {
       const client = makeClient();
@@ -585,10 +605,7 @@ export function createServer(): McpServer {
         .number()
         .describe("Number of items pulled from external storage"),
       conflicts: z.number().describe("Number of conflicts detected"),
-      errors: z
-        .array(z.string())
-        .optional()
-        .describe("Error messages if any"),
+      errors: z.array(z.string()).optional().describe("Error messages if any"),
       pulled_items: z
         .array(
           z.object({
@@ -633,9 +650,7 @@ export function createServer(): McpServer {
     {
       storage_type: z.enum(["notion", "sheets"]),
       is_enabled: z.boolean(),
-      entity_types: z.array(
-        z.enum(["tasks", "goals", "projects", "metrics"]),
-      ),
+      entity_types: z.array(z.enum(["tasks", "goals", "projects", "metrics"])),
       sync_frequency_minutes: z
         .number()
         .optional()
@@ -643,9 +658,7 @@ export function createServer(): McpServer {
       config: z
         .record(z.string(), z.any())
         .optional()
-        .describe(
-          "Storage-specific config: Notion database IDs or Sheet IDs",
-        ),
+        .describe("Storage-specific config: Notion database IDs or Sheet IDs"),
     },
     async (params) => {
       const client = makeClient();
@@ -674,17 +687,25 @@ export function createServer(): McpServer {
       mentor_id: z
         .string()
         .optional()
-        .describe("Optional mentor to shape the consulting style (inamori, dalio, grove, musk, etc.)"),
+        .describe(
+          "Optional mentor to shape the consulting style (inamori, dalio, grove, musk, etc.)",
+        ),
       culture_code: z
         .string()
         .optional()
-        .describe("Optional culture code (default, philippines, singapore, etc.)"),
+        .describe(
+          "Optional culture code (default, philippines, singapore, etc.)",
+        ),
     },
     async ({ problem, mentor_id, culture_code }) => {
       const client = makeClient();
       if (!client)
         return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
-      return startConsultingEngagement(client, { problem, mentor_id, culture_code });
+      return startConsultingEngagement(client, {
+        problem,
+        mentor_id,
+        culture_code,
+      });
     },
   );
 
@@ -756,7 +777,9 @@ export function createServer(): McpServer {
     {
       engagement_id: z
         .string()
-        .describe("The consulting engagement UUID whose approved actions to execute"),
+        .describe(
+          "The consulting engagement UUID whose approved actions to execute",
+        ),
     },
     async ({ engagement_id }) => {
       const client = makeClient();
@@ -784,7 +807,9 @@ export function createServer(): McpServer {
     "close_consulting_engagement",
     "Close a consulting engagement with a retrospective. Generates an effectiveness assessment, lessons learned, and stores insights as organizational memory for future engagements.",
     {
-      engagement_id: z.string().describe("The consulting engagement UUID to close"),
+      engagement_id: z
+        .string()
+        .describe("The consulting engagement UUID to close"),
     },
     async ({ engagement_id }) => {
       const client = makeClient();
@@ -805,6 +830,32 @@ export function createServer(): McpServer {
       if (!client)
         return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
       return listConsultingActions(client, { engagement_id });
+    },
+  );
+
+  // --- Group 10: Team World Model ---
+
+  server.tool(
+    "get_world_model",
+    "Get the team's World Model — skills, collaborations, blockers, growth events, and AI insights extracted from daily check-ins. Use this to understand the team's collective capabilities, collaboration patterns, and recurring challenges.",
+    {},
+    async () => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getWorldModel(client);
+    },
+  );
+
+  server.tool(
+    "get_employee_world_model",
+    "Get a specific employee's World Model — skills, growth trajectory, blockers, and collaborations. Use this to prepare for 1:1s or understand an individual's development.",
+    { name: z.string().describe("Employee name (fuzzy match)") },
+    async ({ name }) => {
+      const client = makeClient();
+      if (!client)
+        return { content: [{ type: "text", text: NO_KEY_MSG }], isError: true };
+      return getEmployeeWorldModel(client, name);
     },
   );
 
