@@ -163,3 +163,16 @@ func (s *Service) ForRecommenderContext(ctx context.Context, tenantID pgtype.UUI
 
 	return rc, nil
 }
+
+// ForRecommenderPrompt returns formatted World Model text for DailyScan prompt injection.
+// Satisfies brain.WorldModelContextProvider interface.
+func (s *Service) ForRecommenderPrompt(ctx context.Context, tenantID pgtype.UUID) (string, error) {
+	rc, err := s.ForRecommenderContext(ctx, tenantID)
+	if err != nil {
+		return "", err
+	}
+	if rc == nil {
+		return "", nil
+	}
+	return rc.FormatForPrompt(), nil
+}
