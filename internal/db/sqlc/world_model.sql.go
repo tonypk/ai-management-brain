@@ -209,6 +209,57 @@ func (q *Queries) ExpireOldInsights(ctx context.Context) error {
 	return err
 }
 
+const findKnowledgeSilos = `-- name: FindKnowledgeSilos :many
+
+SELECT s.skill_name, s.employee_id, e.name as employee_name, s.confidence, s.mention_count
+FROM world_model_skills s
+JOIN employees e ON s.employee_id = e.id
+WHERE s.tenant_id = $1
+  AND s.confidence > 0.7
+  AND s.skill_name IN (
+    SELECT skill_name FROM world_model_skills
+    WHERE tenant_id = $1 AND confidence > 0.5
+    GROUP BY skill_name HAVING count(*) = 1
+  )
+ORDER BY s.confidence DESC
+`
+
+type FindKnowledgeSilosRow struct {
+	SkillName    string         `json:"skill_name"`
+	EmployeeID   pgtype.UUID    `json:"employee_id"`
+	EmployeeName string         `json:"employee_name"`
+	Confidence   pgtype.Numeric `json:"confidence"`
+	MentionCount int32          `json:"mention_count"`
+}
+
+// ===== Recommender Triggers =====
+// Skills where only 1 employee has confidence > 0.5 and that employee has confidence > 0.7
+func (q *Queries) FindKnowledgeSilos(ctx context.Context, tenantID pgtype.UUID) ([]FindKnowledgeSilosRow, error) {
+	rows, err := q.db.Query(ctx, findKnowledgeSilos, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FindKnowledgeSilosRow{}
+	for rows.Next() {
+		var i FindKnowledgeSilosRow
+		if err := rows.Scan(
+			&i.SkillName,
+			&i.EmployeeID,
+			&i.EmployeeName,
+			&i.Confidence,
+			&i.MentionCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findSimilarBlocker = `-- name: FindSimilarBlocker :one
 SELECT id, tenant_id, employee_id, category, description, status, first_seen_at, resolved_at, recurrence_count FROM world_model_blockers
 WHERE tenant_id = $1 AND employee_id = $2 AND category = $3 AND status != 'resolved'
@@ -239,6 +290,98 @@ func (q *Queries) FindSimilarBlocker(ctx context.Context, arg FindSimilarBlocker
 	return i, err
 }
 
+const findSkillMatchForBlocker = `-- name: FindSkillMatchForBlocker :many
+SELECT s.employee_id, e.name as employee_name, s.skill_name, s.confidence, s.proficiency
+FROM world_model_skills s
+JOIN employees e ON s.employee_id = e.id
+WHERE s.tenant_id = $1
+  AND s.skill_name ILIKE '%' || $2 || '%'
+  AND s.confidence > 0.6
+  AND s.employee_id != $3
+ORDER BY s.confidence DESC
+LIMIT 3
+`
+
+type FindSkillMatchForBlockerParams struct {
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	Column2    pgtype.Text `json:"column_2"`
+	EmployeeID pgtype.UUID `json:"employee_id"`
+}
+
+type FindSkillMatchForBlockerRow struct {
+	EmployeeID   pgtype.UUID    `json:"employee_id"`
+	EmployeeName string         `json:"employee_name"`
+	SkillName    string         `json:"skill_name"`
+	Confidence   pgtype.Numeric `json:"confidence"`
+	Proficiency  string         `json:"proficiency"`
+}
+
+// Find employees who have a skill matching a blocker category (excluding the blocked employee)
+func (q *Queries) FindSkillMatchForBlocker(ctx context.Context, arg FindSkillMatchForBlockerParams) ([]FindSkillMatchForBlockerRow, error) {
+	rows, err := q.db.Query(ctx, findSkillMatchForBlocker, arg.TenantID, arg.Column2, arg.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FindSkillMatchForBlockerRow{}
+	for rows.Next() {
+		var i FindSkillMatchForBlockerRow
+		if err := rows.Scan(
+			&i.EmployeeID,
+			&i.EmployeeName,
+			&i.SkillName,
+			&i.Confidence,
+			&i.Proficiency,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getActiveBlockersByEmployee = `-- name: GetActiveBlockersByEmployee :many
+SELECT category, description, recurrence_count
+FROM world_model_blockers
+WHERE tenant_id = $1 AND employee_id = $2 AND status IN ('active', 'recurring')
+ORDER BY recurrence_count DESC
+`
+
+type GetActiveBlockersByEmployeeParams struct {
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	EmployeeID pgtype.UUID `json:"employee_id"`
+}
+
+type GetActiveBlockersByEmployeeRow struct {
+	Category        string `json:"category"`
+	Description     string `json:"description"`
+	RecurrenceCount int32  `json:"recurrence_count"`
+}
+
+// Active blockers for a specific employee (used by compound_risk trigger)
+func (q *Queries) GetActiveBlockersByEmployee(ctx context.Context, arg GetActiveBlockersByEmployeeParams) ([]GetActiveBlockersByEmployeeRow, error) {
+	rows, err := q.db.Query(ctx, getActiveBlockersByEmployee, arg.TenantID, arg.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetActiveBlockersByEmployeeRow{}
+	for rows.Next() {
+		var i GetActiveBlockersByEmployeeRow
+		if err := rows.Scan(&i.Category, &i.Description, &i.RecurrenceCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getBlockerCategoryBreakdown = `-- name: GetBlockerCategoryBreakdown :many
 SELECT category, COUNT(*) as count
 FROM world_model_blockers
@@ -262,6 +405,98 @@ func (q *Queries) GetBlockerCategoryBreakdown(ctx context.Context, tenantID pgty
 	for rows.Next() {
 		var i GetBlockerCategoryBreakdownRow
 		if err := rows.Scan(&i.Category, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getEscalatingBlockers = `-- name: GetEscalatingBlockers :many
+SELECT b.id, b.employee_id, e.name as employee_name, b.category, b.description,
+       b.recurrence_count, b.first_seen_at
+FROM world_model_blockers b
+JOIN employees e ON b.employee_id = e.id
+WHERE b.tenant_id = $1 AND b.status IN ('active', 'recurring') AND b.recurrence_count >= 3
+ORDER BY b.recurrence_count DESC
+`
+
+type GetEscalatingBlockersRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	EmployeeID      pgtype.UUID        `json:"employee_id"`
+	EmployeeName    string             `json:"employee_name"`
+	Category        string             `json:"category"`
+	Description     string             `json:"description"`
+	RecurrenceCount int32              `json:"recurrence_count"`
+	FirstSeenAt     pgtype.Timestamptz `json:"first_seen_at"`
+}
+
+// Blockers with recurrence >= 3 that are still active
+func (q *Queries) GetEscalatingBlockers(ctx context.Context, tenantID pgtype.UUID) ([]GetEscalatingBlockersRow, error) {
+	rows, err := q.db.Query(ctx, getEscalatingBlockers, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetEscalatingBlockersRow{}
+	for rows.Next() {
+		var i GetEscalatingBlockersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EmployeeID,
+			&i.EmployeeName,
+			&i.Category,
+			&i.Description,
+			&i.RecurrenceCount,
+			&i.FirstSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRecentGrowthEventsForTenant = `-- name: GetRecentGrowthEventsForTenant :many
+SELECT g.employee_id, e.name as employee_name, g.event_type, g.description, g.detected_at
+FROM world_model_growth_events g
+JOIN employees e ON g.employee_id = e.id
+WHERE g.tenant_id = $1 AND g.detected_at > now() - INTERVAL '7 days'
+ORDER BY g.detected_at DESC
+LIMIT 20
+`
+
+type GetRecentGrowthEventsForTenantRow struct {
+	EmployeeID   pgtype.UUID        `json:"employee_id"`
+	EmployeeName string             `json:"employee_name"`
+	EventType    string             `json:"event_type"`
+	Description  string             `json:"description"`
+	DetectedAt   pgtype.Timestamptz `json:"detected_at"`
+}
+
+// Growth events in the last 7 days for recommendation context
+func (q *Queries) GetRecentGrowthEventsForTenant(ctx context.Context, tenantID pgtype.UUID) ([]GetRecentGrowthEventsForTenantRow, error) {
+	rows, err := q.db.Query(ctx, getRecentGrowthEventsForTenant, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetRecentGrowthEventsForTenantRow{}
+	for rows.Next() {
+		var i GetRecentGrowthEventsForTenantRow
+		if err := rows.Scan(
+			&i.EmployeeID,
+			&i.EmployeeName,
+			&i.EventType,
+			&i.Description,
+			&i.DetectedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

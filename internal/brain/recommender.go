@@ -13,6 +13,12 @@ import (
 	sqlc "github.com/tonypk/ai-management-brain/internal/db/sqlc"
 )
 
+// WorldModelContextProvider provides formatted World Model data for prompt injection.
+// Implemented by worldmodel.Service to avoid import cycles (worldmodel imports brain).
+type WorldModelContextProvider interface {
+	ForRecommenderPrompt(ctx context.Context, tenantID pgtype.UUID) (string, error)
+}
+
 // Recommender generates AI management recommendations via daily scan and realtime triggers.
 // Uses *AnthropicClient directly (not LLMClient interface) to access ChatLong() for daily scan.
 type Recommender struct {
@@ -20,11 +26,17 @@ type Recommender struct {
 	queries        *sqlc.Queries
 	contextService *ContextService
 	memEval        *MemoryPatternEvaluator
+	wmService      WorldModelContextProvider
 }
 
 // SetMemoryEvaluator injects the memory pattern evaluator after construction.
 func (r *Recommender) SetMemoryEvaluator(eval *MemoryPatternEvaluator) {
 	r.memEval = eval
+}
+
+// SetWorldModelService injects the World Model service for recommendation context.
+func (r *Recommender) SetWorldModelService(svc WorldModelContextProvider) {
+	r.wmService = svc
 }
 
 // RecommendationInput holds data for a single recommendation to be created.
@@ -324,6 +336,22 @@ Output a JSON array of recommendations. Each element:
 
 	userPrompt := fmt.Sprintf("## Team Data\n\n%s", contextData)
 
+	// Inject World Model context as 9th data source
+	if r.wmService != nil {
+		wmText, wmErr := r.wmService.ForRecommenderPrompt(ctx, tenantID)
+		if wmErr == nil && wmText != "" {
+			userPrompt += "\n\n## Team World Model Analysis\n\n" + wmText
+			userPrompt += "\nBased on the World Model data above, also check for:\n" +
+				"1. Knowledge Silos (bus factor=1): recommend knowledge sharing or cross-training\n" +
+				"2. Collaboration Gaps: if people work on related problems without collaborating, recommend pairing\n" +
+				"3. Skill-Blocker Matches: if someone's blocker matches another's expertise, recommend pairing\n" +
+				"4. Escalating Blockers: if a blocker recurs 3+ times, recommend escalation or process change\n" +
+				"5. Growth Opportunities: if someone recently leveled up a skill, suggest stretch assignments\n" +
+				"6. Risk Patterns: surface team-level risks from AI insights\n\n" +
+				"Include \"world_model_evidence\" in the evidence field when generating recommendations from these patterns."
+		}
+	}
+
 	// Use ChatLong for 4096 output tokens — daily scan generates up to 5 full recommendations
 	response, err := r.llm.ChatLong(ctx, systemPrompt, userPrompt)
 	if err != nil {
@@ -405,4 +433,11 @@ func (r *Recommender) RealtimeEvaluate(ctx context.Context, tenantID pgtype.UUID
 	}
 
 	return r.storeIfNew(ctx, tenantID, *input, "realtime_trigger")
+}
+
+// StoreRecommendationIfNew stores a recommendation with dedup check.
+// Used by external trigger evaluators (e.g., world model triggers) that can't
+// call RealtimeEvaluate directly due to import cycles.
+func (r *Recommender) StoreRecommendationIfNew(ctx context.Context, tenantID pgtype.UUID, input RecommendationInput, source string) error {
+	return r.storeIfNew(ctx, tenantID, input, source)
 }

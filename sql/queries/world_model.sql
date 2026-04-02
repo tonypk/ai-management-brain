@@ -165,3 +165,56 @@ FROM world_model_blockers
 WHERE tenant_id = $1 AND status IN ('active', 'recurring')
 GROUP BY category
 ORDER BY count DESC;
+
+-- ===== Recommender Triggers =====
+
+-- name: FindKnowledgeSilos :many
+-- Skills where only 1 employee has confidence > 0.5 and that employee has confidence > 0.7
+SELECT s.skill_name, s.employee_id, e.name as employee_name, s.confidence, s.mention_count
+FROM world_model_skills s
+JOIN employees e ON s.employee_id = e.id
+WHERE s.tenant_id = $1
+  AND s.confidence > 0.7
+  AND s.skill_name IN (
+    SELECT skill_name FROM world_model_skills
+    WHERE tenant_id = $1 AND confidence > 0.5
+    GROUP BY skill_name HAVING count(*) = 1
+  )
+ORDER BY s.confidence DESC;
+
+-- name: FindSkillMatchForBlocker :many
+-- Find employees who have a skill matching a blocker category (excluding the blocked employee)
+SELECT s.employee_id, e.name as employee_name, s.skill_name, s.confidence, s.proficiency
+FROM world_model_skills s
+JOIN employees e ON s.employee_id = e.id
+WHERE s.tenant_id = $1
+  AND s.skill_name ILIKE '%' || $2 || '%'
+  AND s.confidence > 0.6
+  AND s.employee_id != $3
+ORDER BY s.confidence DESC
+LIMIT 3;
+
+-- name: GetEscalatingBlockers :many
+-- Blockers with recurrence >= 3 that are still active
+SELECT b.id, b.employee_id, e.name as employee_name, b.category, b.description,
+       b.recurrence_count, b.first_seen_at
+FROM world_model_blockers b
+JOIN employees e ON b.employee_id = e.id
+WHERE b.tenant_id = $1 AND b.status IN ('active', 'recurring') AND b.recurrence_count >= 3
+ORDER BY b.recurrence_count DESC;
+
+-- name: GetRecentGrowthEventsForTenant :many
+-- Growth events in the last 7 days for recommendation context
+SELECT g.employee_id, e.name as employee_name, g.event_type, g.description, g.detected_at
+FROM world_model_growth_events g
+JOIN employees e ON g.employee_id = e.id
+WHERE g.tenant_id = $1 AND g.detected_at > now() - INTERVAL '7 days'
+ORDER BY g.detected_at DESC
+LIMIT 20;
+
+-- name: GetActiveBlockersByEmployee :many
+-- Active blockers for a specific employee (used by compound_risk trigger)
+SELECT category, description, recurrence_count
+FROM world_model_blockers
+WHERE tenant_id = $1 AND employee_id = $2 AND status IN ('active', 'recurring')
+ORDER BY recurrence_count DESC;
