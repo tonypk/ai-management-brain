@@ -434,3 +434,10 @@ func (r *Recommender) RealtimeEvaluate(ctx context.Context, tenantID pgtype.UUID
 
 	return r.storeIfNew(ctx, tenantID, *input, "realtime_trigger")
 }
+
+// StoreRecommendationIfNew stores a recommendation with dedup check.
+// Used by external trigger evaluators (e.g., world model triggers) that can't
+// call RealtimeEvaluate directly due to import cycles.
+func (r *Recommender) StoreRecommendationIfNew(ctx context.Context, tenantID pgtype.UUID, input RecommendationInput, source string) error {
+	return r.storeIfNew(ctx, tenantID, input, source)
+}
