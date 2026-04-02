@@ -91,5 +91,5 @@ COMMENT ON COLUMN world_model_insights.dimension IS 'rhythm | context | risk | o
 
 CREATE INDEX idx_wm_insights_tenant_dim ON world_model_insights(tenant_id, dimension);
 CREATE INDEX idx_wm_insights_expires ON world_model_insights(expires_at);
-CREATE INDEX idx_wm_insights_active ON world_model_insights(tenant_id, expires_at)
-  WHERE expires_at > now();
+-- Note: Partial index with now() is not possible (IMMUTABLE required).
+-- Runtime queries filter by expires_at > now() using idx_wm_insights_expires.
