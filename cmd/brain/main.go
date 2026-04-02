@@ -1478,6 +1478,9 @@ func main() {
 	wmDecay := worldmodel.NewDecayRunner(queries)
 	wmInsights := worldmodel.NewInsightsGenerator(queries, llmService)
 
+	// Wire World Model context to summarizer
+	summarizer.SetWorldModelContextFn(wmService.ForSummaryContext)
+
 	// Create command handler and register commands
 	cmdHandler := bot.NewCommandHandler(botDB, nil, nil, cfg.BossTelegramID)
 	cmdHandler.SetGroupDB(&groupDBAdapter{q: queries})

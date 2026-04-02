@@ -42,13 +42,19 @@ type SummarizerDB interface {
 
 // Summarizer generates team summaries from daily reports.
 type Summarizer struct {
-	db  SummarizerDB
-	llm *brain.LLMService
+	db              SummarizerDB
+	llm             *brain.LLMService
+	worldModelCtxFn func(ctx context.Context, tenantID string) (string, error)
 }
 
 // NewSummarizer creates a new summarizer.
 func NewSummarizer(db SummarizerDB, llm *brain.LLMService) *Summarizer {
 	return &Summarizer{db: db, llm: llm}
+}
+
+// SetWorldModelContextFn sets the function to retrieve World Model context for summaries.
+func (s *Summarizer) SetWorldModelContextFn(fn func(ctx context.Context, tenantID string) (string, error)) {
+	s.worldModelCtxFn = fn
 }
 
 // Generate creates a summary for the given tenant and date using the provided engine.
@@ -90,6 +96,17 @@ func (s *Summarizer) Generate(ctx context.Context, tenantID, date string, engine
 		summaryConfig.Highlight,
 		summaryConfig.Flag,
 	)
+
+	// Inject World Model context if available
+	if s.worldModelCtxFn != nil {
+		wmCtx, err := s.worldModelCtxFn(ctx, tenantID)
+		if err != nil {
+			slog.Warn("get world model context for summary", "error", err)
+		} else if wmCtx != "" {
+			systemPrompt += "\n\n" + wmCtx
+			systemPrompt += "\n\nIMPORTANT: Use the World Model context above to identify patterns, suggest pairings, and flag risks in your summary. Don't just list today's reports — connect them to the team's knowledge graph."
+		}
+	}
 
 	// Generate via LLM (if available)
 	var content string
