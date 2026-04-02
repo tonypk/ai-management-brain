@@ -683,3 +683,69 @@ type WorkingMemorySnapshot struct {
 	GeneratedBy  pgtype.Text        `json:"generated_by"`
 	GeneratedAt  pgtype.Timestamptz `json:"generated_at"`
 }
+
+// Recurring blocker patterns per employee
+type WorldModelBlocker struct {
+	ID         pgtype.UUID `json:"id"`
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	EmployeeID pgtype.UUID `json:"employee_id"`
+	// cross_team | tooling | requirements | skills_gap | external
+	Category        string             `json:"category"`
+	Description     string             `json:"description"`
+	Status          string             `json:"status"`
+	FirstSeenAt     pgtype.Timestamptz `json:"first_seen_at"`
+	ResolvedAt      pgtype.Timestamptz `json:"resolved_at"`
+	RecurrenceCount int32              `json:"recurrence_count"`
+}
+
+// Skill milestones and growth events detected from check-ins
+type WorldModelGrowthEvent struct {
+	ID         pgtype.UUID `json:"id"`
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	EmployeeID pgtype.UUID `json:"employee_id"`
+	// new_skill | skill_upgrade | first_solo | mentoring_others
+	EventType   string             `json:"event_type"`
+	Description string             `json:"description"`
+	DetectedAt  pgtype.Timestamptz `json:"detected_at"`
+}
+
+// AI-generated team insights refreshed daily
+type WorldModelInsight struct {
+	ID       pgtype.UUID `json:"id"`
+	TenantID pgtype.UUID `json:"tenant_id"`
+	// rhythm | context | risk | opportunity
+	Dimension   string             `json:"dimension"`
+	InsightText string             `json:"insight_text"`
+	Evidence    []byte             `json:"evidence"`
+	Confidence  pgtype.Numeric     `json:"confidence"`
+	GeneratedAt pgtype.Timestamptz `json:"generated_at"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+}
+
+// Collaboration graph edges extracted from check-ins
+type WorldModelRelationship struct {
+	ID          pgtype.UUID `json:"id"`
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	EmployeeAID pgtype.UUID `json:"employee_a_id"`
+	EmployeeBID pgtype.UUID `json:"employee_b_id"`
+	// collaborates (symmetric, a<b enforced in app) | mentors | blocks | depends_on (directed, a→b)
+	RelationType     string             `json:"relation_type"`
+	Context          pgtype.Text        `json:"context"`
+	Strength         pgtype.Numeric     `json:"strength"`
+	LastSeenAt       pgtype.Timestamptz `json:"last_seen_at"`
+	InteractionCount int32              `json:"interaction_count"`
+}
+
+// Skills extracted from daily check-ins with confidence decay
+type WorldModelSkill struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	EmployeeID   pgtype.UUID        `json:"employee_id"`
+	SkillName    string             `json:"skill_name"`
+	Proficiency  string             `json:"proficiency"`
+	Source       string             `json:"source"`
+	Confidence   pgtype.Numeric     `json:"confidence"`
+	FirstSeenAt  pgtype.Timestamptz `json:"first_seen_at"`
+	LastSeenAt   pgtype.Timestamptz `json:"last_seen_at"`
+	MentionCount int32              `json:"mention_count"`
+}
