@@ -14,6 +14,7 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
 	"github.com/tonypk/ai-management-brain/internal/seats"
 	"github.com/tonypk/ai-management-brain/internal/service"
+	"github.com/tonypk/ai-management-brain/internal/worldmodel"
 )
 
 // RouterConfig holds dependencies for the API router.
@@ -43,6 +44,7 @@ type RouterConfig struct {
 	ExecPlanner     *brain.ExecutionPlanner // nil = planning disabled
 	IncentiveEngine *brain.IncentiveEngine  // nil = incentive calc disabled
 	ConsultingEngine *brain.ConsultingEngine // nil = consulting features disabled
+	WorldModelService *worldmodel.Service // nil = world model disabled
 }
 
 // NewRouter creates the API router with public and protected routes.
@@ -340,6 +342,20 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			state.GET("/signals", handleListExecutionSignals(cfg.Queries))
 			state.GET("/risks", handleGetTopRisks(cfg.Queries))
 			state.GET("/memory", handleGetWorkingMemory(cfg.Queries))
+		}
+
+		// World Model
+		if cfg.WorldModelService != nil {
+			wm := protected.Group("/world-model")
+			wm.Use(RequireRole("boss"))
+			{
+				wm.GET("/overview", worldmodel.HandleGetOverview(cfg.WorldModelService))
+				wm.GET("/skills", worldmodel.HandleGetSkills(cfg.WorldModelService))
+				wm.GET("/relationships", worldmodel.HandleGetRelationships(cfg.WorldModelService))
+				wm.GET("/blockers", worldmodel.HandleGetBlockers(cfg.WorldModelService))
+				wm.GET("/insights", worldmodel.HandleGetInsights(cfg.WorldModelService))
+			}
+			protected.GET("/employees/:id/world-model", worldmodel.HandleGetEmployeeWorldModel(cfg.WorldModelService))
 		}
 
 		// Memory routes (optional — requires memory engine)

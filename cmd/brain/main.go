@@ -34,6 +34,7 @@ import (
 	"github.com/tonypk/ai-management-brain/internal/scheduler"
 	"github.com/tonypk/ai-management-brain/internal/seats"
 	"github.com/tonypk/ai-management-brain/internal/service"
+	"github.com/tonypk/ai-management-brain/internal/worldmodel"
 )
 
 // engineForTenant returns the appropriate engine for a tenant (blended or single mentor).
@@ -1471,6 +1472,12 @@ func main() {
 	alertChecker := report.NewAlertChecker(reportDB, channelSender)
 	analyzer := report.NewAnalyzer(reportDB, llmService)
 
+	// World Model components
+	wmExtractor := worldmodel.NewExtractor(llmService, queries)
+	wmService := worldmodel.NewService(queries)
+	wmDecay := worldmodel.NewDecayRunner(queries)
+	wmInsights := worldmodel.NewInsightsGenerator(queries, llmService)
+
 	// Create command handler and register commands
 	cmdHandler := bot.NewCommandHandler(botDB, nil, nil, cfg.BossTelegramID)
 	cmdHandler.SetGroupDB(&groupDBAdapter{q: queries})
@@ -1709,6 +1716,14 @@ func main() {
 							slog.Error("report analysis failed", "employee_id", eid, "error", err)
 						}
 					}(empID, emp.TenantID, today)
+
+					// World Model extraction
+					go func(tid, eid string, ans map[string]string) {
+						answersJSON, _ := json.Marshal(ans)
+						if err := wmExtractor.ExtractFromReport(context.Background(), tid, eid, string(answersJSON)); err != nil {
+							slog.Error("world model extraction failed", "employee_id", eid, "error", err)
+						}
+					}(emp.TenantID, empID, answers)
 				}
 				return sendReply(msg)
 			}
@@ -1795,6 +1810,14 @@ func main() {
 								slog.Error("report analysis failed", "employee_id", employeeID, "error", err)
 							}
 						}()
+
+						// World Model extraction
+						go func(tid, eid string, ans map[string]string) {
+							answersJSON, _ := json.Marshal(ans)
+							if err := wmExtractor.ExtractFromReport(context.Background(), tid, eid, string(answersJSON)); err != nil {
+								slog.Error("world model extraction failed", "employee_id", eid, "error", err)
+							}
+						}(tenantID, employeeID, answers)
 					}
 					return msg, nil
 				}
@@ -2048,6 +2071,18 @@ func main() {
 	if err != nil {
 		slog.Error("failed to create scheduler", "error", err)
 		os.Exit(1)
+	}
+
+	// World Model cron jobs
+	if err := sched.AddJob("wm_decay", "0 3 * * *", func(ctx context.Context) error {
+		return wmDecay.RunForAllTenants(ctx)
+	}); err != nil {
+		slog.Error("failed to add wm_decay job", "error", err)
+	}
+	if err := sched.AddJob("wm_insights", "15 19 * * *", func(ctx context.Context) error {
+		return wmInsights.GenerateForAllTenants(ctx)
+	}); err != nil {
+		slog.Error("failed to add wm_insights job", "error", err)
 	}
 
 	// Boss employee info for proactive actions (channel-agnostic)
@@ -2496,6 +2531,7 @@ func main() {
 		ExecPlanner:      execPlanner,
 		IncentiveEngine:  incentiveEngine,
 		ConsultingEngine: consultingEngine,
+		WorldModelService: wmService,
 	})
 
 	// Health check (public, outside /api/v1)
