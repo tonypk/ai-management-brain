@@ -29,6 +29,7 @@ import {
   TrophyOutline as IncentivesIcon,
   PulseOutline as StateIcon,
   FlashOutline as RecommendationsIcon,
+  GlobeOutline as WorldModelIcon,
 } from '@vicons/ionicons5'
 import { getRecommendationSummary } from '@/api/recommendations'
 import { useAuthStore } from '@/stores/auth'
@@ -63,6 +64,7 @@ const menuOptions: MenuOption[] = [
   { type: 'group', label: 'Observe', key: 'observe-group', children: [
     { label: 'Dashboard', key: 'dashboard', icon: renderIcon(DashboardIcon) },
     { label: 'Company State', key: 'state', icon: renderIcon(StateIcon) },
+    { label: 'World Model', key: 'world-model', icon: renderIcon(WorldModelIcon) },
     { label: 'KPI Metrics', key: 'metrics', icon: renderIcon(MetricsIcon) },
     { label: 'Alerts', key: 'alerts', icon: renderIcon(AlertIcon) },
     { label: 'Reports', key: 'reports', icon: renderIcon(ReportIcon) },
