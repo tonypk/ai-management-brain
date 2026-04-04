@@ -112,16 +112,16 @@ func (h *BillingHandler) HandleStripeWebhook(c *gin.Context) {
 	switch event.Type {
 	case "checkout.session.completed":
 		slog.Info("billing: checkout completed", "event", event.Type)
-		// TODO: Activate subscription for tenant
+		// FUTURE: Activate subscription for tenant (requires Stripe SDK + subscriptions table)
 	case "customer.subscription.updated":
 		slog.Info("billing: subscription updated", "event", event.Type)
-		// TODO: Update tenant subscription status
+		// FUTURE: Update tenant subscription status in DB
 	case "customer.subscription.deleted":
 		slog.Info("billing: subscription cancelled", "event", event.Type)
-		// TODO: Downgrade tenant to free
+		// FUTURE: Downgrade tenant to free plan
 	case "invoice.payment_failed":
 		slog.Warn("billing: payment failed", "event", event.Type)
-		// TODO: Notify tenant of payment failure
+		// FUTURE: Notify tenant of payment failure via channel
 	default:
 		slog.Debug("billing: unhandled event", "type", event.Type)
 	}

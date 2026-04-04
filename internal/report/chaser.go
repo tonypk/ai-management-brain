@@ -133,8 +133,7 @@ func (c *Chaser) ChaseAll(ctx context.Context, tenantID, date, mentorID string) 
 			slog.Error("create chase log", "employee_id", emp.ID, "error", err)
 		}
 
-		// TODO: emit ChaseCompleted event from chase handler
-		// Requires modifying CreateChaseLog to return the created log ID
+		// FUTURE: emit ChaseCompleted event (requires CreateChaseLog returning log ID)
 	}
 
 	return nil

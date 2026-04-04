@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { NConfigProvider, NMessageProvider, NDialogProvider, type GlobalThemeOverrides } from 'naive-ui'
 import AppLayout from '@/layouts/AppLayout.vue'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 import LandingLayout from '@/layouts/LandingLayout.vue'
 
 const route = useRoute()
+const router = useRouter()
+const routerReady = ref(false)
+router.isReady().then(() => { routerReady.value = true })
 
 const layoutName = computed(() => {
   return (route.meta.layout as string) || 'app'
@@ -34,7 +37,7 @@ const themeOverrides: GlobalThemeOverrides = {
   <NConfigProvider :theme-overrides="themeOverrides">
     <NMessageProvider>
       <NDialogProvider>
-        <component :is="layoutComponent">
+        <component v-if="routerReady" :is="layoutComponent">
           <router-view />
         </component>
       </NDialogProvider>
