@@ -1,8 +1,8 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "6.1.0"
-description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, memory-driven AI recommendation engine, bidirectional Notion/Sheets sync. Works instantly after install. Connect manageaibrain.com MCP for full team automation: 33 MCP tools, auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, memory-driven AI recommendations, data sync to Notion/Sheets, 23+ platform messaging. v6.1: Memory engine feeds employee behavioral patterns into recommendations — stress detection, repeated blockers, growth signals, engagement drops. Recommendation outcomes become strategy memories for continuous learning."
+version: "6.2.0"
+description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, memory-driven AI recommendation engine, bidirectional Notion/Sheets sync. Works instantly after install. Connect MCP via CLI (stdio) or HTTP for full team automation: 33 MCP tools, auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, memory-driven AI recommendations, data sync to Notion/Sheets, 23+ platform messaging. v6.2: CLI (stdio) MCP transport — run locally with one API key, no HTTP auth needed. v6.1: Memory engine feeds employee behavioral patterns into recommendations."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
@@ -65,6 +65,31 @@ clawhub install boss-ai-agent
 
 ### Team Operations Mode (connect MCP first)
 
+**Option A: CLI (stdio) — Recommended**
+
+Add to your MCP config (Claude Code `settings.json`, Hermes Agent config, etc.):
+
+```json
+{
+  "mcpServers": {
+    "management-brain": {
+      "command": "node",
+      "args": ["<path-to>/ai-management-brain/mcp-server/dist/index.js"],
+      "env": {
+        "MANAGEMENT_BRAIN_API_KEY": "mb_your_api_key_here",
+        "MANAGEMENT_BRAIN_BASE_URL": "https://manageaibrain.com"
+      }
+    }
+  }
+}
+```
+
+**Option B: HTTP**
+
+Connect to `https://manageaibrain.com/mcp` with `Authorization: Bearer <MCP_HTTP_API_KEY>`. For ChatGPT, Gemini, and web-based clients.
+
+Then:
+
 ```
 /boss-ai-agent
 → Running in Team Operations Mode — connected to your team.
@@ -79,7 +104,11 @@ The skill auto-detects which mode to use based on whether MCP tools are availabl
 
 **Advisor Mode**: AI uses embedded mentor frameworks (decision matrices, culture packs, scenario templates) to answer management questions directly. No network communication — everything runs from the skill instructions.
 
-**Team Operations Mode**: AI connects to `manageaibrain.com/mcp` (requires `MANAGEMENT_BRAIN_API_KEY`) for real team operations. Tool parameters (employee names, discussion topics, message content) are sent to the cloud server for processing. Write tools deliver messages to employees via connected platforms. Local files (`config.json`, chat history, memory) stay on your machine and are not transmitted to the server.
+**Team Operations Mode**: AI connects to the MCP server for real team operations. Two transport options:
+- **CLI (stdio)**: Run `node mcp-server/dist/index.js` locally — only needs `MANAGEMENT_BRAIN_API_KEY`. Recommended for Claude Code, Hermes Agent, and stdio-capable clients.
+- **HTTP**: Connect to `manageaibrain.com/mcp` — needs `MCP_HTTP_API_KEY` Bearer auth. For ChatGPT, Gemini, and web-based clients.
+
+Tool parameters (employee names, discussion topics, message content) are sent to the cloud server for processing. Write tools deliver messages to employees via connected platforms. Local files (`config.json`, chat history, memory) stay on your machine and are not transmitted to the server.
 
 **Persistent behavior** (Team Operations only): Registers up to 6 cron jobs that run autonomously — including jobs that send messages to employees. Solo founder mode (team=0) only registers 3 (briefing, signalScan, sync). Review schedules in `config.json` before activating. Manage with `cron list` / `cron remove`.
 
@@ -223,7 +252,7 @@ Convene 6 AI executives for cross-functional strategic analysis:
 | `report_sync_result` | Report sync completion with stats and pulled items |
 | `configure_sync` | Configure sync: storage type, entity types, frequency |
 
-**MCP endpoint**: `https://manageaibrain.com/mcp`
+**MCP transport**: CLI (stdio) recommended — `node mcp-server/dist/index.js` with `MANAGEMENT_BRAIN_API_KEY`. HTTP alternative: `https://manageaibrain.com/mcp` with `MCP_HTTP_API_KEY` Bearer auth.
 
 ## Web Dashboard (Team Operations Mode)
 
@@ -250,6 +279,10 @@ Boss AI Agent 是老板的 AI 管理中间件。安装后立即可用（Advisor 
 
 **双向数据同步（v6.0 新增）：** 支持与 Notion 和 Google Sheets 双向同步。工作时间每 30 分钟自动同步，支持冲突检测和解决。
 
+**MCP 连接方式（v6.2 新增）：** 支持两种 MCP 传输方式：
+- **CLI (stdio)**（推荐）— 本地运行 MCP server，只需 `MANAGEMENT_BRAIN_API_KEY`，无需 HTTP 认证。适合 Claude Code、Hermes Agent。
+- **HTTP** — 连接 `manageaibrain.com/mcp`，需要 `MCP_HTTP_API_KEY`。适合 ChatGPT、Gemini 等。
+
 **数据说明：** 顾问模式不发送任何数据到云端。团队运营模式中，MCP 工具参数发送至 `manageaibrain.com` 处理。同步通过 OpenClaw 连接器访问 Notion/Sheets，Skill 不直接管理令牌。
 
 安装：`clawhub install boss-ai-agent`
@@ -257,5 +290,7 @@ Boss AI Agent 是老板的 AI 管理中间件。安装后立即可用（Advisor 
 ## Links
 
 - Website: https://manageaibrain.com
+- MCP Server — CLI (stdio): `node mcp-server/dist/index.js` with `MANAGEMENT_BRAIN_API_KEY`
+- MCP Server — HTTP: `https://manageaibrain.com/mcp` with `MCP_HTTP_API_KEY` Bearer auth
 - GitHub: https://github.com/tonypk/ai-management-brain
 - ClawHub: https://clawhub.ai/tonypk/boss-ai-agent

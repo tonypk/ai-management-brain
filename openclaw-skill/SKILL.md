@@ -1,8 +1,8 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "6.0.0"
-description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, AI recommendation engine, bidirectional Notion/Sheets sync. Works instantly after install. Connect manageaibrain.com MCP for full team automation: 33 MCP tools, auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, AI recommendations, data sync to Notion/Sheets, 23+ platform messaging. Integrates with OpenClaw MCP connectors to build a company context layer — the foundation for all management intelligence."
+version: "6.2.0"
+description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, AI recommendation engine, bidirectional Notion/Sheets sync. Works instantly after install. Connect MCP for full team automation: 33 MCP tools via CLI (stdio) or HTTP transport. CLI mode: run locally with just MANAGEMENT_BRAIN_API_KEY — no HTTP auth needed. HTTP mode: connect to manageaibrain.com/mcp. Auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, AI recommendations, data sync to Notion/Sheets, 23+ platform messaging."
 user-invocable: true
 emoji: "🤖"
 homepage: "https://manageaibrain.com"
@@ -27,6 +27,52 @@ You are Boss AI Agent — the boss's AI management advisor and operations middle
 The selected mentor's philosophy affects ALL your decisions — check-in questions, risk assessment, communication priority, escalation intensity, summary perspective, and emergency response style. Mentor permeation is total.
 
 Always respond in the boss's language. Auto-detect from conversation context.
+
+## MCP Connection Options
+
+Team Operations Mode requires connecting to the MCP server. Two transport options:
+
+### Option 1: CLI (stdio) — Recommended
+
+Run the MCP server locally as a subprocess. Simpler setup, lower latency, only one key needed.
+
+```json
+{
+  "mcpServers": {
+    "management-brain": {
+      "command": "node",
+      "args": ["<path-to>/ai-management-brain/mcp-server/dist/index.js"],
+      "env": {
+        "MANAGEMENT_BRAIN_API_KEY": "mb_your_api_key_here",
+        "MANAGEMENT_BRAIN_BASE_URL": "https://manageaibrain.com"
+      }
+    }
+  }
+}
+```
+
+- No `MCP_HTTP_API_KEY` needed — stdio mode bypasses HTTP auth
+- Only requires `MANAGEMENT_BRAIN_API_KEY` (the `mb_` prefixed key)
+- Works with Claude Code, Hermes Agent, and any MCP client that supports stdio transport
+
+### Option 2: HTTP (Streamable HTTP)
+
+Connect to the cloud-hosted MCP endpoint. Works with ChatGPT, Gemini, and web-based MCP clients.
+
+- **URL**: `https://manageaibrain.com/mcp`
+- **Auth**: `Authorization: Bearer <MCP_HTTP_API_KEY>`
+- **Accept**: `application/json, text/event-stream`
+- Requires `MCP_HTTP_API_KEY` (separate from `MANAGEMENT_BRAIN_API_KEY`)
+
+### npm install (alternative for CLI)
+
+If you don't have the source code locally:
+
+```bash
+cd /tmp && git clone https://github.com/tonypk/ai-management-brain.git && cd ai-management-brain/mcp-server && npm install && npm run build
+```
+
+Then point `args` to the `dist/index.js` path.
 
 ## Mode Detection
 
@@ -502,11 +548,16 @@ Boss AI Agent 是老板的 AI 管理中间件。安装后立即可用（Advisor 
 
 **数据说明：** 顾问模式不发送任何数据到云端。团队运营模式中，MCP 工具参数发送至 `manageaibrain.com` 处理，本地文件不上传。同步工具通过 OpenClaw 连接器读写 Notion/Sheets，Skill 不直接管理这些工具的令牌。
 
+**MCP 连接方式（v6.2 新增）：** 支持两种 MCP 传输方式：
+- **CLI (stdio)**（推荐）— 本地运行 `node mcp-server/dist/index.js`，只需 `MANAGEMENT_BRAIN_API_KEY`，无需 HTTP 认证。适合 Claude Code、Hermes Agent 等。
+- **HTTP** — 连接 `manageaibrain.com/mcp`，需要 `MCP_HTTP_API_KEY` Bearer 认证。适合 ChatGPT、Gemini 等 Web 客户端。
+
 安装：`clawhub install boss-ai-agent`
 
 ## Links
 
 - Website: https://manageaibrain.com
-- MCP Server (Team Operations Mode): `https://manageaibrain.com/mcp` — cloud-hosted MCP endpoint where all 33 tools are processed. Claude Code connects via stdio; ChatGPT/Gemini connect via MCP HTTP to this URL.
+- MCP Server — CLI (stdio): Run `node mcp-server/dist/index.js` locally with `MANAGEMENT_BRAIN_API_KEY` env var. Recommended for Claude Code, Hermes Agent, and other stdio-capable clients.
+- MCP Server — HTTP: `https://manageaibrain.com/mcp` — cloud-hosted endpoint, requires `MCP_HTTP_API_KEY` Bearer auth. For ChatGPT, Gemini, and web-based MCP clients.
 - GitHub: https://github.com/tonypk/ai-management-brain
 - ClawHub: https://clawhub.ai/tonypk/boss-ai-agent
