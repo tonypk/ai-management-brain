@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "6.2.0"
+version: "6.3.0"
 description: "Boss AI Agent — your AI management advisor. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, execution intelligence engine, AI recommendation engine, bidirectional Notion/Sheets sync. Works instantly after install. Connect MCP for full team automation: 33 MCP tools via CLI (stdio) or HTTP transport. CLI mode: run locally with just MANAGEMENT_BRAIN_API_KEY — no HTTP auth needed. HTTP mode: connect to manageaibrain.com/mcp. Auto check-ins, tracking, KPI metrics, task management, risk signals, incentive scoring, AI recommendations, data sync to Notion/Sheets, 23+ platform messaging."
 user-invocable: true
 emoji: "🤖"
