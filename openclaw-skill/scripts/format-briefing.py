@@ -42,8 +42,10 @@ def format_section(title, items, empty_msg="No items."):
     lines = [f"### {title}"]
     for item in items:
         if isinstance(item, dict):
-            name = item.get("title", item.get("name", item.get("metric_name", str(item))))
+            name = item.get("title", item.get("name", item.get("employee_name", item.get("metric_name", str(item)))))
             detail = item.get("description", item.get("reason", item.get("value", "")))
+            if not detail and item.get("missed_days"):
+                detail = f"{item['missed_days']} consecutive missed days"
             score = item.get("score", item.get("severity", ""))
             score_str = f" [{score:.0%}]" if isinstance(score, (int, float)) and score <= 1 else ""
             lines.append(f"- **{name}**{score_str}: {detail}")

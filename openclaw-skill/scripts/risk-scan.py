@@ -68,8 +68,8 @@ def categorize_risks(signals, overdue, alerts):
     for a in alert_list:
         people.append({
             "name": f"Missed check-ins: {a.get('name', a.get('employee_name', 'Unknown'))}",
-            "score": min(a.get("consecutive_misses", 0) / 5, 1.0),
-            "reason": f"{a.get('consecutive_misses', '?')} consecutive missed days",
+            "score": min(a.get("consecutive_misses", a.get("missed_days", 0)) / 5, 1.0),
+            "reason": f"{a.get('consecutive_misses', a.get('missed_days', '?'))} consecutive missed days",
             "employees": [a.get("name", a.get("employee_name", ""))],
         })
 
