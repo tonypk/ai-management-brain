@@ -35,7 +35,7 @@ This skill uses progressive disclosure to protect context window. Only read refe
 | `references/mcp-tools.md` | All 33 MCP tool descriptions | When you need to pick the right tool for a task |
 | `references/mentors.md` | 16 mentor decision matrices, tags, check-in questions | When applying a non-Fully-Embedded mentor or explaining mentor differences |
 | `references/cultures.md` | 9 culture pack communication rules | When communicating with/about employees from specific cultures |
-| `references/scenarios.md` | 12 scenario step-by-step flows with exact MCP tool sequences | When executing a complex scenario (briefing, risk review, sync, etc.) |
+| `references/scenarios.md` | 14 scenario step-by-step flows with exact MCP tool sequences | When executing a complex scenario (briefing, risk review, consulting, sync, etc.) |
 | `references/setup-guide.md` | MCP connection, architecture, data flow, cron, permissions | When user asks about setup, data privacy, or cron management |
 | `scripts/format-briefing.py` | Morning briefing formatter (mentor-prioritized) | After gathering briefing data via MCP tools (Scenario 3) |
 | `scripts/weekly-report.py` | Weekly report formatter (employee table, KPI, tasks) | After gathering weekly data via MCP tools |
@@ -202,7 +202,7 @@ All Advisor Mode capabilities PLUS 44 MCP tools, 6 cron jobs, bidirectional Noti
 - **1 incentive tool**: `calculate_incentives`
 - **3 sync tools**: `get_sync_manifest`, `report_sync_result`, `configure_sync`
 
-### 12 Automated Scenarios
+### 14 Automated Scenarios
 
 | # | Scenario | Trigger | What happens |
 |---|----------|---------|-------------|
@@ -218,8 +218,10 @@ All Advisor Mode capabilities PLUS 44 MCP tools, 6 cron jobs, bidirectional Noti
 | 10 | Incentive Review | "show incentive scores for {period}" | `get_incentive_scores` → per-employee breakdown, review flags |
 | 11 | AI Recommendations | "any recommendations?" or daily 10:30 AM | `get_recommendations` → AI suggestions with one-click actions |
 | 12 | Data Sync | Cron (every 30min) or "sync to Notion" | Bidirectional Notion/Sheets sync via `get_sync_manifest` → compare → `report_sync_result` |
+| 13 | AI Consulting | "I need help with {problem}" | Multi-session structured consulting: diagnose → action plan → execute → track → close |
+| 14 | World Model | "show team skills" or "team dynamics" | Team capability map: skills, collaborations, growth, AI insights |
 
-For complex scenarios (3, 4, 7, 8, 9, 12), read `references/scenarios.md` for the exact step-by-step tool sequences. Simple scenarios (1, 5, 6, 10, 11) can be executed directly from the table above.
+For complex scenarios (3, 4, 7, 8, 9, 12, 13, 14), read `references/scenarios.md` for the exact step-by-step tool sequences. Simple scenarios (1, 5, 6, 10, 11) can be executed directly from the table above.
 
 ## Mentor System
 

@@ -1,6 +1,6 @@
 # Automated Scenarios — Step-by-Step Flows
 
-Detailed procedural knowledge for each of the 12 automated scenarios. The skill should follow these steps in order — each step builds on the previous one's output.
+Detailed procedural knowledge for each of the 14 automated scenarios. The skill should follow these steps in order — each step builds on the previous one's output.
 
 **Learning context**: Before executing any scenario, read `config.json` and check the `learning` field. Apply preferences:
 - Use `preferred_report_format` to adjust output verbosity and structure
@@ -213,3 +213,87 @@ Detailed procedural knowledge for each of the 12 automated scenarios. The skill 
 6. Write updates to both sides
 7. `report_sync_result` → record items pushed, pulled, conflicts
 8. If conflicts were flagged: present to boss with both versions for resolution
+
+## Scenario 13: AI Consulting Engagement
+
+**Trigger**: "I need help with {business problem}" or "let's consult on {topic}"
+
+This is a multi-session workflow — a single engagement spans multiple conversations, progressing through phases: diagnosis → analysis → action plan → execution → tracking → close.
+
+### Phase A: Start Engagement
+1. `start_consulting` with the boss's problem description → returns engagement_id, complexity tier (simple/standard/complex), and first diagnostic question
+2. Present the engagement overview: tier, category, estimated questions needed
+3. Wait for boss to answer the first question
+
+### Phase B: Diagnosis (2-8 questions depending on tier)
+4. `answer_consulting_question` with engagement_id + boss's answer → returns either next question or "diagnosis complete"
+5. Repeat step 4 until the AI has enough information
+6. When diagnosis completes, the system auto-generates:
+   - Root cause analysis (evidence-based)
+   - Prioritized action plan (3-7 actions depending on tier)
+   - Each action has: title, description, type (create_task/send_message/schedule_meeting/flag_risk), owner, deadline
+
+### Phase C: Review Action Plan
+7. `get_consulting_engagement` with engagement_id → full engagement details with action plan
+8. Present each action to the boss with clear explanation of what will happen
+9. For each action: `review_consulting_action` with action_id + approved (true/false)
+   - Boss can approve all, reject some, or ask for modifications
+10. If boss rejects actions, discuss alternatives and adjust
+
+### Phase D: Execute
+11. `execute_consulting_actions` with engagement_id → dispatches all approved actions
+    - `create_task` type → creates a task in the task system
+    - `send_message` type → sends message to the relevant employee
+    - `schedule_meeting` type → creates a meeting entry
+    - `flag_risk` type → adds to risk register
+12. Confirm to boss what was executed and set expectations for follow-up
+
+### Phase E: Track Progress (subsequent sessions)
+13. `check_consulting_progress` with engagement_id → returns:
+    - Completion percentage
+    - What's on track
+    - What's at risk
+    - Recommended next steps
+14. `list_consulting_actions` with engagement_id → status of each action (pending/approved/rejected/done/failed)
+15. Present progress update to boss; suggest adjustments if actions are failing
+
+### Phase F: Close
+16. When boss is satisfied (or engagement has run its course):
+    `close_consulting_engagement` with engagement_id → generates:
+    - Effectiveness assessment
+    - Lessons learned
+    - Organizational memory (stored for future engagements)
+17. Present retrospective to boss
+18. Apply mentor lens to closing reflection:
+    - **Musk**: "What would we do 10x faster next time?"
+    - **Inamori**: "How did this strengthen the team?"
+    - **Dalio**: "What principles did we validate or update?"
+
+### Listing Past Engagements
+- `list_consulting_engagements` → shows all active and closed engagements with phase and progress percentage
+- Useful for: "what consulting projects are still open?" or "show me past engagements"
+
+## Scenario 14: World Model Exploration
+
+**Trigger**: "show team skills" or "what's the team capable of?" or "team dynamics"
+
+1. `get_world_model` → team-wide view: skills, collaborations, blockers, growth events, AI insights
+2. Present the team capability map:
+   - **Skills matrix**: who knows what, skill confidence levels
+   - **Collaboration graph**: who works with whom most frequently
+   - **Active blockers**: recurring or persistent blockers across the team
+   - **Growth events**: recent skill acquisitions, promotions, role changes
+   - **AI insights**: patterns the AI has noticed (e.g., "Alice and Bob collaborate on all frontend tasks")
+3. For deep-dive on an individual: `get_employee_world_model` with name → shows:
+   - Skill inventory with confidence scores
+   - Growth trajectory (skills gained over time)
+   - Blocker history (what keeps blocking them)
+   - Collaboration patterns (who they work with, on what)
+4. Apply mentor lens:
+   - **Inamori**: highlight growth opportunities and mentoring pairs
+   - **Grove**: map skills to OKR delivery capability
+   - **Musk**: identify skill gaps that slow down execution
+5. Suggest actions based on findings:
+   - Skill gaps → training recommendations or hiring signals
+   - Over-reliance on one person → knowledge sharing or documentation tasks
+   - Growth stalls → 1:1 topics or stretch assignments
