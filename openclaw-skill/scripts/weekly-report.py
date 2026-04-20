@@ -28,7 +28,7 @@ def format_employee_table(report_data):
     if not report_data:
         return "No report data available.\n"
     
-    employees = report_data if isinstance(report_data, list) else report_data.get("employees", report_data.get("rankings", []))
+    employees = report_data if isinstance(report_data, list) else report_data.get("employees", report_data.get("ranking", report_data.get("rankings", [])))
     if not employees:
         return "No employee data.\n"
     

@@ -41,6 +41,7 @@ This skill uses progressive disclosure to protect context window. Only read refe
 | `scripts/weekly-report.py` | Weekly report formatter (employee table, KPI, tasks) | After gathering weekly data via MCP tools |
 | `scripts/risk-scan.py` | Risk dashboard formatter (categorized, actionable) | After gathering risk data via MCP tools (Scenario 8) |
 | `scripts/sync-flow.py` | Sync preview/report formatter (dry-run or post-sync) | Before or after Notion/Sheets sync (Scenario 12) |
+| `scripts/update-learning.py` | Automates learning field updates in config.json | At end of session to persist preferences and patterns |
 
 ## Mode Detection
 
@@ -246,7 +247,7 @@ The skill gets smarter over time by tracking the boss's preferences and decision
 
 ### What to Track
 
-At the **end of each session**, read `config.json` and update the `learning` field:
+At the **end of each session**, use `scripts/update-learning.py` to persist updates (or update `config.json` directly):
 
 - **`preferred_report_format`**: If the boss asks to change report structure, format, or level of detail (e.g., "make it shorter", "add more numbers", "skip the mentor commentary"), record the preference as a short string like `"concise"`, `"data-heavy"`, or `"no-mentor-commentary"`.
 - **`preferred_language`**: The boss's language (auto-detected from first session). Persist so future sessions don't need to re-detect.
@@ -290,6 +291,7 @@ Four Python scripts handle the formatting-heavy work that Claude would otherwise
 | `weekly-report.py` | Weekly review | `--mentor`, `--report`, `--kpi`, `--task-stats`, `--signals` | Team performance + KPI health report |
 | `risk-scan.py` | 8: Risk Review | `--mentor`, `--company-state`, `--top-risks`, `--signals`, `--overdue`, `--alerts` | Categorized risk dashboard + actions |
 | `sync-flow.py` | 12: Data Sync | `--storage`, `--manifest`, `--sync-result`, `--dry-run` | Sync preview or post-sync report |
+| `update-learning.py` | End of session | `--config`, `--preferred-language`, `--add-pattern`, `--session-context`, etc. | Updates learning field in config.json |
 
 ### Usage Pattern
 
