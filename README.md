@@ -23,11 +23,11 @@ curl http://localhost/healthz
 # {"db":"ok","redis":"ok","status":"ok"}
 ```
 
-**9 Management Mentors:** Inamori (稻盛和夫) · Dalio · Grove · Ren (任正非) · Son (孙正义) · Jobs · Bezos · Ma (马云) · Musk (马斯克)
+**16 Management Mentors:** Inamori (稻盛和夫) · Dalio · Grove · Ren (任正非) · Son (孙正义) · Jobs · Bezos · Ma (马云) · Musk · Buffett · Zhang Yiming · Lei Jun · Cao Dewang · Chu Shijian · Meyer · Trout
 
 **9 Culture Packs:** Default · Philippines · Singapore · Indonesia · Sri Lanka · Malaysia · China · USA · India
 
-**Features:** Daily check-ins, AI-powered chase & summaries, mentor blending, anomaly alerts, multi-channel (Telegram + Slack + Lark), Vue3 dashboard, OAuth, billing.
+**Features:** Daily check-ins · AI-powered chase & summaries · 16 mentor philosophies · mentor blending · 9 culture packs · AI C-Suite Board (6 seats) · Consulting Engine (AI McKinsey) · Execution Intelligence (risk signals, KPI dashboards, working memory) · World Model (team skills & growth) · Incentive Calculation · Notion/Sheets bidirectional sync · 14 automated scenarios · multi-channel (Telegram + Slack + Lark + Signal) · Vue3 dashboard · OAuth · billing
 
 ---
 

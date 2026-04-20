@@ -13,13 +13,13 @@
 
 ### Steps
 
-- [ ] 7.1 创建 `configs/cultures/usa.yaml` — 美国文化包（direct communication, individual accountability, data-driven）
-- [ ] 7.2 创建 `configs/cultures/india.yaml` — 印度文化包（hierarchical respect, relationship-first, indirect feedback）
-- [ ] 7.3 创建 `configs/cultures/default.yaml` — 把 Go 代码中 hardcoded 的 default 提取为 YAML，保持一致性
-- [ ] 7.4 更新 `references/mcp-tools.md` — 补充 11 个未文档化工具（consulting 9 + world model 2），总数 33→44
-- [ ] 7.5 更新 SKILL.md 中 tool count 引用（33→44）
-- [ ] 7.6 在 `references/scenarios.md` 中补充 Consulting 场景的完整 step-by-step（用 9 个 consulting 工具）
-- [ ] 7.7 git commit + push
+- [x] 7.1 创建 `configs/cultures/usa.yaml` — 美国文化包（direct, low hierarchy, no warmth required）
+- [x] 7.2 创建 `configs/cultures/india.yaml` — 印度文化包（indirect, high hierarchy, relationship-first, warmth required）
+- [x] 7.3 创建 `configs/cultures/default.yaml` — 中性 default 提取为 YAML
+- [x] 7.4 更新 `references/mcp-tools.md` — 补充 11 个工具（consulting 9 + world model 2），总数 33→44
+- [x] 7.5 更新 SKILL.md 中 tool count 引用（33→44）
+- [x] 7.6 在 `references/scenarios.md` 中补充 Scenario 13 (Consulting) + Scenario 14 (World Model)，总数 12→14
+- [x] 7.7 git commit + push (bb06731)
 
 ---
 
@@ -29,8 +29,8 @@
 
 ### Steps
 
-- [ ] 8.1 修复 README 第 28 行: "6 Culture Packs" → "9 Culture Packs"
-- [ ] 8.2 更新 "Current State" section: v3.0.0→当前版本, 13 MCP tools→44, boss-ai-agent@3.0.0→8.0.0
+- [x] 8.1 修复 README 第 28 行: "6 Culture Packs" → "9 Culture Packs"
+- [x] 8.2 更新 "Current State" section: v3.0.0→v8.0.0, 13→44 tools, boss-ai-agent@8.0.0, 加 Consulting/World Model/Execution Intelligence
 - [ ] 8.3 更新 Roadmap 表格中的 MCP tool 数量
 - [ ] 8.4 补充新功能到 feature list: Consulting Engine, World Model, Execution Intelligence, Sync, Incentives
 - [ ] 8.5 git commit + push
@@ -43,7 +43,7 @@
 
 ### Steps
 
-- [ ] 9.1 修复 `mcp-server/server.ts` 内部版本号 1.0.0→与 package.json 一致
+- [x] 9.1 修复 `mcp-server/server.ts` 内部版本号 1.0.0→1.1.0（与 package.json 一致）
 - [ ] 9.2 验证 44 个工具在 MCP server 中全部注册且可调用
 - [ ] 9.3 git commit + push
 - [ ] 9.4 发布 MCP server 新版本到 npm（`npm publish`）
@@ -86,3 +86,5 @@
 | Date | Phase | What was done | Next |
 |------|-------|---------------|------|
 | 2026-04-20 | Gap Analysis | 完成 skill vs 网站差异分析: 3 HIGH, 7 MEDIUM, 4 LOW | Phase 7.1 |
+| 2026-04-20 | 7+8+9 partial | 3 文化包 YAML, mcp-tools 33→44, README v8.0.0, server.ts 版本修复 | 7.6 scenarios |
+| 2026-04-20 | 7.6 | scenarios.md 补充 Consulting + World Model (12→14 scenarios) | 8.3 README roadmap |
