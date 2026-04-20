@@ -28,13 +28,14 @@ import { NButton, NSpace, NTag, NGrid, NGi, NCard } from 'naive-ui'
     <!-- Integrations -->
     <section style="padding: 40px 0 60px">
       <h2 style="text-align: center; font-size: 28px; font-weight: 700; margin-bottom: 32px">Works With Your Tools</h2>
-      <NGrid :cols="4" :x-gap="20" :y-gap="20" responsive="screen" :item-responsive="true">
+      <NGrid :cols="5" :x-gap="20" :y-gap="20" responsive="screen" :item-responsive="true">
         <NGi v-for="item in [
+          { title: 'MCP CLI', desc: 'Run MCP server locally via stdio. One API key, zero HTTP auth. Works with any MCP client.', code: 'npx -y @tonykk/management-brain-mcp' },
           { title: 'ClawHub', desc: 'Install as an OpenClaw skill. One command, zero config.', code: 'clawhub install boss-ai-agent' },
-          { title: 'Claude Cowork', desc: 'Add as a Claude Code plugin. Your AI mentor lives inside your IDE.', code: '/boss-ai-agent' },
+          { title: 'Claude Code', desc: 'Add as a Claude Code plugin. Your AI mentor lives inside your IDE.', code: '/boss-ai-agent' },
           { title: 'Telegram Bot', desc: 'Full-featured bot for team check-ins, reports, and board discussions.', code: '@aimanagerbrainbot' },
           { title: 'Web Dashboard', desc: 'Full management dashboard with analytics and AI C-Suite controls.', code: 'manageaibrain.com' },
-        ]" :key="item.title" span="4 m:2 l:1">
+        ]" :key="item.title" span="5 m:1">
           <NCard size="small" style="text-align: center; height: 100%">
             <h4 style="font-size: 16px; margin-bottom: 6px">{{ item.title }}</h4>
             <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-bottom: 12px">{{ item.desc }}</p>
@@ -51,9 +52,12 @@ import { NButton, NSpace, NTag, NGrid, NGi, NCard } from 'naive-ui'
         <NGi v-for="f in [
           { title: 'AI C-Suite', desc: 'Assemble your virtual management team — CEO, CFO, CMO, CTO, CHRO, COO. Run board discussions where every seat weighs in on strategic questions.' },
           { title: '16 Management Mentors', desc: 'Inamori, Dalio, Grove, Ren, Son, Jobs, Bezos, Ma, Musk, plus domain experts. Each with unique management philosophies.' },
+          { title: 'Consulting Engine', desc: 'Like hiring McKinsey — describe a business problem, get structured diagnosis, root cause analysis, action plans, and progress tracking across sessions.' },
+          { title: 'Execution Intelligence', desc: 'AI-powered risk signals, KPI dashboards, working memory, and overdue task tracking. 14 automated scenarios keep your team on track.' },
+          { title: 'World Model', desc: 'Team skills map, growth trajectories, collaboration patterns, and AI insights — all extracted automatically from daily check-ins.' },
+          { title: '44 MCP Tools', desc: 'Full management API via CLI (stdio) or HTTP. Check-ins, consulting, sync, incentives, risk signals — all available to any MCP client.' },
           { title: '9 Culture Packs', desc: 'Philippines, Singapore, Indonesia, Sri Lanka, Malaysia, China, USA, India — culturally adapted communication for global teams.' },
-          { title: 'Smart Daily Check-ins', desc: 'AI-powered daily reports with blocker detection, sentiment analysis, and actionable summaries. 7 automated scenarios.' },
-          { title: 'Multi-Channel', desc: 'Telegram, Slack, and Lark support. Meet your team where they already are. Or use the ClawHub skill.' },
+          { title: 'Notion/Sheets Sync', desc: 'Bidirectional sync with Notion and Google Sheets. Auto-detect changes, resolve conflicts, keep everything in sync.' },
           { title: 'Mentor Blending', desc: 'Combine two mentors (e.g., 70% Inamori + 30% Dalio) for a custom management philosophy.' },
         ]" :key="f.title" span="3 m:1">
           <NCard>
@@ -114,11 +118,12 @@ import { NButton, NSpace, NTag, NGrid, NGi, NCard } from 'naive-ui'
     <!-- Install -->
     <section style="padding: 60px 0">
       <h2 style="text-align: center; font-size: 32px; font-weight: 700; margin-bottom: 36px">Install in Seconds</h2>
-      <NGrid :cols="2" :x-gap="24" :y-gap="24" responsive="screen" :item-responsive="true" style="max-width: 800px; margin: 0 auto">
+      <NGrid :cols="3" :x-gap="24" :y-gap="24" responsive="screen" :item-responsive="true" style="max-width: 1100px; margin: 0 auto">
         <NGi v-for="card in [
-          { title: 'ClawHub (OpenClaw Skill)', desc: 'Full management middleware as an OpenClaw skill. 7 automated scenarios, 14 mentors, 9 cultures.', cmd: 'clawhub install boss-ai-agent', features: ['7 automated scenarios', 'Works offline — zero cloud dependency', 'Optional cloud API'] },
-          { title: 'Claude Code / Cowork Plugin', desc: 'Your AI management mentor inside Claude Code. Strategic advice and board discussions while you code.', cmd: '/install-skill management-brain', features: ['In-editor management mentor', 'Board discussions from your terminal', 'Connects to manageaibrain.com cloud'] },
-        ]" :key="card.title" span="2 m:1">
+          { title: 'MCP CLI (stdio)', desc: 'Run 44 MCP tools locally. One API key, no HTTP auth. Recommended for Claude Code, Hermes Agent, and any stdio-capable client.', cmd: 'npx -y @tonykk/management-brain-mcp', features: ['Only needs MANAGEMENT_BRAIN_API_KEY', 'Lower latency — no HTTP overhead', 'Works with any MCP stdio client'] },
+          { title: 'ClawHub (OpenClaw Skill)', desc: 'Full management middleware as an OpenClaw skill. 16 mentors, 9 cultures, 44 MCP tools.', cmd: 'clawhub install boss-ai-agent', features: ['Advisor Mode works offline', 'Team Ops via CLI or HTTP MCP', 'Auto cron jobs for check-ins'] },
+          { title: 'MCP HTTP', desc: 'Cloud-hosted MCP endpoint for web-based clients. ChatGPT, Gemini, and browser-based MCP tools.', cmd: 'manageaibrain.com/mcp', features: ['Streamable HTTP transport', 'Bearer token auth', 'No local install needed'] },
+        ]" :key="card.title" span="3 m:1">
           <NCard>
             <h3 style="font-size: 20px; margin-bottom: 8px">{{ card.title }}</h3>
             <p style="color: #64748b; font-size: 14px; line-height: 1.5; margin-bottom: 16px">{{ card.desc }}</p>
@@ -140,7 +145,7 @@ import { NButton, NSpace, NTag, NGrid, NGi, NCard } from 'naive-ui'
         <NGi v-for="plan in [
           { name: 'Open Source', price: 'Free', desc: 'Self-hosted, Apache 2.0', features: ['Complete Bot + API + Dashboard', '16 mentors + 9 culture packs', 'AI C-Suite with board discussions', 'Single tenant, up to 10 employees', 'ClawHub skill included', 'Docker one-click deploy'], cta: 'Deploy Now', link: 'https://github.com/tonypk/ai-management-brain', featured: false },
           { name: 'Cloud Pro', price: '$29/mo', desc: 'Up to 20 people', features: ['Cloud hosted, zero maintenance', 'All mentors + custom creation', 'Full C-Suite + board discussions', 'Multi-channel (Telegram + Slack)', 'Mentor blending', 'Analytics dashboard'], cta: 'Start Free Trial', link: '/login', featured: true },
-          { name: 'Enterprise', price: '$299/mo', desc: 'Up to 100 people', features: ['Everything in Pro', 'Multi-tenant (departments)', 'BYOK (your own API key)', 'SSO + RBAC', 'Custom mentors and culture packs', 'All channels + Lark + Cowork'], cta: 'Contact Us', link: '/login', featured: false },
+          { name: 'Enterprise', price: '$299/mo', desc: 'Up to 100 people', features: ['Everything in Pro', 'AI Consulting Engine', 'Incentive Calculation', 'Notion/Sheets bidirectional sync', 'Multi-tenant (departments)', 'BYOK (your own API key)', 'SSO + RBAC', 'Custom mentors and culture packs'], cta: 'Contact Us', link: '/login', featured: false },
         ]" :key="plan.name" span="3 m:1">
           <NCard :style="plan.featured ? 'border: 2px solid #6366f1; box-shadow: 0 4px 24px rgba(99,102,241,0.15)' : ''">
             <NTag v-if="plan.featured" type="primary" size="small" style="margin-bottom: 12px">Most Popular</NTag>
