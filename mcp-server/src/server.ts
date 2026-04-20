@@ -62,7 +62,7 @@ function makeClient(): ApiClient | null {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "management-brain",
-    version: "1.1.0",
+    version: "1.2.0",
   });
 
   // --- Group 1: Daily Operations (read) ---

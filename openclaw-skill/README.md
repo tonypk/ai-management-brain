@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "8.0.0"
+version: "9.0.0"
 description: "Boss AI Agent — AI management advisor and team operations middleware. Use this skill whenever the user needs management advice, leadership guidance, or team operations help. 16 mentor philosophies, 9 culture packs, C-Suite board simulation, continuous learning. Works offline as advisor or connected to manageaibrain.com MCP for full 33-tool automation."
 user-invocable: true
 emoji: "🤖"

@@ -1,10 +1,10 @@
 {
   "name": "@tonykk/management-brain-mcp",
-  "version": "1.0.0",
-  "description": "MCP server for AI Management Brain — 9 tools for team management, C-Suite discussions, and employee insights",
+  "version": "1.2.0",
+  "description": "MCP server for AI Management Brain — 44 tools for team management, consulting engine, world model, C-Suite board, execution intelligence, and bidirectional sync",
   "type": "module",
   "bin": {
-    "management-brain-mcp": "./dist/index.js"
+    "management-brain-mcp": "dist/index.js"
   },
   "files": [
     "dist"
@@ -23,11 +23,35 @@
     "management",
     "ai",
     "claude",
-    "model-context-protocol"
+    "model-context-protocol",
+    "team-management",
+    "ai-management",
+    "mentor",
+    "c-suite",
+    "employee",
+    "check-in",
+    "chatgpt",
+    "gemini",
+    "openclaw",
+    "hermes-agent"
   ],
   "license": "MIT",
+  "author": "tonykk",
+  "homepage": "https://manageaibrain.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tonypk/ai-management-brain.git",
+    "directory": "mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/tonypk/ai-management-brain/issues"
+  },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.0"
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.5.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

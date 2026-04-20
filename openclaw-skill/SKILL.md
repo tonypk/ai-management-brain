@@ -1,7 +1,7 @@
 ---
 name: boss-ai-agent
 title: "Boss AI Agent"
-version: "8.0.0"
+version: "9.0.0"
 description: "Boss AI Agent — AI management advisor and team operations middleware. Use this skill whenever the user needs management advice, leadership guidance, or team operations help. Triggers for: 1:1 meeting prep, daily briefings ('what's important today'), team performance reviews (advice and analysis, not templates), risk assessments, KPI health checks, check-in question design, conflict resolution, cross-cultural feedback ('how do I give feedback to my Filipino/Chinese/Indonesian employee'), mentor philosophy application ('what would Musk/Inamori/Ma say'), C-Suite board simulation, promotion/hiring decisions, employee engagement issues, weekly reports, and incentive reviews. Supports 16 mentor philosophies (Musk, Inamori, Ma, Dalio, Grove, Bezos, etc.), 9 culture packs, and learns boss preferences over time. Works offline as advisor or connected to manageaibrain.com MCP for full 33-tool automation (check-ins, tracking, messaging, sync). Use this even if the user doesn't say 'management' explicitly — any people leadership question, team dynamics issue, or boss-level decision qualifies. Do NOT trigger for software development tasks (building apps, APIs, bots, schemas) even if they relate to HR/employees — this skill is for management advice, not code implementation."
 user-invocable: true
 emoji: "🤖"
