@@ -269,7 +269,13 @@ At the **start of each session**, read `config.json` and apply:
 
 ### Learning Boundaries
 
-- Never store sensitive data (employee PII, salaries, credentials) in config.json
+- **Never store sensitive data in config.json** — this includes:
+  - Employee PII (full names in patterns, personal details, contact info)
+  - Salary figures, compensation data, performance scores
+  - API keys, passwords, tokens, credentials
+  - Specific health or personal information from check-ins
+- When recording `decision_patterns`, use abstract descriptions ("promotes-internally", "prefers-async-standups") rather than mentioning specific employees or numbers
+- When recording `last_session_context`, summarize the *topic* ("Reviewed Q1 KPIs") not the *data* ("Revenue was $X, Alice scored 85%")
 - Keep `decision_patterns` to 20 entries max (remove oldest when full)
 - Keep `ignored/adopted_recommendations` to 50 entries max each
 - The boss can say "forget my preferences" or "reset learning" to clear the learning field

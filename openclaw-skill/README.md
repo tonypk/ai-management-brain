@@ -69,6 +69,8 @@ clawhub install boss-ai-agent
 
 Add to your MCP config (Claude Code `settings.json`, Hermes Agent config, etc.):
 
+> **Security**: Replace the placeholder key below with your real API key. Never commit real API keys to version control — use environment variables or a secrets manager instead.
+
 ```json
 {
   "mcpServers": {

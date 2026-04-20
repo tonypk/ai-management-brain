@@ -37,13 +37,23 @@ DEFAULT_LEARNING = {
 }
 
 
+MAX_JSON_SIZE = 10 * 1024 * 1024  # 10MB
+
+
 def load_config(path):
     config_path = Path(path).expanduser()
     if not config_path.exists():
         print(f"Config not found at {config_path}, creating with defaults.", file=sys.stderr)
         return {"learning": deepcopy(DEFAULT_LEARNING)}
-    with open(config_path) as f:
-        return json.load(f)
+    if config_path.stat().st_size > MAX_JSON_SIZE:
+        print(f"Error: {config_path} exceeds 10MB size limit", file=sys.stderr)
+        sys.exit(1)
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Error loading {config_path}: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def save_config(path, config):

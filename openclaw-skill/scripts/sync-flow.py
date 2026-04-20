@@ -18,11 +18,22 @@ from datetime import datetime
 from pathlib import Path
 
 
+MAX_JSON_SIZE = 10 * 1024 * 1024  # 10MB
+
+
 def load_json(path):
     if not path or not Path(path).exists():
         return None
-    with open(path) as f:
-        return json.load(f)
+    file_path = Path(path)
+    if file_path.stat().st_size > MAX_JSON_SIZE:
+        print(f"Error: {path} exceeds 10MB size limit", file=sys.stderr)
+        return None
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Error loading {path}: {e}", file=sys.stderr)
+        return None
 
 
 def analyze_manifest(manifest, storage_type):

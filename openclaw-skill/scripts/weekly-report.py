@@ -17,28 +17,54 @@ from datetime import datetime
 from pathlib import Path
 
 
+MAX_JSON_SIZE = 10 * 1024 * 1024  # 10MB
+
+ALLOWED_MENTORS = frozenset({
+    "musk", "inamori", "ma", "dalio", "grove", "ren", "son", "jobs", "bezos",
+    "buffett", "zhangyiming", "leijun", "caodewang", "chushijian", "meyer", "trout",
+})
+
+MEDAL_SENTIMENT = {"gold": "positive", "silver": "neutral", "bronze": "needs attention"}
+
+
 def load_json(path):
     if not path or not Path(path).exists():
         return None
-    with open(path) as f:
-        return json.load(f)
+    file_path = Path(path)
+    if file_path.stat().st_size > MAX_JSON_SIZE:
+        print(f"Error: {path} exceeds 10MB size limit", file=sys.stderr)
+        return None
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Error loading {path}: {e}", file=sys.stderr)
+        return None
 
 
 def format_employee_table(report_data):
     if not report_data:
         return "No report data available.\n"
-    
+
     employees = report_data if isinstance(report_data, list) else report_data.get("employees", report_data.get("ranking", report_data.get("rankings", [])))
     if not employees:
         return "No employee data.\n"
-    
+
     lines = ["| Rank | Name | Check-in Rate | Sentiment | Highlights |",
              "|------|------|--------------|-----------|------------|"]
     for i, emp in enumerate(employees, 1):
         name = emp.get("name", "Unknown")
-        rate = emp.get("checkin_rate", emp.get("submission_rate", 0))
-        rate_str = f"{rate:.0%}" if isinstance(rate, float) and rate <= 1 else str(rate)
-        sentiment = emp.get("sentiment", emp.get("sentiment_trend", "N/A"))
+        # Handle both direct rate fields and MCP ranking format {days, medal}
+        rate = emp.get("checkin_rate", emp.get("submission_rate"))
+        if rate is not None:
+            rate_str = f"{rate:.0%}" if isinstance(rate, float) and rate <= 1 else str(rate)
+        else:
+            days = emp.get("days", 0)
+            rate_str = f"{days} days" if days else "0 days"
+        sentiment = emp.get("sentiment", emp.get("sentiment_trend"))
+        if sentiment is None:
+            medal = emp.get("medal", "")
+            sentiment = MEDAL_SENTIMENT.get(medal, "N/A")
         highlights = emp.get("highlights", emp.get("summary", ""))
         if isinstance(highlights, list):
             highlights = "; ".join(highlights[:2])
@@ -162,6 +188,9 @@ def main():
     parser.add_argument("--task-stats", help="Path to task stats JSON")
     parser.add_argument("--signals", help="Path to execution signals JSON")
     args = parser.parse_args()
+    if args.mentor not in ALLOWED_MENTORS:
+        print(f"Warning: unknown mentor '{args.mentor}', falling back to 'musk'", file=sys.stderr)
+        args.mentor = "musk"
 
     report = load_json(args.report)
     kpi = load_json(args.kpi)

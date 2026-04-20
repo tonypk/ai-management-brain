@@ -19,6 +19,13 @@ from datetime import datetime
 from pathlib import Path
 
 
+MAX_JSON_SIZE = 10 * 1024 * 1024  # 10MB
+
+ALLOWED_MENTORS = frozenset({
+    "musk", "inamori", "ma", "dalio", "grove", "ren", "son", "jobs", "bezos",
+    "buffett", "zhangyiming", "leijun", "caodewang", "chushijian", "meyer", "trout",
+})
+
 MENTOR_PRIORITIES = {
     "musk":    ["blockers", "delivery_risks", "metrics", "people"],
     "inamori": ["people", "team_harmony", "blockers", "metrics"],
@@ -32,8 +39,16 @@ MENTOR_PRIORITIES = {
 def load_json(path):
     if not path or not Path(path).exists():
         return None
-    with open(path) as f:
-        return json.load(f)
+    file_path = Path(path)
+    if file_path.stat().st_size > MAX_JSON_SIZE:
+        print(f"Error: {path} exceeds 10MB size limit", file=sys.stderr)
+        return None
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Error loading {path}: {e}", file=sys.stderr)
+        return None
 
 
 def format_section(title, items, empty_msg="No items."):
@@ -155,6 +170,9 @@ def main():
     parser.add_argument("--working-memory", help="Path to working memory JSON")
     parser.add_argument("--recommendations", help="Path to recommendations JSON")
     args = parser.parse_args()
+    if args.mentor not in ALLOWED_MENTORS:
+        print(f"Warning: unknown mentor '{args.mentor}', falling back to 'musk'", file=sys.stderr)
+        args.mentor = "musk"
 
     state = load_json(args.company_state)
     risks = load_json(args.top_risks)
