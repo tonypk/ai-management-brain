@@ -1,0 +1,22 @@
+market: Default
+language: English
+timezone: UTC
+version: 1
+
+communication_style:
+  directness: medium
+  hierarchy_respect: medium
+  relationship_first: false
+  group_face: medium
+
+chase_rules:
+  never_name_in_group: false
+  private_before_escalate: false
+  warmth_required: false
+  acknowledge_effort: false
+
+forbidden_patterns: []
+
+preferred_patterns:
+  - "Reminder: please submit your daily report"
+  - "Your report is pending — please submit when ready"

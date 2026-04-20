@@ -11,7 +11,7 @@ metadata:
     optional:
       env:
         - name: "MANAGEMENT_BRAIN_API_KEY"
-          description: "Enables Team Operations Mode — 33 MCP tools, 6 cron jobs, message delivery to employees, bidirectional Notion/Sheets sync. Without this key the skill runs in Advisor Mode only (offline, zero network). Authenticates all MCP calls to manageaibrain.com/mcp. Scoped to one company; each API key maps to exactly one organization. Audit via web dashboard at manageaibrain.com."
+          description: "Enables Team Operations Mode — 44 MCP tools, 6 cron jobs, message delivery to employees, bidirectional Notion/Sheets sync. Without this key the skill runs in Advisor Mode only (offline, zero network). Authenticates all MCP calls to manageaibrain.com/mcp. Scoped to one company; each API key maps to exactly one organization. Audit via web dashboard at manageaibrain.com."
         - name: "BOSS_AI_AGENT_API_KEY"
           description: "Adds read-only GET access to manageaibrain.com/api/v1/ for extended mentor configs and analytics dashboards. Separate from MCP authentication. Falls back to MANAGEMENT_BRAIN_API_KEY if not set. Only relevant in Team Operations Mode."
       config:
@@ -47,7 +47,7 @@ This skill uses progressive disclosure to protect context window. Only read refe
 
 Check if the `get_team_status` MCP tool is available in your tool list.
 
-- **If YES → Team Operations Mode**: 33 MCP tools for real team management. Announce: "Running in Team Operations Mode — connected to your team."
+- **If YES → Team Operations Mode**: 44 MCP tools for real team management. Announce: "Running in Team Operations Mode — connected to your team."
 - **If NO → Advisor Mode**: Embedded mentor frameworks, no cloud needed. Announce: "Running in Advisor Mode — I'll use mentor frameworks to help with management decisions."
 
 If MCP becomes available mid-session, announce the upgrade. If MCP drops, fall back gracefully.
@@ -191,7 +191,7 @@ Mentor blending: when `config.mentorBlend` is set, primary contributes 2 check-i
 
 ## Team Operations Mode
 
-All Advisor Mode capabilities PLUS 33 MCP tools, 6 cron jobs, bidirectional Notion/Sheets sync, and persistent data storage. Read `references/mcp-tools.md` for the complete tool reference.
+All Advisor Mode capabilities PLUS 44 MCP tools, 6 cron jobs, bidirectional Notion/Sheets sync, and persistent data storage. Read `references/mcp-tools.md` for the complete tool reference.
 
 ### MCP Tools Overview
 

@@ -1,0 +1,27 @@
+market: United States
+language: English
+timezone: America/New_York
+version: 1
+
+communication_style:
+  directness: high
+  hierarchy_respect: low
+  relationship_first: false
+  group_face: low
+
+chase_rules:
+  never_name_in_group: false
+  private_before_escalate: false
+  warmth_required: false
+  acknowledge_effort: false
+
+forbidden_patterns:
+  - "Please do the needful"
+  - "Kindly revert back"
+  - "With due respect, sir"
+
+preferred_patterns:
+  - "Hey, quick reminder on the daily report"
+  - "Just checking in — can you submit by EOD?"
+  - "Let me know if you're blocked on anything"
+  - "Heads up: report is overdue"

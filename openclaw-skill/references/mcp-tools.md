@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-All 33 MCP tools for Team Operations Mode. Use these directly — no manual API calls needed.
+All 44 MCP tools for Team Operations Mode. Use these directly — no manual API calls needed.
 
 ## Read Tools — Daily Operations (9)
 
@@ -79,6 +79,29 @@ The recommendation engine runs a daily scan (10:30 AM) analyzing team data throu
 | `report_sync_result` | Report sync completion — records stats (items pushed/pulled/conflicts) and writes pulled items back |
 | `configure_sync` | Configure sync settings: storage type (Notion/Sheets), entity types, frequency, storage-specific config |
 
+## Consulting Engine (9 — structured AI consulting engagements)
+
+| Tool | What it does |
+|------|-------------|
+| `start_consulting` | Start a new AI consulting engagement — describe a business problem, get structured diagnosis |
+| `answer_consulting_question` | Answer a diagnostic question from the AI consultant during an active engagement |
+| `list_consulting_engagements` | List all consulting engagements (active and closed) with title, tier, category, phase |
+| `get_consulting_engagement` | Get full details of a specific engagement: diagnosis, analysis, action plan, progress |
+| `review_consulting_action` | Approve or reject a specific action in the engagement's action plan |
+| `execute_consulting_actions` | Execute all approved actions (create tasks, schedule meetings, send messages, flag risks) |
+| `check_consulting_progress` | Check progress report: completion percentage, on track, at risk, next steps |
+| `close_consulting_engagement` | Close engagement with retrospective: effectiveness assessment, lessons learned, org memory |
+| `list_consulting_actions` | List all actions for an engagement with status (pending/approved/rejected/done/failed) |
+
+The consulting engine works like hiring McKinsey: describe a problem → AI asks focused diagnostic questions → root cause analysis → prioritized action plan → track execution → close with retrospective.
+
+## World Model (2 — team capabilities and dynamics)
+
+| Tool | What it does |
+|------|-------------|
+| `get_world_model` | Team-wide World Model: skills, collaborations, blockers, growth events, AI insights from daily check-ins |
+| `get_employee_world_model` | Individual World Model: skills, growth trajectory, blockers, collaboration patterns — perfect for 1:1 prep |
+
 ## Tool Categories Summary
 
 | Category | Count | Impact |
@@ -91,4 +114,6 @@ The recommendation engine runs a daily scan (10:30 AM) analyzing team data throu
 | AI Recommendations | 2 | Suggests + executes management actions |
 | Write — Incentives | 1 | Calculates scores |
 | Sync | 3 | Reads/writes Notion/Sheets |
-| **Total** | **33** | |
+| Consulting Engine | 9 | Structured AI consulting engagements |
+| World Model | 2 | Team capabilities and dynamics |
+| **Total** | **44** | |

@@ -25,7 +25,7 @@ curl http://localhost/healthz
 
 **9 Management Mentors:** Inamori (稻盛和夫) · Dalio · Grove · Ren (任正非) · Son (孙正义) · Jobs · Bezos · Ma (马云) · Musk (马斯克)
 
-**6 Culture Packs:** Philippines · Singapore · Indonesia · Sri Lanka · Malaysia · China
+**9 Culture Packs:** Default · Philippines · Singapore · Indonesia · Sri Lanka · Malaysia · China · USA · India
 
 **Features:** Daily check-ins, AI-powered chase & summaries, mentor blending, anomaly alerts, multi-channel (Telegram + Slack + Lark), Vue3 dashboard, OAuth, billing.
 
@@ -516,16 +516,19 @@ All 5 phases are complete. The project evolved significantly beyond initial plan
 | **1. Core Bot** | Daily management loop | Telegram Bot, scheduler, 2 mentors, tenant isolation, AES-256 secrets | Done |
 | **2. Full Mentor + Culture** | Complete strategy system | 9 mentors (expanded to 16 with light-touch), 9 culture packs, mentor blending, proactive actions, sentiment detection | Done |
 | **3. Open Source + Dashboard** | Distributable project | REST API (Gin), Vue3 Dashboard (NaiveUI + ECharts), Docker deploy, CI/CD, rate limiting, Prometheus metrics | Done |
-| **4. Multi-Channel + MCP** | Multi-client support | MCP server (13 tools), OpenClaw Skill, Claude Code + ChatGPT + Gemini support, AI C-Suite Board (6 seats), Organization Architecture Engine | Done |
-| **5. Cloud SaaS** | Production cloud service | `manageaibrain.com`, Web Dashboard v2.0, Organization Setup Wizard, boss-ai-agent@3.0.0 hybrid skill (Advisor + Team Ops modes), 23+ messaging platforms | Done |
+| **4. Multi-Channel + MCP** | Multi-client support | MCP server (44 tools), OpenClaw Skill, Claude Code + ChatGPT + Gemini support, AI C-Suite Board (6 seats), Organization Architecture Engine | Done |
+| **5. Cloud SaaS** | Production cloud service | `manageaibrain.com`, Web Dashboard v2.0, Organization Setup Wizard, boss-ai-agent@8.0.0 hybrid skill (Advisor + Team Ops modes), 23+ messaging platforms | Done |
 
-### Current State (v3.0.0)
+### Current State (v8.0.0)
 
 - **16 mentor philosophies**: 3 fully-embedded (Musk/Inamori/Ma) + 6 standard + 7 light-touch
 - **9 culture packs**: default, Philippines, Singapore, Indonesia, Sri Lanka, Malaysia, China, USA, India
 - **6 AI C-Suite seats**: CEO, CFO, CMO, CTO, CHRO, COO
-- **13 MCP tools**: 9 read + 4 write (message delivery)
-- **ClawHub Skill**: `boss-ai-agent@3.0.0` — Advisor Mode (zero dependency) + Team Operations Mode (MCP-connected)
+- **44 MCP tools**: 21 read + 6 write + 2 AI recommendations + 1 incentives + 3 sync + 9 consulting + 2 world model
+- **ClawHub Skill**: `boss-ai-agent@8.0.0` — Advisor Mode (zero dependency) + Team Operations Mode (MCP-connected)
+- **Consulting Engine**: AI McKinsey — structured diagnosis, root cause analysis, action plans, progress tracking
+- **World Model**: Team skills, growth trajectories, collaboration patterns, AI insights from daily check-ins
+- **Execution Intelligence**: Risk signals, KPI dashboards, working memory, overdue task tracking
 - **Web Dashboard**: Health gauge, submission trends, sentiment heatmap, alert center, organization setup
 - **Production**: `manageaibrain.com` on AWS t3a.small, Docker Compose, PostgreSQL 16, Redis 7
 - All channels (+ Lark/DingTalk)
